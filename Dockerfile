@@ -7,6 +7,14 @@ RUN apk add --no-cache musl-dev \
 WORKDIR /pumpkin
 COPY . /pumpkin
 
+# Railway builds from a source archive, which does not populate Git submodules.
+# Fetch the pinned WIT definitions when they are missing from the build context.
+RUN test -f pumpkin-plugin-wit/v0.1/world.wit || ( \
+    rm -rf pumpkin-plugin-wit && \
+    git clone https://github.com/Pumpkin-MC/pumpkin-plugin-wit pumpkin-plugin-wit && \
+    git -C pumpkin-plugin-wit checkout 3773e86ec7ce68eb53e879f613aeb3b2198d9522 \
+    )
+
 RUN rustup show active-toolchain || rustup toolchain install
 RUN rustup component add rustfmt
 
