@@ -11,10 +11,7 @@ RUN rustup show active-toolchain || rustup toolchain install
 RUN rustup component add rustfmt
 
 # build release
-RUN --mount=type=cache,id=pumpkin-target,sharing=private,target=/pumpkin/target \
-    --mount=type=cache,id=pumpkin-cargo-git,target=/usr/local/cargo/git/db \
-    --mount=type=cache,id=pumpkin-cargo-registry,target=/usr/local/cargo/registry/ \
-    cargo build --release && cp target/release/pumpkin ./pumpkin.release
+RUN cargo build --release && cp target/release/pumpkin ./pumpkin.release
 
 FROM alpine:3.24
 
