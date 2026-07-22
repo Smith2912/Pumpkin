@@ -41,7 +41,6 @@ impl CUpdateAdvancements {
 }
 
 impl ClientPacket for CUpdateAdvancements {
-    #[allow(clippy::unimplemented)]
     fn write_packet_data(
         &self,
         mut write: impl std::io::Write,
@@ -112,6 +111,40 @@ impl ClientPacket for CUpdateAdvancements {
         }
 
         write.write_bool(self.show_advancements)?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CUpdateAdvancements;
+    use crate::ClientPacket;
+    use pumpkin_data::Advancement;
+    use pumpkin_util::version::JavaMinecraftVersion;
+
+    #[test]
+    fn advancement_display_serializes_for_supported_item_formats()
+    -> Result<(), Box<dyn std::error::Error>> {
+        assert!(Advancement::STORY_ROOT.display.is_some());
+
+        for version in [
+            JavaMinecraftVersion::V_1_21_11,
+            JavaMinecraftVersion::V_26_2,
+        ] {
+            let packet = CUpdateAdvancements::new(
+                false,
+                vec![Advancement::STORY_ROOT],
+                Vec::new(),
+                Vec::new(),
+                true,
+            );
+            let mut bytes = Vec::new();
+
+            packet.write_packet_data(&mut bytes, &version)?;
+
+            assert_eq!(&bytes[..2], &[0, 1]);
+        }
 
         Ok(())
     }
