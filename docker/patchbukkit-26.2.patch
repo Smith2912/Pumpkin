@@ -1,0 +1,13 @@
+diff --git a/rust/src/commands/mod.rs b/rust/src/commands/mod.rs
+index 484dc62..22d354c 100644
+--- a/rust/src/commands/mod.rs
++++ b/rust/src/commands/mod.rs
+@@ -34,7 +34,7 @@ pub struct AnyCommandNode {
+ }
+ 
+ impl GetClientSideArgParser for AnyCommandNode {
+-    fn get_client_side_parser(&self) -> ArgumentType<'_> {
++    fn get_client_side_parser(&self) -> ArgumentType {
+         ArgumentType::String(StringProtoArgBehavior::GreedyPhrase)
+     }
+ 
