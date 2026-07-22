@@ -67,6 +67,21 @@ pub enum LoaderError {
         server_version: u32,
     },
 
+    #[error(
+        "Plugin is missing native metadata layout information. Please rebuild it against this Pumpkin build."
+    )]
+    MetadataLayoutMissing,
+
+    #[error(
+        "Plugin metadata layout mismatch (plugin size/alignment {plugin_size}/{plugin_align}, server {server_size}/{server_align}). Please rebuild it against this Pumpkin build."
+    )]
+    MetadataLayoutMismatch {
+        plugin_size: usize,
+        plugin_align: usize,
+        server_size: usize,
+        server_align: usize,
+    },
+
     #[error("Wasm plugin initialization error: {0}")]
     WasmInitializationError(#[from] PluginInitError),
 }
