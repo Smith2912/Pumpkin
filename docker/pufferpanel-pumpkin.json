@@ -1,0 +1,54 @@
+{
+  "name": "Pumpkin 26.2",
+  "node": 0,
+  "users": [
+    "admin"
+  ],
+  "type": "minecraft-java",
+  "display": "Pumpkin 26.2 with PatchBukkit",
+  "icon": "minecraft-java",
+  "data": {
+    "ip": {
+      "type": "string",
+      "value": "0.0.0.0",
+      "display": "IP",
+      "required": true,
+      "userEdit": false
+    },
+    "port": {
+      "type": "integer",
+      "value": 25565,
+      "display": "Port",
+      "required": true,
+      "userEdit": false
+    }
+  },
+  "groups": [],
+  "install": [],
+  "uninstall": [],
+  "run": {
+    "command": "/bin/pumpkin",
+    "stop": "stop",
+    "stdin": {
+      "type": "stdin"
+    },
+    "autostart": true,
+    "autorecover": true,
+    "autorestart": false,
+    "expectedExitCode": 0
+  },
+  "environment": {
+    "type": "host",
+    "disableUnshare": true
+  },
+  "supportedEnvironments": [
+    {
+      "type": "host",
+      "disableUnshare": true
+    }
+  ],
+  "requirements": {},
+  "query": {
+    "type": "minecraft"
+  }
+}

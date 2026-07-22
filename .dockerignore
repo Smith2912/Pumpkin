@@ -7,6 +7,7 @@
 # Allow the source code folders
 !/pumpkin*/
 !/assets
+!/docker
 
 # Allow build.rs to read git commit sha
 !/.git
