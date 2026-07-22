@@ -66,23 +66,40 @@ pumpkin-util = { path = "/pumpkin/pumpkin-util" }\n' \
 
 FROM eclipse-temurin:25-jre-noble@sha256:2f1da100788559b397bcf48c736169ea5b070bde84e55f203bbee8e83d87a175
 
+ARG PUFFERPANEL_VERSION=3.0.9
+ARG PUFFERPANEL_SHA256=ae6b74b00c0383a3f0f9fb81a99b37bb64e3028288d46b39617ff6945bc01379
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        gosu \
         libgcc-s1 \
         libstdc++6 \
         netcat-openbsd \
     && rm -rf /var/lib/apt/lists/* \
+    && curl --proto '=https' --tlsv1.2 -fsSL \
+        "https://github.com/pufferpanel/pufferpanel/releases/download/v${PUFFERPANEL_VERSION}/pufferpanel_${PUFFERPANEL_VERSION}_amd64.deb" \
+        -o /tmp/pufferpanel.deb \
+    && echo "${PUFFERPANEL_SHA256}  /tmp/pufferpanel.deb" | sha256sum -c - \
+    && dpkg-deb --extract /tmp/pufferpanel.deb /tmp/pufferpanel \
+    && install -m 0755 /tmp/pufferpanel/usr/sbin/pufferpanel /usr/local/bin/pufferpanel \
+    && mkdir -p /var/www \
+    && cp -a /tmp/pufferpanel/var/www/pufferpanel /var/www/pufferpanel \
+    && rm -rf /tmp/pufferpanel /tmp/pufferpanel.deb \
     && groupadd --gid 2613 pumpkin \
     && useradd --uid 2613 --gid pumpkin --home-dir /pumpkin --shell /usr/sbin/nologin pumpkin \
-    && mkdir -p /pumpkin /opt/pumpkin/plugins \
+    && mkdir -p /pumpkin /opt/pumpkin/plugins /opt/pumpkin/pufferpanel \
     && chown 2613:2613 /pumpkin
 
 COPY --from=builder /pumpkin.release /bin/pumpkin
 COPY --from=builder /libpatchbukkit.so /opt/pumpkin/plugins/libpatchbukkit.so
+COPY docker/pufferpanel-config.json /opt/pumpkin/pufferpanel/config.json
+COPY docker/pufferpanel-pumpkin.json /opt/pumpkin/pufferpanel/pumpkin.json
 COPY --chmod=755 docker/pumpkin-entrypoint.sh /usr/local/bin/pumpkin-entrypoint
 
 WORKDIR /pumpkin
 ENV RUST_BACKTRACE=1
-EXPOSE 25565
+EXPOSE 25565 5657 8080
 USER 2613:2613
 ENTRYPOINT ["/usr/local/bin/pumpkin-entrypoint"]
-HEALTHCHECK CMD nc -z 127.0.0.1 25565 || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=5 \
+    CMD nc -z 127.0.0.1 25565 && nc -z 127.0.0.1 8080 || exit 1

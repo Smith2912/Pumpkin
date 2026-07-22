@@ -1,0 +1,56 @@
+{
+  "logs": "/pumpkin/.pufferpanel/logs",
+  "web": {
+    "host": "0.0.0.0:8080"
+  },
+  "panel": {
+    "enable": true,
+    "database": {
+      "dialect": "sqlite3",
+      "url": "file:/pumpkin/.pufferpanel/database.db?cache=shared"
+    },
+    "web": {
+      "files": "/var/www/pufferpanel",
+      "cookies": {
+        "secure": true,
+        "httpOnly": true,
+        "age": 2592000,
+        "sameSite": "Strict",
+        "path": "/"
+      }
+    },
+    "settings": {
+      "companyName": "Pumpkin Server",
+      "masterUrl": "http://localhost:8080"
+    },
+    "registrationEnabled": false
+  },
+  "daemon": {
+    "enable": true,
+    "console": {
+      "buffer": 1024,
+      "forward": true
+    },
+    "sftp": {
+      "host": "0.0.0.0:5657",
+      "key": "/pumpkin/.pufferpanel/sftp.key",
+      "log": false
+    },
+    "auth": {
+      "url": "http://localhost:8080"
+    },
+    "data": {
+      "root": "/pumpkin/.pufferpanel",
+      "servers": "/pumpkin",
+      "cache": "cache",
+      "binaries": "binaries",
+      "backups": {
+        "folder": "backups"
+      },
+      "crashLimit": 3
+    }
+  },
+  "security": {
+    "disableUnshare": true
+  }
+}
