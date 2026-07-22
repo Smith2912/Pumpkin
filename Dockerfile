@@ -31,7 +31,7 @@ COPY . /pumpkin
 
 # PatchBukkit's pinned source predates Pumpkin 26.2 by one small command API
 # signature change. Keep the compatibility adjustment explicit and reviewable.
-RUN git -C /patchbukkit apply /pumpkin/docker/patchbukkit-26.2.patch
+RUN git -C /patchbukkit apply --unidiff-zero /pumpkin/docker/patchbukkit-26.2.patch
 
 # Railway builds from a source archive, which does not populate Git submodules.
 # Fetch the pinned WIT definitions when they are missing from the build context.
