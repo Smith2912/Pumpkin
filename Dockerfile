@@ -11,8 +11,10 @@ COPY . /pumpkin
 # Fetch the pinned WIT definitions when they are missing from the build context.
 RUN test -f pumpkin-plugin-wit/v0.1/world.wit || ( \
     rm -rf pumpkin-plugin-wit && \
-    git clone https://github.com/Pumpkin-MC/pumpkin-plugin-wit pumpkin-plugin-wit && \
-    git -C pumpkin-plugin-wit checkout 3773e86ec7ce68eb53e879f613aeb3b2198d9522 \
+    git init pumpkin-plugin-wit && \
+    git -C pumpkin-plugin-wit remote add origin https://github.com/Pumpkin-MC/pumpkin-plugin-wit && \
+    git -C pumpkin-plugin-wit fetch --depth=1 origin 3773e86ec7ce68eb53e879f613aeb3b2198d9522 && \
+    git -C pumpkin-plugin-wit checkout --detach FETCH_HEAD \
     )
 
 RUN rustup show active-toolchain || rustup toolchain install
