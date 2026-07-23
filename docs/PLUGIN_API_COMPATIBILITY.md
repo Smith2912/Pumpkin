@@ -231,6 +231,46 @@ a more specific reason use Bukkit's `UNKNOWN` cause. Teleport flags, relative
 teleports, vehicles/passengers, `PlayerMoveEvent`, portals, beds, and death
 transitions remain separate contracts.
 
+## Online player controls batch gate
+
+The Essentials-style online-player controls batch is complete only when one
+deployed commit passes all of these checks:
+
+1. Bukkit `getAllowFlight`, `setAllowFlight`, `isFlying`, `setFlying`,
+   `getFlySpeed`, `setFlySpeed`, `getWalkSpeed`, and `setWalkSpeed` use the
+   live Pumpkin ability state. Disabling flight also stops active flight, and
+   every accepted change immediately sends the client ability update.
+2. Bukkit speeds reject non-finite values and values outside `[-1, 1]` before
+   crossing the bridge. Pumpkin independently rejects invalid native speeds
+   and rejects `flying=true` when flight is not allowed.
+3. Bukkit `isSprinting`, `setSprinting`, `isSneaking`, and `setSneaking` use
+   one player-session bridge. A change updates both Pumpkin's entity state and
+   the metadata visible to clients.
+4. Bukkit `getPing`, `getLocale`, and `locale` read the connected player's live
+   keepalive latency and client locale without maintaining a duplicate Java
+   cache.
+5. `Player.performCommand` executes known Bukkit plugin commands directly in
+   the Java command map. Known native Pumpkin commands are accepted through a
+   deferred native dispatch so a plugin command cannot recursively deadlock the
+   JVM worker. Unknown commands return `false`.
+6. Bukkit `kickPlayer` and Paper `kick(Component, Cause)` fire a cancellable
+   `PlayerKickEvent`, preserve a listener-modified reason, serialize that
+   Adventure component losslessly, and disconnect through Pumpkin's normal
+   edition-aware path.
+7. The pinned PatchBukkit patch applies cleanly and both Java/protobuf and Rust
+   bridge builds pass from that clean replay.
+8. Human verification changes a connected player from spectator to survival,
+   runs Essentials `/fly` twice, changes fly and walk speed, executes one
+   plugin command and one native command through `Player.performCommand`, and
+   confirms a cancelled kick leaves the player connected before a second kick
+   disconnects with the expected reason.
+
+`Player.performCommand` returns after a native command has been validated and
+queued; native execution completes asynchronously. Bukkit plugin commands
+remain synchronous inside the Java command map. The kick event's reason and
+cancellation are bridged in this batch; custom kick leave-message propagation
+remains a separate quit-lifecycle milestone.
+
 ## Human verification runbook
 
 Every compatibility change must leave evidence a maintainer can reproduce and

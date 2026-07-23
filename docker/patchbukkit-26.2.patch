@@ -2388,10 +2388,43 @@ index e48457f..417bb9d 100644
  
      @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
-index 458bbb9..de710c3 100644
+index 458bbb9..9ea85be 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
-@@ -163,14 +163,12 @@ public class PatchBukkitPlayer
+@@ -9,6 +9,7 @@ import java.util.*;
+ import java.util.concurrent.CompletableFuture;
+
+ import org.bukkit.BanEntry;
++import org.bukkit.Bukkit;
+ import org.bukkit.Chunk;
+ import org.bukkit.DyeColor;
+ import org.bukkit.Effect;
+@@ -41,6 +42,7 @@ import org.bukkit.entity.Entity;
+ import org.bukkit.entity.EntityType;
+ import org.bukkit.entity.LivingEntity;
+ import org.bukkit.entity.Player;
++import org.bukkit.event.player.PlayerKickEvent;
+ import org.bukkit.event.player.PlayerKickEvent.Cause;
+ import org.bukkit.event.player.PlayerResourcePackStatusEvent.Status;
+ import org.bukkit.inventory.EquipmentSlot;
+@@ -68,11 +70,16 @@ import io.papermc.paper.entity.PlayerGiveResult;
+ import io.papermc.paper.math.Position;
+ import net.kyori.adventure.bossbar.BossBar;
+ import net.kyori.adventure.text.Component;
++import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
++import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+ import net.kyori.adventure.util.TriState;
+ import net.md_5.bungee.api.chat.BaseComponent;
+ import patchbukkit.bridge.NativeBridgeFfi;
+ import patchbukkit.message.SendMessageRequest;
+ import patchbukkit.abilities.SetAbilitiesRequest;
++import patchbukkit.player.KickPlayerRequest;
++import patchbukkit.player.PerformPlayerCommandRequest;
++import patchbukkit.player.UpdatePlayerSessionStateRequest;
+ import patchbukkit.sound.PlayerEntityPlaySoundRequest;
+ import patchbukkit.sound.PlayerPlaySoundRequest;
+
+@@ -163,14 +170,12 @@ public class PatchBukkitPlayer
  
      @Override
      public boolean isOnline() {
@@ -2408,7 +2441,7 @@ index 458bbb9..de710c3 100644
      }
  
      @Override
-@@ -217,8 +215,7 @@ public class PatchBukkitPlayer
+@@ -217,8 +222,7 @@ public class PatchBukkitPlayer
  
      @Override
      public @org.jspecify.annotations.Nullable Player getPlayer() {
@@ -2418,7 +2451,112 @@ index 458bbb9..de710c3 100644
      }
  
      @Override
-@@ -1057,14 +1054,19 @@ public class PatchBukkitPlayer
+@@ -554,14 +558,35 @@ public class PatchBukkitPlayer
+
+     @Override
+     public void kickPlayer(@org.jspecify.annotations.Nullable String message) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'kickPlayer'");
++        Component reason = message == null
++            ? Component.text("Kicked by an operator.")
++            : LegacyComponentSerializer.legacySection().deserialize(message);
++        this.kick(reason, Cause.PLUGIN);
+     }
+
+     @Override
+     public void kick(@org.jspecify.annotations.Nullable Component message, Cause cause) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'kick'");
++        Component reason = message == null ? Component.text("Kicked by an operator.") : message;
++        PlayerKickEvent event = new PlayerKickEvent(
++            this,
++            reason,
++            Component.text(this.getName() + " left the game"),
++            cause == null ? Cause.UNKNOWN : cause
++        );
++        Bukkit.getPluginManager().callEvent(event);
++        if (event.isCancelled()) {
++            return;
++        }
++
++        boolean accepted = NativeBridgeFfi.kickPlayer(
++            KickPlayerRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.uuid))
++                .setReasonJson(GsonComponentSerializer.gson().serialize(event.reason()))
++                .build()
++        ).getSuccess();
++        if (!accepted) {
++            throw new IllegalStateException("Native server rejected player kick");
++        }
+     }
+
+     @Override
+@@ -620,20 +645,58 @@ public class PatchBukkitPlayer
+
+     @Override
+     public boolean performCommand(String command) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'performCommand'");
++        Preconditions.checkNotNull(command, "Command cannot be null");
++        String commandLine = command.startsWith("/") ? command.substring(1) : command;
++        String label = commandLine.split(" ", 2)[0];
++        if (Bukkit.getServer().getCommandMap().getCommand(label) != null) {
++            return Bukkit.getServer().dispatchCommand(this, commandLine);
++        }
++        return NativeBridgeFfi.performPlayerCommand(
++            PerformPlayerCommandRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.uuid))
++                .setCommand(commandLine)
++                .build()
++        ).getSuccess();
+     }
+
+     @Override
+     public boolean isSprinting() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'isSprinting'");
++        return NativeBridgeFfi.getPlayerSessionState(
++            BridgeUtils.convertUuid(this.uuid)
++        ).getSprinting();
+     }
+
+     @Override
+     public void setSprinting(boolean sprinting) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setSprinting'");
++        boolean accepted = NativeBridgeFfi.updatePlayerSessionState(
++            UpdatePlayerSessionStateRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.uuid))
++                .setSprinting(sprinting)
++                .build()
++        ).getSuccess();
++        if (!accepted) {
++            throw new IllegalStateException("Native server rejected sprint state");
++        }
++    }
++
++    @Override
++    public boolean isSneaking() {
++        return NativeBridgeFfi.getPlayerSessionState(
++            BridgeUtils.convertUuid(this.uuid)
++        ).getSneaking();
++    }
++
++    @Override
++    public void setSneaking(boolean sneaking) {
++        boolean accepted = NativeBridgeFfi.updatePlayerSessionState(
++            UpdatePlayerSessionStateRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.uuid))
++                .setSneaking(sneaking)
++                .build()
++        ).getSuccess();
++        if (!accepted) {
++            throw new IllegalStateException("Native server rejected sneak state");
++        }
+     }
+
+     @Override
+@@ -1057,14 +1120,19 @@ public class PatchBukkitPlayer
  
      @Override
      public void updateInventory() {
@@ -2442,16 +2580,21 @@ index 458bbb9..de710c3 100644
      }
  
      @Override
-@@ -1220,7 +1222,7 @@ public class PatchBukkitPlayer
+@@ -1220,8 +1288,11 @@ public class PatchBukkitPlayer
      public void setAllowFlight(boolean flight) {
          var abilities = NativeBridgeFfi.getAbilities(BridgeUtils.convertUuid(this.uuid)).toBuilder();
          abilities.setAllowFlying(flight);
 -        if (abilities.getFlying()) abilities.setFlying(false);
+-        NativeBridgeFfi.setAbilities(SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(BridgeUtils.convertUuid(this.uuid)).build());
 +        if (!flight && abilities.getFlying()) abilities.setFlying(false);
-         NativeBridgeFfi.setAbilities(SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(BridgeUtils.convertUuid(this.uuid)).build());
++        updateAbilities(SetAbilitiesRequest.newBuilder()
++            .setAbilities(abilities)
++            .setUuid(BridgeUtils.convertUuid(this.uuid))
++            .build());
      }
  
-@@ -1308,39 +1310,58 @@ public class PatchBukkitPlayer
+     @Override
+@@ -1308,39 +1379,67 @@ public class PatchBukkitPlayer
  
      @Override
      public boolean isFlying() {
@@ -2464,12 +2607,16 @@ index 458bbb9..de710c3 100644
      public void setFlying(boolean value) {
          var playerUuid = BridgeUtils.convertUuid(this.getUniqueId());
 -        var abilities = NativeBridgeFfi.getAbilities(playerUuid).toBuilder().setFlying(value).build();
+-        NativeBridgeFfi.setAbilities(SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(playerUuid).build());
 +        var abilitiesBuilder = NativeBridgeFfi.getAbilities(playerUuid).toBuilder();
 +        if (value && !abilitiesBuilder.getAllowFlying()) {
 +            throw new IllegalArgumentException("Cannot make player fly when flight is not allowed");
 +        }
 +        var abilities = abilitiesBuilder.setFlying(value).build();
-         NativeBridgeFfi.setAbilities(SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(playerUuid).build());
++        updateAbilities(SetAbilitiesRequest.newBuilder()
++            .setAbilities(abilities)
++            .setUuid(playerUuid)
++            .build());
      }
  
      @Override
@@ -2481,7 +2628,7 @@ index 458bbb9..de710c3 100644
 +        var abilities = NativeBridgeFfi.getAbilities(playerUuid).toBuilder()
 +            .setFlySpeed(value / 2.0f)
 +            .build();
-+        NativeBridgeFfi.setAbilities(
++        updateAbilities(
 +            SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(playerUuid).build()
 +        );
      }
@@ -2495,7 +2642,7 @@ index 458bbb9..de710c3 100644
 +        var abilities = NativeBridgeFfi.getAbilities(playerUuid).toBuilder()
 +            .setWalkSpeed(value / 2.0f)
 +            .build();
-+        NativeBridgeFfi.setAbilities(
++        updateAbilities(
 +            SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(playerUuid).build()
 +        );
      }
@@ -2518,6 +2665,43 @@ index 458bbb9..de710c3 100644
 +        if (!Float.isFinite(value) || value < -1.0f || value > 1.0f) {
 +            throw new IllegalArgumentException("Speed must be finite and between -1 and 1");
 +        }
++    }
++
++    private static void updateAbilities(SetAbilitiesRequest request) {
++        if (!NativeBridgeFfi.setAbilities(request).getSuccess()) {
++            throw new IllegalStateException("Native server rejected player abilities");
++        }
+     }
+
+     @Override
+@@ -1502,20 +1601,24 @@ public class PatchBukkitPlayer
+
+     @Override
+     public Locale locale() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'locale'");
++        return Locale.forLanguageTag(this.getLocale().replace('_', '-'));
+     }
+
+     @Override
+     public int getPing() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getPing'");
++        long ping = Integer.toUnsignedLong(
++            NativeBridgeFfi.getPlayerSessionState(
++                BridgeUtils.convertUuid(this.uuid)
++            ).getPing()
++        );
++        return (int) Math.min(ping, Integer.MAX_VALUE);
+     }
+
+     @Override
+     public String getLocale() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getLocale'");
++        return NativeBridgeFfi.getPlayerSessionState(
++            BridgeUtils.convertUuid(this.uuid)
++        ).getLocale();
      }
  
      @Override
@@ -6702,7 +6886,7 @@ index e8c2c36..4766cfa 100644
  
      @Override
 diff --git a/proto/patchbukkit/bridge.proto b/proto/patchbukkit/bridge.proto
-index 85df0ae..0d3524d 100644
+index 85df0ae..05b780e 100644
 --- a/proto/patchbukkit/bridge.proto
 +++ b/proto/patchbukkit/bridge.proto
 @@ -9,6 +9,8 @@ import "patchbukkit/config.proto";
@@ -6714,7 +6898,7 @@ index 85df0ae..0d3524d 100644
  import "patchbukkit/registry.proto";
  import "patchbukkit/sound.proto";
  
-@@ -22,6 +24,19 @@ service NativeBridge {
+@@ -22,6 +24,23 @@ service NativeBridge {
    rpc SendMessage(patchbukkit.message.SendMessageRequest) returns (google.protobuf.Empty);
  
    rpc GetLocation(patchbukkit.common.UUID) returns (patchbukkit.common.Location);
@@ -6725,6 +6909,10 @@ index 85df0ae..0d3524d 100644
 +  rpc SetPlayerGameMode(patchbukkit.player.SetPlayerGameModeRequest) returns (patchbukkit.player.SetPlayerGameModeResponse);
 +  rpc GetPlayerVitals(patchbukkit.common.UUID) returns (patchbukkit.player.PlayerVitals);
 +  rpc UpdatePlayerVitals(patchbukkit.player.UpdatePlayerVitalsRequest) returns (patchbukkit.player.UpdatePlayerVitalsResponse);
++  rpc GetPlayerSessionState(patchbukkit.common.UUID) returns (patchbukkit.player.PlayerSessionState);
++  rpc UpdatePlayerSessionState(patchbukkit.player.UpdatePlayerSessionStateRequest) returns (patchbukkit.player.UpdatePlayerSessionStateResponse);
++  rpc KickPlayer(patchbukkit.player.KickPlayerRequest) returns (patchbukkit.player.KickPlayerResponse);
++  rpc PerformPlayerCommand(patchbukkit.player.PerformPlayerCommandRequest) returns (patchbukkit.player.PerformPlayerCommandResponse);
 +  rpc TeleportPlayer(patchbukkit.player.TeleportPlayerRequest) returns (patchbukkit.player.TeleportPlayerResponse);
 +  rpc GetInventory(patchbukkit.player.GetInventoryRequest) returns (patchbukkit.player.InventorySnapshot);
 +  rpc SetInventoryItem(patchbukkit.player.SetInventoryItemRequest) returns (patchbukkit.player.SetInventoryItemResponse);
@@ -7051,10 +7239,10 @@ index 75429d3..25a6639 100644
  }
 diff --git a/proto/patchbukkit/player.proto b/proto/patchbukkit/player.proto
 new file mode 100644
-index 0000000..c0e9a34
+index 0000000..c309611
 --- /dev/null
 +++ b/proto/patchbukkit/player.proto
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,135 @@
 +syntax = "proto3";
 +
 +package patchbukkit.player;
@@ -7099,6 +7287,41 @@ index 0000000..c0e9a34
 +}
 +
 +message UpdatePlayerVitalsResponse {
++  bool success = 1;
++}
++
++message PlayerSessionState {
++  bool sprinting = 1;
++  bool sneaking = 2;
++  uint32 ping = 3;
++  string locale = 4;
++}
++
++message UpdatePlayerSessionStateRequest {
++  patchbukkit.common.UUID player_uuid = 1;
++  optional bool sprinting = 2;
++  optional bool sneaking = 3;
++}
++
++message UpdatePlayerSessionStateResponse {
++  bool success = 1;
++}
++
++message KickPlayerRequest {
++  patchbukkit.common.UUID player_uuid = 1;
++  string reason_json = 2;
++}
++
++message KickPlayerResponse {
++  bool success = 1;
++}
++
++message PerformPlayerCommandRequest {
++  patchbukkit.common.UUID player_uuid = 1;
++  string command = 2;
++}
++
++message PerformPlayerCommandResponse {
 +  bool success = 1;
 +}
 +
@@ -12276,6 +12499,34 @@ index 4fe3703..85ac936 100644
  
      jvm.invoke_static(
          "org.bukkit.Bukkit",
+diff --git a/rust/src/java/native_callbacks/abilities.rs b/rust/src/java/native_callbacks/abilities.rs
+index 5fe30b4..b879485 100644
+--- a/rust/src/java/native_callbacks/abilities.rs
++++ b/rust/src/java/native_callbacks/abilities.rs
+@@ -30,6 +30,15 @@ pub fn ffi_native_bridge_set_abilities_impl(request: SetAbilitiesRequest) -> Opt
+     let abilities = request.abilities?;
+     let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
+
++    if !abilities.fly_speed.is_finite()
++        || !abilities.walk_speed.is_finite()
++        || !(-0.5..=0.5).contains(&abilities.fly_speed)
++        || !(-0.5..=0.5).contains(&abilities.walk_speed)
++        || (abilities.flying && !abilities.allow_flying)
++    {
++        return Some(false);
++    }
++
+     let mut pumpkin_abilities = tokio::task::block_in_place(|| {
+         ctx.runtime
+             .block_on(async { player.abilities.lock().await })
+@@ -42,6 +51,7 @@ pub fn ffi_native_bridge_set_abilities_impl(request: SetAbilitiesRequest) -> Opt
+     pumpkin_abilities.allow_modify_world = abilities.allow_modify_world;
+     pumpkin_abilities.fly_speed = abilities.fly_speed;
+     pumpkin_abilities.walk_speed = abilities.walk_speed;
++    drop(pumpkin_abilities);
+
+     let player = player.clone();
+     ctx.runtime.spawn(async move {
 diff --git a/rust/src/java/native_callbacks/block.rs b/rust/src/java/native_callbacks/block.rs
 new file mode 100644
 index 0000000..a37c488
@@ -13169,12 +13420,14 @@ index 56698aa..f8246fa 100644
  
 diff --git a/rust/src/java/native_callbacks/player.rs b/rust/src/java/native_callbacks/player.rs
 new file mode 100644
-index 0000000..6407d0e
+index 0000000..3999649
 --- /dev/null
 +++ b/rust/src/java/native_callbacks/player.rs
-@@ -0,0 +1,261 @@
-+use std::str::FromStr;
+@@ -0,0 +1,358 @@
++use std::{str::FromStr, sync::atomic::Ordering};
 +
++use pumpkin::{entity::EntityBase, net::DisconnectReason};
++use pumpkin_util::text::TextComponent;
 +use pumpkin_util::{GameMode, math::vector3::Vector3};
 +
 +use crate::java::native_callbacks::CALLBACK_CONTEXT;
@@ -13183,10 +13436,12 @@ index 0000000..6407d0e
 +    common::Uuid,
 +    itemstack::ItemStack as BridgeItemStack,
 +    player::{
-+        GetInventoryRequest, InventoryKind, InventorySnapshot, PlayerGameMode, PlayerVitals,
++        GetInventoryRequest, InventoryKind, InventorySnapshot, KickPlayerRequest,
++        PerformPlayerCommandRequest, PlayerGameMode, PlayerSessionState, PlayerVitals,
 +        SetCursorItemRequest, SetCursorItemResponse, SetHeldItemSlotRequest,
 +        SetHeldItemSlotResponse, SetInventoryItemRequest, SetInventoryItemResponse,
-+        SetPlayerGameModeRequest, TeleportPlayerRequest, UpdatePlayerVitalsRequest,
++        SetPlayerGameModeRequest, TeleportPlayerRequest, UpdatePlayerSessionStateRequest,
++        UpdatePlayerVitalsRequest,
 +    },
 +};
 +
@@ -13288,6 +13543,99 @@ index 0000000..6407d0e
 +                player.set_exhaustion(exhaustion).await;
 +            }
 +        })
++    });
++
++    Some(true)
++}
++
++pub fn ffi_native_bridge_get_player_session_state_impl(
++    request: Uuid,
++) -> Option<PlayerSessionState> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.value).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++
++    Some(PlayerSessionState {
++        sprinting: player.get_entity().is_sprinting(),
++        sneaking: player.get_entity().is_sneaking(),
++        ping: player.ping.load(Ordering::Relaxed),
++        locale: player.config.load().locale.clone(),
++    })
++}
++
++pub fn ffi_native_bridge_update_player_session_state_impl(
++    request: UpdatePlayerSessionStateRequest,
++) -> Option<bool> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++
++    tokio::task::block_in_place(|| {
++        ctx.runtime.block_on(async {
++            let entity = player.get_entity();
++            if let Some(sprinting) = request.sprinting
++                && entity.is_sprinting() != sprinting
++            {
++                entity.set_sprinting(sprinting).await;
++            }
++            if let Some(sneaking) = request.sneaking
++                && entity.is_sneaking() != sneaking
++            {
++                entity.set_sneaking(sneaking).await;
++            }
++        })
++    });
++
++    Some(true)
++}
++
++pub fn ffi_native_bridge_kick_player_impl(request: KickPlayerRequest) -> Option<bool> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
++    let reason = serde_json::from_str::<TextComponent>(&request.reason_json).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++
++    ctx.runtime.spawn(async move {
++        player.kick(DisconnectReason::Kicked, reason).await;
++    });
++
++    Some(true)
++}
++
++pub fn ffi_native_bridge_perform_player_command_impl(
++    request: PerformPlayerCommandRequest,
++) -> Option<bool> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
++    let command = request.command.trim().to_owned();
++    if command.is_empty() {
++        return Some(false);
++    }
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++    let server = ctx.plugin_context.server.clone();
++    let root = command
++        .strip_prefix('/')
++        .unwrap_or(&command)
++        .split_whitespace()
++        .next()?;
++    let command_exists = tokio::task::block_in_place(|| {
++        ctx.runtime.block_on(async {
++            server
++                .command_dispatcher
++                .read()
++                .await
++                .get_all_commands()
++                .contains_key(root)
++        })
++    });
++    if !command_exists {
++        return Some(false);
++    }
++
++    ctx.runtime.spawn(async move {
++        let source = player.get_command_source(&server).await;
++        let dispatcher = server.command_dispatcher.read().await;
++        dispatcher.handle_command(&source, &command).await;
 +    });
 +
 +    Some(true)
