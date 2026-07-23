@@ -47,6 +47,7 @@ use crate::{
             player_changed_world::PlayerChangedWorldEvent, player_join::PlayerJoinEvent,
             player_leave::PlayerLeaveEvent, player_respawn::PlayerRespawnEvent,
         },
+        weather::{thunder_change::ThunderChangeEvent, weather_change::WeatherChangeEvent},
     },
     server::Server,
 };
@@ -1120,8 +1121,8 @@ impl World {
         }
     }
 
-    async fn tick_environment(&self) {
-        let (world_age, is_night, time_of_day) = {
+    async fn tick_environment(self: &Arc<Self>) {
+        let (world_age, is_night, time_of_day, advance_weather) = {
             let mut level_time = self.level_time.lock().await;
             let (advance_time, advance_weather) = {
                 let lock = self.level_info.load();
@@ -1161,11 +1162,30 @@ impl World {
                 level_time.world_age,
                 level_time.is_night(),
                 level_time.time_of_day,
+                advance_weather,
             )
         };
 
-        let mut weather = self.weather.lock().await;
-        weather.tick_weather(self);
+        let weather_transition = {
+            let mut weather = self.weather.lock().await;
+            weather.weather_cycle_enabled = advance_weather;
+            weather
+                .advance_weather_cycle()
+                .map(|(raining, thundering)| {
+                    (
+                        weather.clear_weather_time,
+                        weather.rain_time,
+                        weather.thunder_time,
+                        raining,
+                        thundering,
+                    )
+                })
+        };
+        if let Some((clear_time, rain_time, thunder_time, raining, thundering)) = weather_transition
+        {
+            self.set_weather_parameters(clear_time, rain_time, thunder_time, raining, thundering)
+                .await;
+        }
 
         if self.should_skip_night() && is_night {
             let mut level_time = self.level_time.lock().await;
@@ -1178,13 +1198,19 @@ impl World {
                 player.wake_up().await;
             }
 
-            if weather.weather_cycle_enabled && (weather.raining || weather.thundering) {
-                weather.reset_weather_cycle(self);
+            let should_clear_weather = {
+                let weather = self.weather.lock().await;
+                weather.weather_cycle_enabled && (weather.raining || weather.thundering)
+            };
+            if should_clear_weather {
+                self.set_weather_parameters(0, 0, 0, false, false).await;
             }
         } else if world_age % 20 == 0 {
             let level_time = self.level_time.lock().await;
             level_time.send_time(self).await;
         }
+
+        self.weather.lock().await.tick_weather_levels(self);
     }
 
     #[expect(clippy::too_many_lines)]
@@ -1719,24 +1745,135 @@ impl World {
         self.weather.lock().await.raining
     }
 
-    pub async fn set_raining(&self, raining: bool) {
-        let mut weather = self.weather.lock().await;
-        if weather.raining != raining {
-            let thunder = weather.thundering;
-            weather.set_weather_parameters(self, 0, 0, raining, thunder);
-        }
+    pub async fn set_raining(self: &Arc<Self>, raining: bool) {
+        let (clear_time, rain_time, thunder_time, thundering) = {
+            let weather = self.weather.lock().await;
+            (
+                weather.clear_weather_time,
+                weather.rain_time,
+                weather.thunder_time,
+                weather.thundering,
+            )
+        };
+        self.set_weather_parameters(clear_time, rain_time, thunder_time, raining, thundering)
+            .await;
     }
 
     pub async fn is_thundering(&self) -> bool {
         self.weather.lock().await.thundering
     }
 
-    pub async fn set_thundering(&self, thundering: bool) {
+    pub async fn set_thundering(self: &Arc<Self>, thundering: bool) {
+        let (clear_time, rain_time, thunder_time, raining) = {
+            let weather = self.weather.lock().await;
+            (
+                weather.clear_weather_time,
+                weather.rain_time,
+                weather.thunder_time,
+                weather.raining,
+            )
+        };
+        self.set_weather_parameters(clear_time, rain_time, thunder_time, raining, thundering)
+            .await;
+    }
+
+    /// Updates weather after firing cancellable native plugin events.
+    ///
+    /// If a transition is cancelled, the corresponding state and timer remain
+    /// unchanged while an independent accepted transition can still proceed.
+    pub async fn set_weather_parameters(
+        self: &Arc<Self>,
+        clear_time: i32,
+        rain_time: i32,
+        thunder_time: i32,
+        raining: bool,
+        thundering: bool,
+    ) {
+        let (was_raining, was_thundering) = {
+            let weather = self.weather.lock().await;
+            (weather.raining, weather.thundering)
+        };
+
+        let rain_cancelled = if was_raining == raining {
+            false
+        } else if let Some(server) = self.server.upgrade() {
+            server
+                .plugin_manager
+                .fire(WeatherChangeEvent::new(self.clone(), raining))
+                .await
+                .cancelled
+        } else {
+            false
+        };
+
+        let thunder_cancelled = if was_thundering == thundering {
+            false
+        } else if let Some(server) = self.server.upgrade() {
+            server
+                .plugin_manager
+                .fire(ThunderChangeEvent::new(self.clone(), thundering))
+                .await
+                .cancelled
+        } else {
+            false
+        };
+
         let mut weather = self.weather.lock().await;
-        if weather.thundering != thundering {
-            let raining = weather.raining;
-            weather.set_weather_parameters(self, 0, 0, raining, thundering);
-        }
+        let applied_raining = if rain_cancelled {
+            weather.raining
+        } else {
+            raining
+        };
+        let applied_thundering = if thunder_cancelled {
+            weather.thundering
+        } else {
+            thundering
+        };
+        let applied_clear_time = if rain_cancelled {
+            weather.clear_weather_time
+        } else {
+            clear_time
+        };
+        let applied_rain_time = if rain_cancelled {
+            weather.rain_time
+        } else {
+            rain_time
+        };
+        let applied_thunder_time = if thunder_cancelled {
+            weather.thunder_time
+        } else {
+            thunder_time
+        };
+        weather.apply_weather_parameters(
+            self,
+            applied_clear_time,
+            applied_rain_time,
+            applied_thunder_time,
+            applied_raining,
+            applied_thundering,
+        );
+    }
+
+    /// Applies a weather update whose frontend has already fired its API events.
+    ///
+    /// Java compatibility bridges use this method after dispatching Bukkit
+    /// weather events to avoid recursively sending the same event back to Java.
+    pub async fn set_weather_parameters_after_event(
+        self: &Arc<Self>,
+        clear_time: i32,
+        rain_time: i32,
+        thunder_time: i32,
+        raining: bool,
+        thundering: bool,
+    ) {
+        self.weather.lock().await.apply_weather_parameters(
+            self,
+            clear_time,
+            rain_time,
+            thunder_time,
+            raining,
+            thundering,
+        );
     }
 
     /// Gets the y position of the first non air block from the top down

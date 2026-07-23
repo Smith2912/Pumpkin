@@ -1,0 +1,947 @@
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
+index e6519917b29d5eb3ebd8b58895d31400536aea9d..d2a0fd796431b4d0ebc33532b15e19df735b468f 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
+@@ -32,6 +32,8 @@ import org.bukkit.event.player.PlayerToggleSprintEvent;
+ import org.bukkit.event.server.PluginEnableEvent;
+ import org.bukkit.event.server.RemoteServerCommandEvent;
+ import org.bukkit.event.server.ServerCommandEvent;
++import org.bukkit.event.weather.ThunderChangeEvent;
++import org.bukkit.event.weather.WeatherChangeEvent;
+ import com.destroystokyo.paper.event.brigadier.AsyncPlayerSendCommandsEvent;
+ import com.destroystokyo.paper.event.server.AsyncTabCompleteEvent;
+ import org.bukkit.plugin.EventExecutor;
+@@ -172,6 +174,14 @@ public final class EventSystemTests {
+             @EventHandler
+             public void onRemoteServerCommand(RemoteServerCommandEvent event) {
+             }
++
++            @EventHandler
++            public void onWeatherChange(WeatherChangeEvent event) {
++            }
++
++            @EventHandler
++            public void onThunderChange(ThunderChangeEvent event) {
++            }
+         };
+         Bukkit.getPluginManager().registerEvents(listener, plugin);
+     }
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
+index 8f61b9c31a666dd1827150ebe9e49f92d5f44e98..58a3538c93c4a0a13e00feab92529643bfe93558 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
+@@ -9,6 +9,11 @@ import org.bukkit.Server;
+ import org.bukkit.block.Block;
+ import org.bukkit.command.CommandMap;
+ import org.bukkit.command.ConsoleCommandSender;
++import org.bukkit.event.EventHandler;
++import org.bukkit.event.HandlerList;
++import org.bukkit.event.Listener;
++import org.bukkit.event.weather.ThunderChangeEvent;
++import org.bukkit.event.weather.WeatherChangeEvent;
+ import org.bukkit.plugin.PluginManager;
+ import org.bukkit.permissions.PermissibleBase;
+ import org.bukkit.scheduler.BukkitScheduler;
+@@ -16,6 +21,7 @@ import org.patchbukkit.testplugin.ConformanceTest;
+ import org.patchbukkit.testplugin.TestCategory;
+ import org.patchbukkit.testplugin.TestExpectation;
+ import org.bukkit.plugin.java.JavaPlugin;
++import java.util.concurrent.atomic.AtomicBoolean;
+
+ import static org.patchbukkit.testplugin.TestAssertions.*;
+
+@@ -45,6 +51,112 @@ public final class ServerTests {
+         assertNotNull(block.getType(), "block material");
+     }
+
++    @ConformanceTest(name = "World time and weather round-trip through Pumpkin", category = TestCategory.SERVER)
++    public void testWorldTimeAndWeather() {
++        World world = Bukkit.getWorlds().get(0);
++        long fullTime = world.getFullTime();
++        boolean storm = world.hasStorm();
++        boolean thundering = world.isThundering();
++        int weatherDuration = world.getWeatherDuration();
++        int thunderDuration = world.getThunderDuration();
++        int clearWeatherDuration = world.getClearWeatherDuration();
++
++        try {
++            world.setFullTime(fullTime + 20);
++            long observedFullTime = world.getFullTime();
++            assertTrue(
++                observedFullTime >= fullTime + 20 && observedFullTime <= fullTime + 25,
++                "full time should round-trip while the world keeps ticking"
++            );
++            assertTrue(world.getTime() >= 0 && world.getTime() < 24000, "day time should be normalized");
++            assertTrue(world.getGameTime() >= 0, "game time should be available");
++
++            world.setStorm(!storm);
++            assertTrue(world.hasStorm() != storm, "storm state should round-trip");
++            world.setWeatherDuration(200);
++            int observedWeatherDuration = world.getWeatherDuration();
++            assertTrue(
++                observedWeatherDuration >= 195 && observedWeatherDuration <= 200,
++                "weather duration should round-trip while the world keeps ticking"
++            );
++
++            world.setThundering(!thundering);
++            assertTrue(world.isThundering() != thundering, "thunder state should round-trip");
++            world.setThunderDuration(300);
++            int observedThunderDuration = world.getThunderDuration();
++            assertTrue(
++                observedThunderDuration >= 295 && observedThunderDuration <= 300,
++                "thunder duration should round-trip while the world keeps ticking"
++            );
++
++            world.setClearWeatherDuration(400);
++            int observedClearWeatherDuration = world.getClearWeatherDuration();
++            assertTrue(
++                observedClearWeatherDuration >= 395 && observedClearWeatherDuration <= 400,
++                "clear-weather duration should round-trip while the world keeps ticking"
++            );
++        } finally {
++            world.setFullTime(fullTime);
++            world.setStorm(storm);
++            world.setWeatherDuration(weatherDuration);
++            world.setThundering(thundering);
++            world.setThunderDuration(thunderDuration);
++            world.setClearWeatherDuration(clearWeatherDuration);
++        }
++    }
++
++    @ConformanceTest(name = "World weather setters fire cancellable Bukkit events", category = TestCategory.SERVER)
++    public void testWorldWeatherCancellation() {
++        World world = Bukkit.getWorlds().get(0);
++        boolean originalStorm = world.hasStorm();
++        boolean originalThunder = world.isThundering();
++        boolean replacementStorm = !originalStorm;
++        boolean replacementThunder = !originalThunder;
++        AtomicBoolean weatherObserved = new AtomicBoolean();
++        AtomicBoolean thunderObserved = new AtomicBoolean();
++
++        Listener listener = new Listener() {
++            @EventHandler
++            public void onWeatherChange(WeatherChangeEvent event) {
++                if (event.getWorld() == world
++                    && event.toWeatherState() == replacementStorm) {
++                    weatherObserved.set(true);
++                    event.setCancelled(true);
++                }
++            }
++
++            @EventHandler
++            public void onThunderChange(ThunderChangeEvent event) {
++                if (event.getWorld() == world
++                    && event.toThunderState() == replacementThunder) {
++                    thunderObserved.set(true);
++                    event.setCancelled(true);
++                }
++            }
++        };
++
++        Bukkit.getPluginManager().registerEvents(listener, plugin);
++        try {
++            world.setStorm(replacementStorm);
++            assertTrue(weatherObserved.get(), "WeatherChangeEvent should be delivered");
++            assertTrue(
++                world.hasStorm() == originalStorm,
++                "cancelled WeatherChangeEvent should preserve rain state"
++            );
++
++            world.setThundering(replacementThunder);
++            assertTrue(thunderObserved.get(), "ThunderChangeEvent should be delivered");
++            assertTrue(
++                world.isThundering() == originalThunder,
++                "cancelled ThunderChangeEvent should preserve thunder state"
++            );
++        } finally {
++            HandlerList.unregisterAll(listener);
++            world.setStorm(originalStorm);
++            world.setThundering(originalThunder);
++        }
++    }
++
+     private final JavaPlugin plugin;
+
+     public ServerTests(JavaPlugin plugin) {
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
+index 645ffa2f8b0b449efa2ab5a1929f4b0547ac55ae..3b82cc75adfc00374bb623c25d093593250b690f 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
+@@ -103,6 +103,14 @@ public class PatchBukkitPluginManager extends SimplePluginManager {
+         this.eventManager.callEvent(event);
+     }
+
++    /**
++     * Dispatches an event that has already originated inside the PatchBukkit
++     * implementation without sending it back through the native bridge.
++     */
++    public void callEventLocally(@NotNull Event event) throws IllegalStateException {
++        this.eventManager.callEventLocally(event);
++    }
++
+     @Override
+     public void registerEvents(@NotNull Listener listener, @NotNull Plugin plugin) {
+         this.eventManager.registerEvents(listener, plugin);
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
+index 9c8750dfc243694cb53a9a71ee210e489b50874c..91fcc96c5b1041cb6bece18e7793f16f46235d7c 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
+@@ -48,6 +48,8 @@ import patchbukkit.events.PlayerToggleSneakEvent;
+ import patchbukkit.events.PlayerToggleSprintEvent;
+ import patchbukkit.events.RemoteServerCommandEvent;
+ import patchbukkit.events.ServerCommandEvent;
++import patchbukkit.events.ThunderChangeEvent;
++import patchbukkit.events.WeatherChangeEvent;
+
+ import java.net.InetAddress;
+ import java.net.UnknownHostException;
+@@ -505,6 +507,26 @@ public class PatchBukkitEventFactory {
+                     redstoneEvent.getNewCurrent()
+                 );
+             }
++            case WEATHER_CHANGE -> {
++                WeatherChangeEvent weatherEvent = event.getWeatherChange();
++                org.bukkit.World world = getWorld(weatherEvent.getWorldUuid());
++                if (world == null) yield null;
++
++                yield new org.bukkit.event.weather.WeatherChangeEvent(
++                    world,
++                    weatherEvent.getToWeatherState()
++                );
++            }
++            case THUNDER_CHANGE -> {
++                ThunderChangeEvent thunderEvent = event.getThunderChange();
++                org.bukkit.World world = getWorld(thunderEvent.getWorldUuid());
++                if (world == null) yield null;
++
++                yield new org.bukkit.event.weather.ThunderChangeEvent(
++                    world,
++                    thunderEvent.getToThunderState()
++                );
++            }
+             case PLAYER_INTERACT -> {
+                 PlayerInteractEvent interactEvent = event.getPlayerInteract();
+                 Player player = getPlayer(interactEvent.getPlayerUuid().getValue());
+@@ -863,6 +885,24 @@ public class PatchBukkitEventFactory {
+                     .setNewCurrent(redstoneEvent.getNewCurrent())
+                     .build()
+             );
++        } else if (event instanceof org.bukkit.event.weather.WeatherChangeEvent weatherEvent) {
++            eventBuilder.setWeatherChange(
++                WeatherChangeEvent.newBuilder()
++                    .setWorldUuid(UUID.newBuilder()
++                        .setValue(weatherEvent.getWorld().getUID().toString())
++                        .build())
++                    .setToWeatherState(weatherEvent.toWeatherState())
++                    .build()
++            );
++        } else if (event instanceof org.bukkit.event.weather.ThunderChangeEvent thunderEvent) {
++            eventBuilder.setThunderChange(
++                ThunderChangeEvent.newBuilder()
++                    .setWorldUuid(UUID.newBuilder()
++                        .setValue(thunderEvent.getWorld().getUID().toString())
++                        .build())
++                    .setToThunderState(thunderEvent.toThunderState())
++                    .build()
++            );
+         } else if (event instanceof org.bukkit.event.player.PlayerInteractEvent interactEvent) {
+             PlayerInteractEvent.Builder interactBuilder = PlayerInteractEvent.newBuilder()
+                 .setPlayerUuid(UUID.newBuilder()
+@@ -882,6 +922,23 @@ public class PatchBukkitEventFactory {
+         return builder.build().toByteArray();
+     }
+
++    @Nullable
++    private static org.bukkit.World getWorld(@NotNull UUID worldUuid) {
++        try {
++            org.bukkit.World world = Bukkit.getWorld(
++                java.util.UUID.fromString(worldUuid.getValue())
++            );
++            if (world == null) {
++                LOGGER.warning("EventFactory: World is unavailable for UUID "
++                    + worldUuid.getValue());
++            }
++            return world;
++        } catch (IllegalArgumentException exception) {
++            LOGGER.warning("EventFactory: Invalid world UUID " + worldUuid.getValue());
++            return null;
++        }
++    }
++
+     @Nullable
+     private static org.bukkit.Location createLocation(
+         @NotNull patchbukkit.common.Location location
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
+index 9420cad49b15cb0ca80b982a56958a5c25831b8f..17a645c101df0b6caec27970fa60d4c931e28789 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
+@@ -44,11 +44,7 @@ public class PatchBukkitEventManager {
+     }
+
+     public void callEvent(@NotNull Event event) throws IllegalStateException {
+-        if (event.isAsynchronous() && this.server.isPrimaryThread()) {
+-            throw new IllegalStateException(event.getEventName() + " may only be triggered asynchronously.");
+-        } else if (!event.isAsynchronous() && !this.server.isPrimaryThread() && !this.server.isStopping()) {
+-            throw new IllegalStateException(event.getEventName() + " may only be triggered synchronously.");
+-        }
++        validateEventThread(event);
+
+         if (isJavaOnlyEvent(event.getClass())) {
+             callEventJavaOnly(event);
+@@ -80,6 +76,23 @@ public class PatchBukkitEventManager {
+         }
+     }
+
++    /**
++     * Dispatches an event created by a PatchBukkit API implementation without
++     * reflecting it back through the native bridge.
++     */
++    public void callEventLocally(@NotNull Event event) throws IllegalStateException {
++        validateEventThread(event);
++        callEventJavaOnly(event);
++    }
++
++    private void validateEventThread(@NotNull Event event) {
++        if (event.isAsynchronous() && this.server.isPrimaryThread()) {
++            throw new IllegalStateException(event.getEventName() + " may only be triggered asynchronously.");
++        } else if (!event.isAsynchronous() && !this.server.isPrimaryThread() && !this.server.isStopping()) {
++            throw new IllegalStateException(event.getEventName() + " may only be triggered synchronously.");
++        }
++    }
++
+     /**
+     * Java-only event dispatch for events that don't have Pumpkin equivalents.
+     * Used for custom plugin events or unsupported Bukkit events.
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
+index 4766cfa513aefbae49a185a9969fc54603d58673..1a072a99d75fb09b7f8d052ca4e59736ed3db93f 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
+@@ -28,6 +28,12 @@ import org.bukkit.util.Vector;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
+ import org.jspecify.annotations.NonNull;
++import org.patchbukkit.bridge.BridgeUtils;
++import org.patchbukkit.PatchBukkitPluginManager;
++import patchbukkit.bridge.NativeBridgeFfi;
++import patchbukkit.world.UpdateWorldStateRequest;
++import patchbukkit.world.WorldState;
++import patchbukkit.world.WorldStateRequest;
+ public class PatchBukkitWorld
+     extends PatchBukkitRegionAccessor
+     implements World
+@@ -74,6 +80,29 @@ public class PatchBukkitWorld
+         return world;
+     }
+
++    private WorldState nativeState() {
++        WorldState state = NativeBridgeFfi.getWorldState(
++            WorldStateRequest.newBuilder()
++                .setWorldUuid(BridgeUtils.convertUuid(this.uuid))
++                .build()
++        );
++        if (state == null) {
++            throw new IllegalStateException("World is no longer loaded: " + this.uuid);
++        }
++        return state;
++    }
++
++    private void updateNativeState(UpdateWorldStateRequest.Builder request) {
++        var response = NativeBridgeFfi.updateWorldState(
++            request
++                .setWorldUuid(BridgeUtils.convertUuid(this.uuid))
++                .build()
++        );
++        if (response == null || !response.getSuccess()) {
++            throw new IllegalStateException("Failed to update world state: " + this.uuid);
++        }
++    }
++
+     @Override
+     public boolean isVoidDamageEnabled() {
+         // TODO Auto-generated method stub
+@@ -641,138 +670,136 @@ public class PatchBukkitWorld
+
+     @Override
+     public long getTime() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getTime'"
+-        );
++        return Math.floorMod(getFullTime(), 24000L);
+     }
+
+     @Override
+     public void setTime(long time) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'setTime'"
+-        );
++        long fullTime = getFullTime();
++        setFullTime(fullTime + Math.floorMod(time - fullTime, 24000L));
+     }
+
+     @Override
+     public long getFullTime() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getFullTime'"
+-        );
++        return nativeState().getFullTime();
+     }
+
+     @Override
+     public void setFullTime(long time) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'setFullTime'"
++        updateNativeState(
++            UpdateWorldStateRequest.newBuilder().setFullTime(time)
+         );
+     }
+
+     @Override
+     public boolean isDayTime() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'isDayTime'"
+-        );
++        return getTime() < 12300L;
+     }
+
+     @Override
+     public long getGameTime() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getGameTime'"
+-        );
++        return nativeState().getGameTime();
+     }
+
+     @Override
+     public boolean hasStorm() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'hasStorm'"
+-        );
++        return nativeState().getRaining();
+     }
+
+     @Override
+     public void setStorm(boolean hasStorm) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'setStorm'"
++        if (hasStorm == hasStorm()) {
++            return;
++        }
++        org.bukkit.event.weather.WeatherChangeEvent event =
++            new org.bukkit.event.weather.WeatherChangeEvent(this, hasStorm);
++        dispatchLocalEvent(event);
++        if (event.isCancelled()) {
++            return;
++        }
++        updateNativeState(
++            UpdateWorldStateRequest.newBuilder().setRaining(hasStorm)
+         );
+     }
+
+     @Override
+     public int getWeatherDuration() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getWeatherDuration'"
+-        );
++        return nativeState().getRainTime();
+     }
+
+     @Override
+     public void setWeatherDuration(int duration) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'setWeatherDuration'"
++        if (duration < 0) {
++            throw new IllegalArgumentException("Weather duration cannot be negative");
++        }
++        updateNativeState(
++            UpdateWorldStateRequest.newBuilder().setRainTime(duration)
+         );
+     }
+
+     @Override
+     public boolean isThundering() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'isThundering'"
+-        );
++        return nativeState().getThundering();
+     }
+
+     @Override
+     public void setThundering(boolean thundering) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'setThundering'"
++        if (thundering == isThundering()) {
++            return;
++        }
++        org.bukkit.event.weather.ThunderChangeEvent event =
++            new org.bukkit.event.weather.ThunderChangeEvent(this, thundering);
++        dispatchLocalEvent(event);
++        if (event.isCancelled()) {
++            return;
++        }
++        updateNativeState(
++            UpdateWorldStateRequest.newBuilder().setThundering(thundering)
+         );
+     }
+
+     @Override
+     public int getThunderDuration() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getThunderDuration'"
+-        );
++        return nativeState().getThunderTime();
+     }
+
+     @Override
+     public void setThunderDuration(int duration) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'setThunderDuration'"
++        if (duration < 0) {
++            throw new IllegalArgumentException("Thunder duration cannot be negative");
++        }
++        updateNativeState(
++            UpdateWorldStateRequest.newBuilder().setThunderTime(duration)
+         );
+     }
+
+     @Override
+     public boolean isClearWeather() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'isClearWeather'"
+-        );
++        WorldState state = nativeState();
++        return !state.getRaining() && !state.getThundering();
+     }
+
+     @Override
+     public void setClearWeatherDuration(int duration) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'setClearWeatherDuration'"
++        if (duration < 0) {
++            throw new IllegalArgumentException("Clear-weather duration cannot be negative");
++        }
++        updateNativeState(
++            UpdateWorldStateRequest.newBuilder().setClearWeatherTime(duration)
+         );
+     }
+
+     @Override
+     public int getClearWeatherDuration() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getClearWeatherDuration'"
+-        );
++        return nativeState().getClearWeatherTime();
++    }
++
++    private static void dispatchLocalEvent(org.bukkit.event.Event event) {
++        if (Bukkit.getPluginManager() instanceof PatchBukkitPluginManager manager) {
++            manager.callEventLocally(event);
++        } else {
++            Bukkit.getPluginManager().callEvent(event);
++        }
+     }
+
+     @Override
+diff --git a/proto/patchbukkit/bridge.proto b/proto/patchbukkit/bridge.proto
+index eb99334c8a4a3a4c9aa5b1922b99c74ae7cec4a8..9bbc8a3f0456012576aa5c21f426a26113f60f48 100644
+--- a/proto/patchbukkit/bridge.proto
++++ b/proto/patchbukkit/bridge.proto
+@@ -13,6 +13,7 @@ import "patchbukkit/itemstack.proto";
+ import "patchbukkit/player.proto";
+ import "patchbukkit/registry.proto";
+ import "patchbukkit/sound.proto";
++import "patchbukkit/world.proto";
+
+ service NativeBridge {
+   rpc GetAbilities(patchbukkit.common.UUID) returns (patchbukkit.abilities.Abilities);
+@@ -26,6 +27,8 @@ service NativeBridge {
+   rpc GetLocation(patchbukkit.common.UUID) returns (patchbukkit.common.Location);
+   rpc GetWorlds(patchbukkit.common.EmptyRequest) returns (patchbukkit.common.WorldList);
+   rpc GetBlock(patchbukkit.common.BlockPosition) returns (patchbukkit.common.BlockSnapshot);
++  rpc GetWorldState(patchbukkit.world.WorldStateRequest) returns (patchbukkit.world.WorldState);
++  rpc UpdateWorldState(patchbukkit.world.UpdateWorldStateRequest) returns (patchbukkit.world.UpdateWorldStateResponse);
+
+   rpc GetPlayerGameMode(patchbukkit.common.UUID) returns (patchbukkit.player.PlayerGameMode);
+   rpc SetPlayerGameMode(patchbukkit.player.SetPlayerGameModeRequest) returns (patchbukkit.player.SetPlayerGameModeResponse);
+diff --git a/proto/patchbukkit/events/event.proto b/proto/patchbukkit/events/event.proto
+index 6e267267912de31af2ced184aad07644a02e8709..708065d2d5e9dbcccfc8734b1160717f689a9037 100644
+--- a/proto/patchbukkit/events/event.proto
++++ b/proto/patchbukkit/events/event.proto
+@@ -5,6 +5,7 @@ package patchbukkit.events;
+ import "patchbukkit/common/types.proto";
+ import "patchbukkit/events/block_events.proto";
+ import "patchbukkit/events/player_events.proto";
++import "patchbukkit/events/weather_events.proto";
+
+ option java_multiple_files = true;
+ option java_package = "patchbukkit.events";
+@@ -39,6 +40,8 @@ message Event {
+     PlayerToggleSprintEvent player_toggle_sprint = 26;
+     PlayerItemHeldEvent player_item_held = 27;
+     PlayerExpChangeEvent player_exp_change = 28;
++    WeatherChangeEvent weather_change = 29;
++    ThunderChangeEvent thunder_change = 30;
+   }
+ }
+
+diff --git a/proto/patchbukkit/events/weather_events.proto b/proto/patchbukkit/events/weather_events.proto
+new file mode 100644
+index 0000000000000000000000000000000000000000..f91ac01a336adf1a93a05286ab61c7cb66902403
+--- /dev/null
++++ b/proto/patchbukkit/events/weather_events.proto
+@@ -0,0 +1,18 @@
++syntax = "proto3";
++
++package patchbukkit.events;
++
++import "patchbukkit/common/types.proto";
++
++option java_multiple_files = true;
++option java_package = "patchbukkit.events";
++
++message WeatherChangeEvent {
++  patchbukkit.common.UUID world_uuid = 1;
++  bool to_weather_state = 2;
++}
++
++message ThunderChangeEvent {
++  patchbukkit.common.UUID world_uuid = 1;
++  bool to_thunder_state = 2;
++}
+diff --git a/proto/patchbukkit/world.proto b/proto/patchbukkit/world.proto
+new file mode 100644
+index 0000000000000000000000000000000000000000..c98a9f1374f51dea3b66852a83f86d79e38813a6
+--- /dev/null
++++ b/proto/patchbukkit/world.proto
+@@ -0,0 +1,37 @@
++syntax = "proto3";
++
++package patchbukkit.world;
++
++import "patchbukkit/common/types.proto";
++
++option java_multiple_files = true;
++option java_package = "patchbukkit.world";
++
++message WorldStateRequest {
++  patchbukkit.common.UUID world_uuid = 1;
++}
++
++message WorldState {
++  int64 full_time = 1;
++  int64 game_time = 2;
++  bool raining = 3;
++  int32 rain_time = 4;
++  bool thundering = 5;
++  int32 thunder_time = 6;
++  int32 clear_weather_time = 7;
++}
++
++message UpdateWorldStateRequest {
++  patchbukkit.common.UUID world_uuid = 1;
++  optional int64 full_time = 2;
++  optional bool raining = 3;
++  optional int32 rain_time = 4;
++  optional bool thundering = 5;
++  optional int32 thunder_time = 6;
++  optional int32 clear_weather_time = 7;
++}
++
++message UpdateWorldStateResponse {
++  bool success = 1;
++  WorldState state = 2;
++}
+diff --git a/rust/src/events/handler.rs b/rust/src/events/handler.rs
+index 0d2137986c30503434695b7a910f04466141032d..1eb916a342e87d7b1db76421758b6fcbbc79e0ab 100644
+--- a/rust/src/events/handler.rs
++++ b/rust/src/events/handler.rs
+@@ -28,7 +28,8 @@ use crate::proto::patchbukkit::events::{
+     PlayerToggleFlightEvent as ProtoPlayerToggleFlightEvent,
+     PlayerToggleSneakEvent as ProtoPlayerToggleSneakEvent,
+     PlayerToggleSprintEvent as ProtoPlayerToggleSprintEvent, RemoteServerCommandEvent,
+-    ServerCommandEvent,
++    ServerCommandEvent, ThunderChangeEvent as ProtoThunderChangeEvent,
++    WeatherChangeEvent as ProtoWeatherChangeEvent,
+ };
+
+ pub struct EventContext {
+@@ -461,6 +462,62 @@ impl PatchBukkitEvent for pumpkin::plugin::block::block_redstone::BlockRedstoneE
+     }
+ }
+
++impl PatchBukkitEvent for pumpkin::plugin::weather::weather_change::WeatherChangeEvent {
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::WeatherChange(ProtoWeatherChangeEvent {
++                    world_uuid: Some(Uuid {
++                        value: self.world.uuid.to_string(),
++                    }),
++                    to_weather_state: self.to_weather_state,
++                })),
++            },
++            context: EventContext {
++                server,
++                player: None,
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
++        let Data::WeatherChange(event) = data else {
++            return None;
++        };
++        let world_uuid = uuid::Uuid::parse_str(&event.world_uuid?.value).ok()?;
++        (world_uuid == self.world.uuid && event.to_weather_state == self.to_weather_state)
++            .then_some(())
++    }
++}
++
++impl PatchBukkitEvent for pumpkin::plugin::weather::thunder_change::ThunderChangeEvent {
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::ThunderChange(ProtoThunderChangeEvent {
++                    world_uuid: Some(Uuid {
++                        value: self.world.uuid.to_string(),
++                    }),
++                    to_thunder_state: self.to_thunder_state,
++                })),
++            },
++            context: EventContext {
++                server,
++                player: None,
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
++        let Data::ThunderChange(event) = data else {
++            return None;
++        };
++        let world_uuid = uuid::Uuid::parse_str(&event.world_uuid?.value).ok()?;
++        (world_uuid == self.world.uuid && event.to_thunder_state == self.to_thunder_state)
++            .then_some(())
++    }
++}
++
+ impl PatchBukkitEvent for pumpkin::plugin::player::player_interact_event::PlayerInteractEvent {
+     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+         let action = match self.action {
+diff --git a/rust/src/java/native_callbacks/events.rs b/rust/src/java/native_callbacks/events.rs
+index 4f016d3744cddfc4aff309dbd8fcc3f68131ce56..2781a37434f8b6d7333210efb73f719e65b60677 100644
+--- a/rust/src/java/native_callbacks/events.rs
++++ b/rust/src/java/native_callbacks/events.rs
+@@ -450,6 +450,40 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
+                         )
+                         .await;
+                 }
++                "org.bukkit.event.weather.WeatherChangeEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::weather::weather_change::WeatherChangeEvent,
++                            PatchBukkitEventHandler<
++                                pumpkin::plugin::weather::weather_change::WeatherChangeEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
++                "org.bukkit.event.weather.ThunderChangeEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::weather::thunder_change::ThunderChangeEvent,
++                            PatchBukkitEventHandler<
++                                pumpkin::plugin::weather::thunder_change::ThunderChangeEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
+                 "org.bukkit.event.player.PlayerInteractEvent" => {
+                     context
+                         .register_event::<
+diff --git a/rust/src/java/native_callbacks/mod.rs b/rust/src/java/native_callbacks/mod.rs
+index f8246fae754d637161a5f718e38133c7662a1420..51afcfd2fa5e0f1e7e365398b8a649050a7288ee 100644
+--- a/rust/src/java/native_callbacks/mod.rs
++++ b/rust/src/java/native_callbacks/mod.rs
+@@ -31,6 +31,9 @@ pub use player::*;
+ pub mod registry;
+ pub use registry::*;
+
++pub mod world;
++pub use world::*;
++
+ pub mod sound;
+ pub use sound::*;
+
+diff --git a/rust/src/java/native_callbacks/world.rs b/rust/src/java/native_callbacks/world.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..021e4b59a4aee72741080aed1444cc2d4bc5bca2
+--- /dev/null
++++ b/rust/src/java/native_callbacks/world.rs
+@@ -0,0 +1,121 @@
++use std::sync::Arc;
++
++use pumpkin::world::World;
++
++use crate::{
++    java::native_callbacks::CALLBACK_CONTEXT,
++    proto::patchbukkit::world::{
++        UpdateWorldStateRequest, UpdateWorldStateResponse, WorldState, WorldStateRequest,
++    },
++};
++
++fn find_world(world_uuid: &str) -> Option<Arc<World>> {
++    let context = CALLBACK_CONTEXT.get()?;
++    let uuid = uuid::Uuid::parse_str(world_uuid).ok()?;
++    context
++        .plugin_context
++        .server
++        .worlds
++        .load()
++        .iter()
++        .find(|world| world.uuid == uuid)
++        .cloned()
++}
++
++async fn snapshot(world: &World) -> WorldState {
++    let level_time = world.level_time.lock().await;
++    let full_time = level_time.time_of_day;
++    let game_time = level_time.world_age;
++    drop(level_time);
++
++    let weather = world.weather.lock().await;
++    WorldState {
++        full_time,
++        game_time,
++        raining: weather.raining,
++        rain_time: weather.rain_time,
++        thundering: weather.thundering,
++        thunder_time: weather.thunder_time,
++        clear_weather_time: weather.clear_weather_time,
++    }
++}
++
++pub fn ffi_native_bridge_get_world_state_impl(request: WorldStateRequest) -> Option<WorldState> {
++    let context = CALLBACK_CONTEXT.get()?;
++    let world = find_world(&request.world_uuid?.value)?;
++
++    Some(tokio::task::block_in_place(|| {
++        context.runtime.block_on(snapshot(&world))
++    }))
++}
++
++pub fn ffi_native_bridge_update_world_state_impl(
++    request: UpdateWorldStateRequest,
++) -> Option<UpdateWorldStateResponse> {
++    let context = CALLBACK_CONTEXT.get()?;
++    let world = find_world(&request.world_uuid?.value)?;
++
++    if request.rain_time.is_some_and(|value| value < 0)
++        || request.thunder_time.is_some_and(|value| value < 0)
++        || request.clear_weather_time.is_some_and(|value| value < 0)
++    {
++        return Some(UpdateWorldStateResponse {
++            success: false,
++            state: None,
++        });
++    }
++
++    Some(tokio::task::block_in_place(|| {
++        context.runtime.block_on(async {
++            if let Some(full_time) = request.full_time {
++                world.set_time_of_day(full_time).await;
++            }
++
++            if request.raining.is_some()
++                || request.rain_time.is_some()
++                || request.thundering.is_some()
++                || request.thunder_time.is_some()
++                || request.clear_weather_time.is_some()
++            {
++                let (
++                    current_raining,
++                    current_rain_time,
++                    current_thundering,
++                    current_thunder_time,
++                    current_clear_weather_time,
++                ) = {
++                    let weather = world.weather.lock().await;
++                    (
++                        weather.raining,
++                        weather.rain_time,
++                        weather.thundering,
++                        weather.thunder_time,
++                        weather.clear_weather_time,
++                    )
++                };
++                let raining = request.raining.unwrap_or(current_raining);
++                let rain_time = request.rain_time.unwrap_or(current_rain_time);
++                let thundering = request.thundering.unwrap_or(current_thundering);
++                let thunder_time = request.thunder_time.unwrap_or(current_thunder_time);
++                let clear_weather_time = request
++                    .clear_weather_time
++                    .unwrap_or(current_clear_weather_time);
++
++                world
++                    .set_weather_parameters_after_event(
++                        clear_weather_time,
++                        rain_time,
++                        thunder_time,
++                        raining,
++                        thundering,
++                    )
++                    .await;
++            }
++
++            UpdateWorldStateResponse {
++                success: true,
++                state: Some(snapshot(&world).await),
++            }
++        })
++    }))
++}
+diff --git a/rust/src/proto/mod.rs b/rust/src/proto/mod.rs
+index edf6c8d4e272e989c4cbae6051344a85594606b7..53edec6e91db47e1a7413f74ceacbe8a2769d2e3 100644
+--- a/rust/src/proto/mod.rs
++++ b/rust/src/proto/mod.rs
+@@ -42,6 +42,10 @@ pub mod patchbukkit {
+     pub mod itemstack {
+         include!(concat!(env!("OUT_DIR"), "/patchbukkit.itemstack.rs"));
+     }
++
++    pub mod world {
++        include!(concat!(env!("OUT_DIR"), "/patchbukkit.world.rs"));
++    }
+ }
+
+ include!(concat!(env!("OUT_DIR"), "/ffi_init.rs"));

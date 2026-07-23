@@ -4,6 +4,7 @@ use std::sync::Arc;
 pub mod block;
 pub mod player;
 pub mod server;
+pub mod weather;
 pub mod world;
 
 /// A trait representing an event in the system.

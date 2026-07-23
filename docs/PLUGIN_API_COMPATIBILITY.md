@@ -351,6 +351,43 @@ and inventories can report their type. Paper menu-view builders remain
 explicitly unsupported until Pumpkin has a native container/view construction
 bridge; this gate does not claim them.
 
+## World time and weather batch gate
+
+The Essentials-style world-state batch is complete only when one deployed
+commit passes all of these checks:
+
+1. Bukkit `getTime`, `getFullTime`, `getGameTime`, `setTime`, and
+   `setFullTime` read and update Pumpkin's live world clock. Relative time is
+   normalized to one Minecraft day, while full time preserves the day count.
+2. Bukkit storm, thunder, rain-duration, thunder-duration, and forced-clear
+   duration reads and writes use Pumpkin's live weather state. The three timers
+   remain independent across the bridge.
+3. Pumpkin's built-in weather command, natural weather cycle, sleep-based
+   weather reset, and native plugin setters fire `WeatherChangeEvent` and
+   `ThunderChangeEvent` before changing state. Cancellation preserves the
+   corresponding state and timer. Bukkit-originated setters dispatch locally
+   before the native update so they cannot recursively deadlock the JVM worker.
+4. Accepted time changes are sent to connected Java and Bedrock clients, and
+   storm transitions use Pumpkin's normal weather packets rather than a
+   Java-only cache.
+5. Negative weather durations are rejected before mutation. An unloaded world
+   or rejected native update produces an explicit Java error rather than
+   fabricated state.
+6. The conformance checks register both weather events, prove that cancellation
+   blocks the matching Bukkit world setter, snapshot time and weather, change
+   every bridged field, read each value back while the world continues ticking,
+   and restore the original state in a `finally` block.
+7. The pinned patch applies cleanly and the clean replay passes the Java,
+   protobuf, test-plugin, and Rust bridge builds.
+8. Human verification runs `/pbtest server`, confirms its cancelled weather
+   transitions do not change the sky, then runs Essentials time, weather, and
+   thunder commands with protection disabled and confirms the sky and client
+   clock visibly change.
+
+This batch does not claim per-player time or weather, lightning events or
+entities, game-rule mutation, world creation/unloading, or cross-world clock
+coupling.
+
 ## Human verification runbook
 
 Every compatibility change must leave evidence a maintainer can reproduce and
