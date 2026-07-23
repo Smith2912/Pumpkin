@@ -1595,10 +1595,122 @@ index 0000000..ed415a4
 +    }
 +}
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
-index e48457f..870ef7c 100644
+index e48457f..b1641c8 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
-@@ -1128,14 +1128,42 @@ public class PatchBukkitHumanEntity
+@@ -50,6 +50,7 @@ import org.checkerframework.checker.index.qual.NonNegative;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
+ import org.jetbrains.annotations.Range;
++import org.patchbukkit.bridge.BridgeUtils;
+ 
+ import com.destroystokyo.paper.block.TargetBlockInfo;
+ import com.destroystokyo.paper.block.TargetBlockInfo.FluidMode;
+@@ -58,6 +59,9 @@ import com.destroystokyo.paper.entity.TargetEntityInfo;
+ import io.papermc.paper.world.damagesource.CombatTracker;
+ import net.kyori.adventure.key.Key;
+ import net.kyori.adventure.util.TriState;
++import patchbukkit.bridge.NativeBridgeFfi;
++import patchbukkit.player.PlayerVitals;
++import patchbukkit.player.UpdatePlayerVitalsRequest;
+ 
+ @SuppressWarnings({ "deprecation", "removal" })
+ public class PatchBukkitHumanEntity
+@@ -71,6 +75,23 @@ public class PatchBukkitHumanEntity
+         super(uuid, name);
+     }
+ 
++    private PlayerVitals getPlayerVitals() {
++        PlayerVitals vitals = NativeBridgeFfi.getPlayerVitals(BridgeUtils.convertUuid(this.uuid));
++        if (vitals == null) {
++            throw new IllegalStateException("Player is no longer online: " + this.uuid);
++        }
++        return vitals;
++    }
++
++    private void updatePlayerVitals(UpdatePlayerVitalsRequest.Builder request) {
++        var response = NativeBridgeFfi.updatePlayerVitals(
++            request.setPlayerUuid(BridgeUtils.convertUuid(this.uuid)).build()
++        );
++        if (response == null || !response.getSuccess()) {
++            throw new IllegalStateException("Failed to update player state: " + this.uuid);
++        }
++    }
++
+     @Override
+     public boolean isOp() {
+         return this.op;
+@@ -812,14 +833,17 @@ public class PatchBukkitHumanEntity
+ 
+     @Override
+     public double getHealth() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getHealth'");
++        return this.getPlayerVitals().getHealth();
+     }
+ 
+     @Override
+     public void setHealth(double health) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setHealth'");
++        if (!Double.isFinite(health) || health < 0.0 || health > this.getMaxHealth()) {
++            throw new IllegalArgumentException("Health must be between 0 and max health");
++        }
++        this.updatePlayerVitals(
++            UpdatePlayerVitalsRequest.newBuilder().setHealth(health)
++        );
+     }
+ 
+     @Override
+@@ -830,32 +854,37 @@ public class PatchBukkitHumanEntity
+ 
+     @Override
+     public double getAbsorptionAmount() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getAbsorptionAmount'");
++        return this.getPlayerVitals().getAbsorption();
+     }
+ 
+     @Override
+     public void setAbsorptionAmount(double amount) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setAbsorptionAmount'");
++        if (!Double.isFinite(amount) || amount < 0.0) {
++            throw new IllegalArgumentException("Absorption amount must be finite and non-negative");
++        }
++        this.updatePlayerVitals(
++            UpdatePlayerVitalsRequest.newBuilder().setAbsorption(amount)
++        );
+     }
+ 
+     @Override
+     public double getMaxHealth() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getMaxHealth'");
++        return this.getPlayerVitals().getMaxHealth();
+     }
+ 
+     @Override
+     public void setMaxHealth(double health) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setMaxHealth'");
++        if (!Double.isFinite(health) || health <= 0.0) {
++            throw new IllegalArgumentException("Max health must be finite and positive");
++        }
++        this.updatePlayerVitals(
++            UpdatePlayerVitalsRequest.newBuilder().setMaxHealth(health)
++        );
+     }
+ 
+     @Override
+     public void resetMaxHealth() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'resetMaxHealth'");
++        this.setMaxHealth(20.0);
+     }
+ 
+     @Override
+@@ -1128,14 +1157,42 @@ public class PatchBukkitHumanEntity
  
      @Override
      public GameMode getGameMode() {
@@ -1645,8 +1757,68 @@ index e48457f..870ef7c 100644
      }
  
      @Override
+@@ -1257,38 +1314,47 @@ public class PatchBukkitHumanEntity
+ 
+     @Override
+     public float getExhaustion() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getExhaustion'");
++        return this.getPlayerVitals().getExhaustion();
+     }
+ 
+     @Override
+     public void setExhaustion(float value) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setExhaustion'");
++        if (!Float.isFinite(value) || value < 0.0f) {
++            throw new IllegalArgumentException("Exhaustion must be finite and non-negative");
++        }
++        this.updatePlayerVitals(
++            UpdatePlayerVitalsRequest.newBuilder().setExhaustion(value)
++        );
+     }
+ 
+     @Override
+     public float getSaturation() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getSaturation'");
++        return this.getPlayerVitals().getSaturation();
+     }
+ 
+     @Override
+     public void setSaturation(float value) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setSaturation'");
++        if (!Float.isFinite(value) || value < 0.0f) {
++            throw new IllegalArgumentException("Saturation must be finite and non-negative");
++        }
++        this.updatePlayerVitals(
++            UpdatePlayerVitalsRequest.newBuilder().setSaturation(value)
++        );
+     }
+ 
+     @Override
+     public int getFoodLevel() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getFoodLevel'");
++        return this.getPlayerVitals().getFoodLevel();
+     }
+ 
+     @Override
+     public void setFoodLevel(int value) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setFoodLevel'");
++        if (value < 0 || value > 20) {
++            throw new IllegalArgumentException("Food level must be between 0 and 20");
++        }
++        this.updatePlayerVitals(
++            UpdatePlayerVitalsRequest.newBuilder().setFoodLevel(value)
++        );
+     }
+ 
+     @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
-index 458bbb9..ff37315 100644
+index 458bbb9..66285af 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
 @@ -163,14 +163,12 @@ public class PatchBukkitPlayer
@@ -1690,6 +1862,85 @@ index 458bbb9..ff37315 100644
 +        return GameMode.valueOf(
 +            gameMode.getPrevious().toUpperCase(java.util.Locale.ROOT)
 +        );
+     }
+ 
+     @Override
+@@ -1220,7 +1223,7 @@ public class PatchBukkitPlayer
+     public void setAllowFlight(boolean flight) {
+         var abilities = NativeBridgeFfi.getAbilities(BridgeUtils.convertUuid(this.uuid)).toBuilder();
+         abilities.setAllowFlying(flight);
+-        if (abilities.getFlying()) abilities.setFlying(false);
++        if (!flight && abilities.getFlying()) abilities.setFlying(false);
+         NativeBridgeFfi.setAbilities(SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(BridgeUtils.convertUuid(this.uuid)).build());
+     }
+ 
+@@ -1308,39 +1311,58 @@ public class PatchBukkitPlayer
+ 
+     @Override
+     public boolean isFlying() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'isFlying'");
++        return NativeBridgeFfi.getAbilities(BridgeUtils.convertUuid(this.uuid)).getFlying();
+     }
+ 
+     @Override
+     public void setFlying(boolean value) {
+         var playerUuid = BridgeUtils.convertUuid(this.getUniqueId());
+-        var abilities = NativeBridgeFfi.getAbilities(playerUuid).toBuilder().setFlying(value).build();
++        var abilitiesBuilder = NativeBridgeFfi.getAbilities(playerUuid).toBuilder();
++        if (value && !abilitiesBuilder.getAllowFlying()) {
++            throw new IllegalArgumentException("Cannot make player fly when flight is not allowed");
++        }
++        var abilities = abilitiesBuilder.setFlying(value).build();
+         NativeBridgeFfi.setAbilities(SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(playerUuid).build());
+     }
+ 
+     @Override
+     public void setFlySpeed(float value) throws IllegalArgumentException {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setFlySpeed'");
++        validateSpeed(value);
++        var playerUuid = BridgeUtils.convertUuid(this.uuid);
++        var abilities = NativeBridgeFfi.getAbilities(playerUuid).toBuilder()
++            .setFlySpeed(value / 2.0f)
++            .build();
++        NativeBridgeFfi.setAbilities(
++            SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(playerUuid).build()
++        );
+     }
+ 
+     @Override
+     public void setWalkSpeed(float value) throws IllegalArgumentException {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setWalkSpeed'");
++        validateSpeed(value);
++        var playerUuid = BridgeUtils.convertUuid(this.uuid);
++        var abilities = NativeBridgeFfi.getAbilities(playerUuid).toBuilder()
++            .setWalkSpeed(value / 2.0f)
++            .build();
++        NativeBridgeFfi.setAbilities(
++            SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(playerUuid).build()
++        );
+     }
+ 
+     @Override
+     public float getFlySpeed() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getFlySpeed'");
++        return NativeBridgeFfi.getAbilities(BridgeUtils.convertUuid(this.uuid)).getFlySpeed() * 2.0f;
+     }
+ 
+     @Override
+     public float getWalkSpeed() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getWalkSpeed'");
++        return NativeBridgeFfi.getAbilities(BridgeUtils.convertUuid(this.uuid)).getWalkSpeed() * 2.0f;
++    }
++
++    private static void validateSpeed(float value) {
++        if (!Float.isFinite(value) || value < -1.0f || value > 1.0f) {
++            throw new IllegalArgumentException("Speed must be finite and between -1 and 1");
++        }
      }
  
      @Override
@@ -2464,7 +2715,7 @@ index e8c2c36..1c566bc 100644
  
      @Override
 diff --git a/proto/patchbukkit/bridge.proto b/proto/patchbukkit/bridge.proto
-index 85df0ae..280df12 100644
+index 85df0ae..820eb30 100644
 --- a/proto/patchbukkit/bridge.proto
 +++ b/proto/patchbukkit/bridge.proto
 @@ -9,6 +9,7 @@ import "patchbukkit/config.proto";
@@ -2475,7 +2726,7 @@ index 85df0ae..280df12 100644
  import "patchbukkit/registry.proto";
  import "patchbukkit/sound.proto";
  
-@@ -22,6 +23,10 @@ service NativeBridge {
+@@ -22,6 +23,12 @@ service NativeBridge {
    rpc SendMessage(patchbukkit.message.SendMessageRequest) returns (google.protobuf.Empty);
  
    rpc GetLocation(patchbukkit.common.UUID) returns (patchbukkit.common.Location);
@@ -2483,6 +2734,8 @@ index 85df0ae..280df12 100644
 +
 +  rpc GetPlayerGameMode(patchbukkit.common.UUID) returns (patchbukkit.player.PlayerGameMode);
 +  rpc SetPlayerGameMode(patchbukkit.player.SetPlayerGameModeRequest) returns (patchbukkit.player.SetPlayerGameModeResponse);
++  rpc GetPlayerVitals(patchbukkit.common.UUID) returns (patchbukkit.player.PlayerVitals);
++  rpc UpdatePlayerVitals(patchbukkit.player.UpdatePlayerVitalsRequest) returns (patchbukkit.player.UpdatePlayerVitalsResponse);
  
    rpc GetRegistryData(patchbukkit.registry.GetRegistryDataRequest) returns (patchbukkit.registry.GetRegistryDataResponse);
  
@@ -2590,10 +2843,10 @@ index cd92e96..c74ae7e 100644
 +}
 diff --git a/proto/patchbukkit/player.proto b/proto/patchbukkit/player.proto
 new file mode 100644
-index 0000000..b9117b3
+index 0000000..6cbfa34
 --- /dev/null
 +++ b/proto/patchbukkit/player.proto
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,45 @@
 +syntax = "proto3";
 +
 +package patchbukkit.player;
@@ -2614,6 +2867,29 @@ index 0000000..b9117b3
 +}
 +
 +message SetPlayerGameModeResponse {
++  bool success = 1;
++}
++
++message PlayerVitals {
++  double health = 1;
++  double max_health = 2;
++  double absorption = 3;
++  int32 food_level = 4;
++  float saturation = 5;
++  float exhaustion = 6;
++}
++
++message UpdatePlayerVitalsRequest {
++  patchbukkit.common.UUID player_uuid = 1;
++  optional double health = 2;
++  optional double max_health = 3;
++  optional double absorption = 4;
++  optional int32 food_level = 5;
++  optional float saturation = 6;
++  optional float exhaustion = 7;
++}
++
++message UpdatePlayerVitalsResponse {
 +  bool success = 1;
 +}
 diff --git a/proto/patchbukkit/registry.proto b/proto/patchbukkit/registry.proto
@@ -3385,10 +3661,10 @@ index 56698aa..d084ca1 100644
  
 diff --git a/rust/src/java/native_callbacks/player.rs b/rust/src/java/native_callbacks/player.rs
 new file mode 100644
-index 0000000..1e0ed44
+index 0000000..9ec2781
 --- /dev/null
 +++ b/rust/src/java/native_callbacks/player.rs
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,112 @@
 +use std::str::FromStr;
 +
 +use pumpkin_util::GameMode;
@@ -3396,7 +3672,7 @@ index 0000000..1e0ed44
 +use crate::java::native_callbacks::CALLBACK_CONTEXT;
 +use crate::proto::patchbukkit::{
 +    common::Uuid,
-+    player::{PlayerGameMode, SetPlayerGameModeRequest},
++    player::{PlayerGameMode, PlayerVitals, SetPlayerGameModeRequest, UpdatePlayerVitalsRequest},
 +};
 +
 +pub fn ffi_native_bridge_get_player_game_mode_impl(request: Uuid) -> Option<PlayerGameMode> {
@@ -3424,6 +3700,79 @@ index 0000000..1e0ed44
 +    tokio::task::block_in_place(|| {
 +        ctx.runtime
 +            .block_on(player.apply_gamemode_after_external_event(game_mode));
++    });
++
++    Some(true)
++}
++
++pub fn ffi_native_bridge_get_player_vitals_impl(request: Uuid) -> Option<PlayerVitals> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.value).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++
++    Some(PlayerVitals {
++        health: f64::from(player.living_entity.health.load()),
++        max_health: f64::from(player.living_entity.get_max_health()),
++        absorption: f64::from(player.get_absorption()),
++        food_level: i32::from(player.hunger_manager.level.load()),
++        saturation: player.hunger_manager.saturation.load(),
++        exhaustion: player.get_exhaustion(),
++    })
++}
++
++pub fn ffi_native_bridge_update_player_vitals_impl(
++    request: UpdatePlayerVitalsRequest,
++) -> Option<bool> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++    let numeric_limit = f64::from(f32::MAX);
++    let target_max_health = request
++        .max_health
++        .unwrap_or_else(|| f64::from(player.living_entity.get_max_health()));
++
++    if request.health.is_some_and(|value| {
++        !value.is_finite() || value < 0.0 || value > numeric_limit || value > target_max_health
++    }) || request
++        .max_health
++        .is_some_and(|value| !value.is_finite() || value <= 0.0 || value > numeric_limit)
++        || request
++            .absorption
++            .is_some_and(|value| !value.is_finite() || value < 0.0 || value > numeric_limit)
++        || request
++            .food_level
++            .is_some_and(|value| !(0..=20).contains(&value))
++        || request
++            .saturation
++            .is_some_and(|value| !value.is_finite() || value < 0.0)
++        || request
++            .exhaustion
++            .is_some_and(|value| !value.is_finite() || value < 0.0)
++    {
++        return Some(false);
++    }
++
++    tokio::task::block_in_place(|| {
++        ctx.runtime.block_on(async {
++            if let Some(max_health) = request.max_health {
++                player.set_max_health(max_health as f32).await;
++            }
++            if let Some(health) = request.health {
++                player.set_health(health as f32).await;
++            }
++            if let Some(absorption) = request.absorption {
++                player.set_absorption(absorption as f32).await;
++            }
++            if let Some(food_level) = request.food_level {
++                player.set_food_level(food_level as u8).await;
++            }
++            if let Some(saturation) = request.saturation {
++                player.set_saturation(saturation).await;
++            }
++            if let Some(exhaustion) = request.exhaustion {
++                player.set_exhaustion(exhaustion).await;
++            }
++        })
 +    });
 +
 +    Some(true)
