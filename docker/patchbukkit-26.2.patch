@@ -84,10 +84,10 @@ index 032bce0..2b72119 100644
 +
  }
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
-index e8bd1a6..0a816fc 100644
+index e8bd1a6..6860a72 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
-@@ -1,8 +1,10 @@
+@@ -1,11 +1,12 @@
  package org.patchbukkit.testplugin.tests;
  
  import org.bukkit.Bukkit;
@@ -97,11 +97,22 @@ index e8bd1a6..0a816fc 100644
 +import org.bukkit.damage.DamageType;
  import org.patchbukkit.testplugin.ConformanceTest;
  import org.patchbukkit.testplugin.TestCategory;
- import org.patchbukkit.testplugin.TestExpectation;
-@@ -33,6 +35,20 @@ public final class RegistryTests {
+-import org.patchbukkit.testplugin.TestExpectation;
+ 
+ import static org.patchbukkit.testplugin.TestAssertions.*;
+ 
+@@ -33,14 +34,23 @@ public final class RegistryTests {
          assertNotNull(stream, "Registry.SOUNDS.stream()");
      }
  
+-    @ConformanceTest(name = "Server.getRegistry(Sound.class) returns registry", category = TestCategory.REGISTRY,
+-            expectation = TestExpectation.EXPECT_UNSUPPORTED)
+-    public void testServerGetRegistry() {
+-        // Server.getRegistry() returns null in PatchBukkit — might throw or return null
+-        Registry<Sound> reg = Bukkit.getServer().getRegistry(Sound.class);
+-        if (reg == null) {
+-            throw new UnsupportedOperationException("Server.getRegistry() returned null (not implemented)");
+-        }
 +    @ConformanceTest(name = "Damage types are populated from Pumpkin", category = TestCategory.REGISTRY)
 +    public void testDamageTypes() {
 +        DamageType arrow = Registry.DAMAGE_TYPE.get(NamespacedKey.minecraft("arrow"));
@@ -114,13 +125,16 @@ index e8bd1a6..0a816fc 100644
 +            "death.attack.arrow".equals(arrow.getTranslationKey()),
 +            "arrow translation key should match Pumpkin metadata"
 +        );
+     }
+ 
++    @ConformanceTest(name = "Server.getRegistry(Sound.class) returns registry", category = TestCategory.REGISTRY)
++    public void testServerGetRegistry() {
++        Registry<Sound> registry = Bukkit.getServer().getRegistry(Sound.class);
++        assertNotNull(registry, "Server.getRegistry(Sound.class)");
 +    }
-+
-     @ConformanceTest(name = "Server.getRegistry(Sound.class) returns registry", category = TestCategory.REGISTRY,
-             expectation = TestExpectation.EXPECT_UNSUPPORTED)
-     public void testServerGetRegistry() {
+ }
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
-index 1940bf5..553a40d 100644
+index 1940bf5..c2ee4f6 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
 @@ -1,5 +1,6 @@
@@ -130,7 +144,7 @@ index 1940bf5..553a40d 100644
  import org.bukkit.Bukkit;
  import org.bukkit.Server;
  import org.bukkit.command.CommandMap;
-@@ -39,6 +40,33 @@ public final class ServerTests {
+@@ -39,12 +40,56 @@ public final class ServerTests {
          assertNotNull(version, "Server.getBukkitVersion()");
      }
  
@@ -161,10 +175,33 @@ index 1940bf5..553a40d 100644
 +        assertTrue(!Bukkit.getServer().isStopping(), "Server should not be stopping during conformance tests");
 +    }
 +
++    @ConformanceTest(name = "Plugin lifecycle runs on the primary thread", category = TestCategory.SERVER)
++    public void testPrimaryThread() {
++        assertTrue(
++            Bukkit.getServer().isPrimaryThread(),
++            "plugin enable and conformance tests should run on the Bukkit primary thread"
++        );
++    }
++
      @ConformanceTest(name = "Server.getPluginManager() returns non-null", category = TestCategory.SERVER)
      public void testGetPluginManager() {
          PluginManager pm = Bukkit.getServer().getPluginManager();
-@@ -75,6 +103,11 @@ public final class ServerTests {
+         assertNotNull(pm, "Server.getPluginManager()");
+     }
+ 
++    @ConformanceTest(name = "Server.dispatchCommand() reaches the command map", category = TestCategory.SERVER)
++    public void testDispatchUnknownCommand() {
++        boolean handled = Bukkit.getServer().dispatchCommand(
++            Bukkit.getConsoleSender(),
++            "patchbukkit-command-that-does-not-exist"
++        );
++        assertTrue(!handled, "unknown commands should return false");
++    }
++
+     @ConformanceTest(name = "Server.getConsoleSender() returns non-null", category = TestCategory.SERVER)
+     public void testGetConsoleSender() {
+         ConsoleCommandSender cs = Bukkit.getServer().getConsoleSender();
+@@ -75,6 +120,11 @@ public final class ServerTests {
          assertNotNull(unsafe, "Server.getUnsafe()");
      }
  
@@ -177,10 +214,23 @@ index 1940bf5..553a40d 100644
      public void testSuggestPlayerNames() {
          boolean result = Bukkit.getServer().suggestPlayerNamesWhenNullTabCompletions();
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
-index 3a6b9c4..fcd1ec1 100644
+index 3a6b9c4..1a05e1a 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
-@@ -11,11 +11,11 @@ import static org.patchbukkit.testplugin.TestAssertions.*;
+@@ -1,8 +1,12 @@
+ package org.patchbukkit.testplugin.tests;
+ 
+ import net.kyori.adventure.text.flattener.ComponentFlattener;
++import io.papermc.paper.registry.RegistryKey;
+ import org.bukkit.Bukkit;
++import org.bukkit.NamespacedKey;
+ import org.bukkit.UnsafeValues;
++import org.bukkit.damage.DamageSource;
++import org.bukkit.damage.DamageType;
+ import org.patchbukkit.testplugin.ConformanceTest;
+ import org.patchbukkit.testplugin.TestCategory;
+ 
+@@ -11,11 +15,11 @@ import static org.patchbukkit.testplugin.TestAssertions.*;
  @SuppressWarnings("deprecation")
  public final class UnsafeValuesTests {
  
@@ -194,6 +244,33 @@ index 3a6b9c4..fcd1ec1 100644
      }
  
      @ConformanceTest(name = "UnsafeValues.isSupportedApiVersion(\"1.21\") returns true", category = TestCategory.UNSAFE_VALUES)
+@@ -46,4 +50,26 @@ public final class UnsafeValuesTests {
+         assertNotNull(flattener, "UnsafeValues.componentFlattener()");
+     }
+ 
++    @ConformanceTest(name = "DamageSource builder is implemented", category = TestCategory.UNSAFE_VALUES)
++    public void testDamageSourceBuilder() {
++        DamageSource source = DamageSource.builder(DamageType.MAGIC).build();
++        assertNotNull(source, "DamageSource");
++        assertTrue(
++            source.getDamageType() == DamageType.MAGIC,
++            "DamageSource should retain its damage type"
++        );
++    }
++
++    @ConformanceTest(name = "UnsafeValues registry lookup is implemented", category = TestCategory.UNSAFE_VALUES)
++    public void testRegistryLookup() {
++        DamageType arrow = Bukkit.getUnsafe().get(
++            RegistryKey.DAMAGE_TYPE,
++            NamespacedKey.minecraft("arrow")
++        );
++        assertTrue(
++            arrow == DamageType.ARROW,
++            "UnsafeValues should return the populated damage-type registry value"
++        );
++    }
++
+ }
 diff --git a/java/patchbukkit/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/java/patchbukkit/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 new file mode 100644
 index 0000000..9f759b8
@@ -837,10 +914,17 @@ index d90de1b..40e1ba2 100644
      public boolean isTransitiveDependency(
          PluginMeta pluginMeta,
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
-index d935769..0ffc746 100644
+index d935769..bf655a0 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
-@@ -13,6 +13,8 @@ import io.papermc.paper.threadedregions.scheduler.RegionScheduler;
+@@ -7,12 +7,15 @@ import io.papermc.paper.ban.BanListType;
+ import io.papermc.paper.configuration.ServerConfiguration;
+ import io.papermc.paper.datapack.DatapackManager;
+ import io.papermc.paper.math.Position;
++import io.papermc.paper.registry.RegistryAccess;
+ import io.papermc.paper.threadedregions.scheduler.AsyncScheduler;
+ import io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler;
+ import io.papermc.paper.threadedregions.scheduler.RegionScheduler;
  
  import java.awt.image.BufferedImage;
  import java.io.File;
@@ -849,7 +933,7 @@ index d935769..0ffc746 100644
  import java.net.InetAddress;
  import java.util.Collection;
  import java.util.Collections;
-@@ -21,6 +23,7 @@ import java.util.List;
+@@ -21,6 +24,7 @@ import java.util.List;
  import java.util.Map;
  import java.util.Set;
  import java.util.UUID;
@@ -857,7 +941,7 @@ index d935769..0ffc746 100644
  import java.util.function.Consumer;
  import java.util.logging.Level;
  import java.util.logging.Logger;
-@@ -97,6 +100,7 @@ import org.patchbukkit.scheduler.PatchBukkitScheduler;
+@@ -97,6 +101,7 @@ import org.patchbukkit.scheduler.PatchBukkitScheduler;
  import org.patchbukkit.versioning.Versioning;
  
  import patchbukkit.bridge.NativeBridgeFfi;
@@ -865,15 +949,16 @@ index d935769..0ffc746 100644
  import patchbukkit.log.LogLevel;
  import patchbukkit.log.SendLogRequest;
  
-@@ -110,6 +114,7 @@ public class PatchBukkitServer implements Server {
+@@ -110,6 +115,8 @@ public class PatchBukkitServer implements Server {
      private final BukkitScheduler scheduler = new PatchBukkitScheduler();
      private final PatchBukkitPluginManager pluginManager = new PatchBukkitPluginManager(this);
      private final ServicesManager servicesManager = new PatchBukkitServicesManager();
 +    private final AtomicBoolean stopping = new AtomicBoolean();
++    private final Thread primaryThread = Thread.currentThread();
  
  
      private final Map<UUID, Player> onlinePlayers = new java.util.concurrent.ConcurrentHashMap<>();
-@@ -141,11 +146,17 @@ public class PatchBukkitServer implements Server {
+@@ -141,11 +148,17 @@ public class PatchBukkitServer implements Server {
          root.addHandler(new java.util.logging.Handler() {
              @Override
              public void publish(java.util.logging.LogRecord record) {
@@ -892,7 +977,7 @@ index d935769..0ffc746 100644
                                  .setLoggerName(record.getLoggerName())
                                  .build()
                  );
-@@ -181,6 +192,10 @@ public class PatchBukkitServer implements Server {
+@@ -181,6 +194,10 @@ public class PatchBukkitServer implements Server {
          this.pluginManager.registerPlugin(plugin);
      }
  
@@ -903,7 +988,7 @@ index d935769..0ffc746 100644
      @Override
      public void sendPluginMessage(
          @NotNull Plugin source,
-@@ -211,10 +226,9 @@ public class PatchBukkitServer implements Server {
+@@ -211,10 +228,9 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @NotNull File getPluginsFolder() {
@@ -917,7 +1002,7 @@ index d935769..0ffc746 100644
      }
  
      @Override
-@@ -234,10 +248,7 @@ public class PatchBukkitServer implements Server {
+@@ -234,10 +250,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @NotNull String getMinecraftVersion() {
@@ -929,7 +1014,19 @@ index d935769..0ffc746 100644
      }
  
      @Override
-@@ -867,10 +878,9 @@ public class PatchBukkitServer implements Server {
+@@ -718,10 +731,7 @@ public class PatchBukkitServer implements Server {
+         @NotNull CommandSender sender,
+         @NotNull String commandLine
+     ) throws CommandException {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'dispatchCommand'"
+-        );
++        return this.commandMap.dispatch(sender, commandLine);
+     }
+ 
+     @Override
+@@ -867,10 +877,9 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public boolean getOnlineMode() {
@@ -943,7 +1040,19 @@ index d935769..0ffc746 100644
      }
  
      @Override
-@@ -1284,10 +1294,7 @@ public class PatchBukkitServer implements Server {
+@@ -1224,10 +1233,7 @@ public class PatchBukkitServer implements Server {
+ 
+     @Override
+     public boolean isPrimaryThread() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'isPrimaryThread'"
+-        );
++        return Thread.currentThread() == this.primaryThread;
+     }
+ 
+     @Override
+@@ -1284,10 +1290,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @NotNull WarningState getWarningState() {
@@ -955,7 +1064,19 @@ index d935769..0ffc746 100644
      }
  
      @Override
-@@ -1705,10 +1712,7 @@ public class PatchBukkitServer implements Server {
+@@ -1589,10 +1592,7 @@ public class PatchBukkitServer implements Server {
+     public <T extends Keyed> @Nullable Registry<T> getRegistry(
+         @NotNull Class<T> tClass
+     ) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getRegistry'"
+-        );
++        return RegistryAccess.registryAccess().getRegistry(tClass);
+     }
+ 
+     @Override
+@@ -1705,10 +1705,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public boolean isStopping() {
@@ -968,10 +1089,26 @@ index d935769..0ffc746 100644
  
      @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
-index 53a254c..9742416 100644
+index 53a254c..c6d19d6 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
-@@ -54,6 +54,10 @@ import patchbukkit.common.EmptyRequest;
+@@ -6,6 +6,7 @@ import io.papermc.paper.entity.EntitySerializationFlag;
+ import io.papermc.paper.inventory.tooltip.TooltipContext;
+ import io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager;
+ import io.papermc.paper.registry.RegistryKey;
++import io.papermc.paper.registry.RegistryAccess;
+ import java.io.IOException;
+ import java.util.List;
+ import java.util.Map;
+@@ -47,6 +48,7 @@ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
+ import org.jspecify.annotations.NonNull;
+ import org.patchbukkit.events.PatchBukkitLifecycleEventManager;
++import org.patchbukkit.damage.PatchBukkitDamageSource;
+ import org.patchbukkit.versioning.ApiVersion;
+ import org.patchbukkit.versioning.Versioning;
+ import patchbukkit.common.EmptyRequest;
+@@ -54,6 +56,10 @@ import patchbukkit.common.EmptyRequest;
  @SuppressWarnings("removal")
  public class PatchBukkitUnsafeValues implements UnsafeValues {
  
@@ -982,7 +1119,7 @@ index 53a254c..9742416 100644
      public static final PatchBukkitUnsafeValues INSTANCE =
          new PatchBukkitUnsafeValues();
  
-@@ -61,7 +65,9 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+@@ -61,7 +67,9 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
      public boolean isSupportedApiVersion(String apiVersion) {
          if (apiVersion == null) return false;
          final ApiVersion toCheck = ApiVersion.getOrCreateVersion(apiVersion);
@@ -993,7 +1130,17 @@ index 53a254c..9742416 100644
          final ApiVersion minimumVersion = ApiVersion.getOrCreateVersion(minimumApi);
  
          return !toCheck.isNewerThan(ApiVersion.CURRENT) && !toCheck.isOlderThan(minimumVersion);
-@@ -154,8 +160,7 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+@@ -78,8 +86,7 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+ 
+ 	@Override
+ 	public ComponentFlattener componentFlattener() {
+-		// TODO Auto-generated method stub
+-		throw new UnsupportedOperationException("Unimplemented method 'componentFlattener'");
++		return ComponentFlattener.basic();
+ 	}
+ 
+ 	@Override
+@@ -154,8 +161,7 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
  
  	@Override
  	public int getDataVersion() {
@@ -1003,6 +1150,159 @@ index 53a254c..9742416 100644
  	}
  
  	@Override
+@@ -232,8 +238,7 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+ 
+ 	@Override
+ 	public @NotNull Builder createDamageSourceBuilder(@NotNull DamageType damageType) {
+-		// TODO Auto-generated method stub
+-		throw new UnsupportedOperationException("Unimplemented method 'createDamageSourceBuilder'");
++		return PatchBukkitDamageSource.builder(damageType);
+ 	}
+ 
+ 	@Override
+@@ -244,8 +249,8 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+ 
+ 	@Override
+ 	public <B extends Keyed> B get(RegistryKey<B> registry, NamespacedKey key) {
+-		// TODO Auto-generated method stub
+-		throw new UnsupportedOperationException("Unimplemented method 'get'");
++		Registry<B> values = RegistryAccess.registryAccess().getRegistry(registry);
++		return values == null ? null : values.get(key);
+ 	}
+ 
+ 	@Override
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/damage/PatchBukkitDamageSource.java b/java/patchbukkit/src/main/java/org/patchbukkit/damage/PatchBukkitDamageSource.java
+new file mode 100644
+index 0000000..ed415a4
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/damage/PatchBukkitDamageSource.java
+@@ -0,0 +1,126 @@
++package org.patchbukkit.damage;
++
++import java.util.Objects;
++import org.bukkit.Location;
++import org.bukkit.damage.DamageScaling;
++import org.bukkit.damage.DamageSource;
++import org.bukkit.damage.DamageType;
++import org.bukkit.entity.Entity;
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.annotations.Nullable;
++
++public final class PatchBukkitDamageSource implements DamageSource {
++    private final DamageType damageType;
++    private final Entity causingEntity;
++    private final Entity directEntity;
++    private final Location damageLocation;
++
++    private PatchBukkitDamageSource(
++        DamageType damageType,
++        Entity causingEntity,
++        Entity directEntity,
++        Location damageLocation
++    ) {
++        this.damageType = damageType;
++        this.causingEntity = causingEntity;
++        this.directEntity = directEntity;
++        this.damageLocation = damageLocation == null ? null : damageLocation.clone();
++    }
++
++    public static @NotNull DamageSource.Builder builder(@NotNull DamageType damageType) {
++        return new SourceBuilder(damageType);
++    }
++
++    @Override
++    public @NotNull DamageType getDamageType() {
++        return damageType;
++    }
++
++    @Override
++    public @Nullable Entity getCausingEntity() {
++        return causingEntity;
++    }
++
++    @Override
++    public @Nullable Entity getDirectEntity() {
++        return directEntity;
++    }
++
++    @Override
++    public @Nullable Location getDamageLocation() {
++        return damageLocation == null ? null : damageLocation.clone();
++    }
++
++    @Override
++    public @Nullable Location getSourceLocation() {
++        if (directEntity != null) {
++            return directEntity.getLocation();
++        }
++        if (causingEntity != null) {
++            return causingEntity.getLocation();
++        }
++        return getDamageLocation();
++    }
++
++    @Override
++    public boolean isIndirect() {
++        return causingEntity != null
++            && directEntity != null
++            && causingEntity != directEntity;
++    }
++
++    @Override
++    public float getFoodExhaustion() {
++        return damageType.getExhaustion();
++    }
++
++    @Override
++    public boolean scalesWithDifficulty() {
++        return damageType.getDamageScaling() != DamageScaling.NEVER;
++    }
++
++    private static final class SourceBuilder implements DamageSource.Builder {
++        private final DamageType damageType;
++        private Entity causingEntity;
++        private Entity directEntity;
++        private Location damageLocation;
++
++        private SourceBuilder(DamageType damageType) {
++            this.damageType = Objects.requireNonNull(damageType, "damageType");
++        }
++
++        @Override
++        public @NotNull DamageSource.Builder withCausingEntity(
++            @Nullable Entity causingEntity
++        ) {
++            this.causingEntity = causingEntity;
++            return this;
++        }
++
++        @Override
++        public @NotNull DamageSource.Builder withDirectEntity(
++            @Nullable Entity directEntity
++        ) {
++            this.directEntity = directEntity;
++            return this;
++        }
++
++        @Override
++        public @NotNull DamageSource.Builder withDamageLocation(
++            @Nullable Location damageLocation
++        ) {
++            this.damageLocation = damageLocation == null ? null : damageLocation.clone();
++            return this;
++        }
++
++        @Override
++        public @NotNull DamageSource build() {
++            return new PatchBukkitDamageSource(
++                damageType,
++                causingEntity,
++                directEntity,
++                damageLocation
++            );
++        }
++    }
++}
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitDamageType.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitDamageType.java
 new file mode 100644
 index 0000000..4e2745c
