@@ -34,27 +34,31 @@ index d225037..96de007 100644
 +        }, this);
 +
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
-index 0ddff2f..00c5775 100644
+index 0ddff2f..ae2535e 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
 @@ -5,0 +6,2 @@ import org.bukkit.event.EventPriority;
 +import org.bukkit.event.Event;
 +import org.bukkit.event.HandlerList;
-@@ -6,0 +9,8 @@ import org.bukkit.event.Listener;
+@@ -6,0 +9,9 @@ import org.bukkit.event.Listener;
 +import org.bukkit.event.player.AsyncPlayerChatEvent;
 +import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 +import org.bukkit.event.player.PlayerCommandPreprocessEvent;
++import org.bukkit.event.player.PlayerCommandSendEvent;
 +import org.bukkit.event.player.PlayerChangedWorldEvent;
 +import org.bukkit.event.player.PlayerGameModeChangeEvent;
 +import org.bukkit.event.player.PlayerLoginEvent;
 +import org.bukkit.event.player.PlayerQuitEvent;
 +import org.bukkit.event.player.PlayerRespawnEvent;
-@@ -7,0 +18 @@ import org.bukkit.event.server.PluginEnableEvent;
+@@ -7,0 +19,4 @@ import org.bukkit.event.server.PluginEnableEvent;
++import org.bukkit.event.server.RemoteServerCommandEvent;
 +import org.bukkit.event.server.ServerCommandEvent;
-@@ -12,0 +24,2 @@ import org.bukkit.plugin.java.JavaPlugin;
++import com.destroystokyo.paper.event.brigadier.AsyncPlayerSendCommandsEvent;
++import com.destroystokyo.paper.event.server.AsyncTabCompleteEvent;
+@@ -12,0 +28,2 @@ import org.bukkit.plugin.java.JavaPlugin;
 +import java.util.concurrent.atomic.AtomicBoolean;
 +
-@@ -33,0 +47,58 @@ public final class EventSystemTests {
+@@ -33,0 +51,74 @@ public final class EventSystemTests {
 +    @ConformanceTest(name = "registerEvents() for native player lifecycle events", category = TestCategory.EVENT_SYSTEM)
 +    public void testRegisterNativePlayerLifecycleEvents() {
 +        Listener listener = new Listener() {
@@ -83,6 +87,18 @@ index 0ddff2f..00c5775 100644
 +            }
 +
 +            @EventHandler
++            public void onAsyncPlayerSendCommands(AsyncPlayerSendCommandsEvent<?> event) {
++            }
++
++            @EventHandler
++            public void onPlayerCommandSend(PlayerCommandSendEvent event) {
++            }
++
++            @EventHandler
++            public void onAsyncTabComplete(AsyncTabCompleteEvent event) {
++            }
++
++            @EventHandler
 +            public void onAsyncPlayerChat(AsyncPlayerChatEvent event) {
 +            }
 +
@@ -92,6 +108,10 @@ index 0ddff2f..00c5775 100644
 +
 +            @EventHandler
 +            public void onServerCommand(ServerCommandEvent event) {
++            }
++
++            @EventHandler
++            public void onRemoteServerCommand(RemoteServerCommandEvent event) {
 +            }
 +        };
 +        Bukkit.getPluginManager().registerEvents(listener, plugin);
@@ -113,7 +133,7 @@ index 0ddff2f..00c5775 100644
 +        assertTrue(called.get(), "custom plugin event listener was not called");
 +    }
 +
-@@ -61,0 +133,13 @@ public final class EventSystemTests {
+@@ -61,0 +153,13 @@ public final class EventSystemTests {
 +
 +    private static final class CustomPluginEvent extends Event {
 +        private static final HandlerList HANDLERS = new HandlerList();
@@ -1637,28 +1657,32 @@ index 458bbb9..66285af 100644
 +            throw new IllegalArgumentException("Speed must be finite and between -1 and 1");
 +        }
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
-index 14c24f1..effa0ef 100644
+index 14c24f1..c493512 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
 @@ -7,0 +8 @@ import org.bukkit.Bukkit;
 +import org.bukkit.GameMode;
-@@ -13,0 +15,5 @@ import patchbukkit.events.FireEventResponse;
+@@ -13,0 +15,7 @@ import patchbukkit.events.FireEventResponse;
 +import patchbukkit.events.AsyncPlayerPreLoginEvent;
++import patchbukkit.events.AsyncTabCompleteEvent;
 +import patchbukkit.events.PlayerChatEvent;
 +import patchbukkit.events.PlayerChangedWorldEvent;
 +import patchbukkit.events.PlayerCommandPreprocessEvent;
++import patchbukkit.events.PlayerCommandsSendEvent;
 +import patchbukkit.events.PlayerGameModeChangeEvent;
-@@ -14,0 +21,4 @@ import patchbukkit.events.PlayerJoinEvent;
+@@ -14,0 +23,5 @@ import patchbukkit.events.PlayerJoinEvent;
 +import patchbukkit.events.PlayerLoginEvent;
 +import patchbukkit.events.PlayerQuitEvent;
 +import patchbukkit.events.PlayerRespawnEvent;
++import patchbukkit.events.RemoteServerCommandEvent;
 +import patchbukkit.events.ServerCommandEvent;
-@@ -15,0 +26,4 @@ import patchbukkit.events.PlayerJoinEvent;
+@@ -15,0 +29,5 @@ import patchbukkit.events.PlayerJoinEvent;
 +import java.net.InetAddress;
 +import java.net.UnknownHostException;
++import java.util.ArrayList;
 +import java.util.LinkedHashSet;
 +import java.util.Set;
-@@ -36,0 +51,69 @@ public class PatchBukkitEventFactory {
+@@ -36,0 +55,69 @@ public class PatchBukkitEventFactory {
 +            case ASYNC_PLAYER_PRE_LOGIN -> {
 +                AsyncPlayerPreLoginEvent preLoginEvent = event.getAsyncPlayerPreLogin();
 +                InetAddress address = parseAddress(preLoginEvent.getAddress());
@@ -1728,7 +1752,7 @@ index 14c24f1..effa0ef 100644
 +                    realAddress
 +                );
 +            }
-@@ -44,0 +128,115 @@ public class PatchBukkitEventFactory {
+@@ -44,0 +132,170 @@ public class PatchBukkitEventFactory {
 +            case PLAYER_CHANGED_WORLD -> {
 +                PlayerChangedWorldEvent changedWorldEvent = event.getPlayerChangedWorld();
 +                Player player = getPlayer(changedWorldEvent.getPlayerUuid().getValue());
@@ -1788,6 +1812,61 @@ index 14c24f1..effa0ef 100644
 +                    "/" + commandEvent.getCommand()
 +                );
 +            }
++            case ASYNC_PLAYER_COMMANDS_SEND -> {
++                PlayerCommandsSendEvent commandEvent = event.getAsyncPlayerCommandsSend();
++                Player player = getPlayer(commandEvent.getPlayerUuid().getValue());
++                if (player == null) yield null;
++
++                com.mojang.brigadier.tree.RootCommandNode<
++                    io.papermc.paper.command.brigadier.CommandSourceStack
++                > root = new com.mojang.brigadier.tree.RootCommandNode<>();
++                for (String command : commandEvent.getCommandsList()) {
++                    root.addChild(
++                        com.mojang.brigadier.builder.LiteralArgumentBuilder
++                            .<io.papermc.paper.command.brigadier.CommandSourceStack>literal(command)
++                            .build()
++                    );
++                }
++
++                yield new com.destroystokyo.paper.event.brigadier.AsyncPlayerSendCommandsEvent<>(
++                    player,
++                    root,
++                    false
++                );
++            }
++            case PLAYER_COMMANDS_SEND -> {
++                PlayerCommandsSendEvent commandEvent = event.getPlayerCommandsSend();
++                Player player = getPlayer(commandEvent.getPlayerUuid().getValue());
++                if (player == null) yield null;
++
++                yield new org.bukkit.event.player.PlayerCommandSendEvent(
++                    player,
++                    new LinkedHashSet<>(commandEvent.getCommandsList())
++                );
++            }
++            case ASYNC_TAB_COMPLETE -> {
++                AsyncTabCompleteEvent tabEvent = event.getAsyncTabComplete();
++                Player player = getPlayer(tabEvent.getPlayerUuid().getValue());
++                if (player == null) yield null;
++
++                com.destroystokyo.paper.event.server.AsyncTabCompleteEvent bukkitEvent =
++                    new com.destroystokyo.paper.event.server.AsyncTabCompleteEvent(
++                        player,
++                        new ArrayList<>(tabEvent.getCompletionsList()),
++                        tabEvent.getBuffer(),
++                        true,
++                        null
++                    );
++                bukkitEvent.setHandled(tabEvent.getHandled());
++                yield bukkitEvent;
++            }
++            case REMOTE_SERVER_COMMAND -> {
++                RemoteServerCommandEvent commandEvent = event.getRemoteServerCommand();
++                yield new org.bukkit.event.server.RemoteServerCommandEvent(
++                    Bukkit.getConsoleSender(),
++                    commandEvent.getCommand()
++                );
++            }
 +            case PLAYER_CHAT -> {
 +                PlayerChatEvent chatEvent = event.getPlayerChat();
 +                Player player = getPlayer(chatEvent.getPlayerUuid().getValue());
@@ -1844,7 +1923,7 @@ index 14c24f1..effa0ef 100644
 +                    reason
 +                );
 +            }
-@@ -61 +259,32 @@ public class PatchBukkitEventFactory {
+@@ -61 +318,32 @@ public class PatchBukkitEventFactory {
 -        if (event instanceof org.bukkit.event.player.PlayerJoinEvent joinEvent) {
 +        if (event instanceof org.bukkit.event.player.AsyncPlayerPreLoginEvent preLoginEvent) {
 +            eventBuilder.setAsyncPlayerPreLogin(
@@ -1878,7 +1957,7 @@ index 14c24f1..effa0ef 100644
 +                    .build()
 +            );
 +        } else if (event instanceof org.bukkit.event.player.PlayerJoinEvent joinEvent) {
-@@ -71,0 +301,105 @@ public class PatchBukkitEventFactory {
+@@ -71,0 +360,145 @@ public class PatchBukkitEventFactory {
 +        } else if (event instanceof org.bukkit.event.player.PlayerChangedWorldEvent changedWorldEvent) {
 +            eventBuilder.setPlayerChangedWorld(
 +                PlayerChangedWorldEvent.newBuilder()
@@ -1908,6 +1987,46 @@ index 14c24f1..effa0ef 100644
 +                        .setValue(gameModeEvent.getPlayer().getUniqueId().toString())
 +                        .build())
 +                    .setNewGameMode(gameModeEvent.getNewGameMode().name())
++                    .build()
++            );
++        } else if (event instanceof org.bukkit.event.server.RemoteServerCommandEvent commandEvent) {
++            eventBuilder.setRemoteServerCommand(
++                RemoteServerCommandEvent.newBuilder()
++                    .setCommand(commandEvent.getCommand())
++                    .build()
++            );
++        } else if (
++            event instanceof com.destroystokyo.paper.event.brigadier.AsyncPlayerSendCommandsEvent<?> commandEvent
++        ) {
++            PlayerCommandsSendEvent.Builder commandBuilder = PlayerCommandsSendEvent.newBuilder()
++                .setPlayerUuid(UUID.newBuilder()
++                    .setValue(commandEvent.getPlayer().getUniqueId().toString())
++                    .build());
++            for (com.mojang.brigadier.tree.CommandNode<?> node :
++                commandEvent.getCommandNode().getChildren()) {
++                commandBuilder.addCommands(node.getName());
++            }
++            eventBuilder.setAsyncPlayerCommandsSend(commandBuilder.build());
++        } else if (event instanceof org.bukkit.event.player.PlayerCommandSendEvent commandEvent) {
++            eventBuilder.setPlayerCommandsSend(
++                PlayerCommandsSendEvent.newBuilder()
++                    .setPlayerUuid(UUID.newBuilder()
++                        .setValue(commandEvent.getPlayer().getUniqueId().toString())
++                        .build())
++                    .addAllCommands(commandEvent.getCommands())
++                    .build()
++            );
++        } else if (
++            event instanceof com.destroystokyo.paper.event.server.AsyncTabCompleteEvent tabEvent
++        ) {
++            eventBuilder.setAsyncTabComplete(
++                AsyncTabCompleteEvent.newBuilder()
++                    .setPlayerUuid(UUID.newBuilder()
++                        .setValue(((Player) tabEvent.getSender()).getUniqueId().toString())
++                        .build())
++                    .setBuffer(tabEvent.getBuffer())
++                    .addAllCompletions(tabEvent.getCompletions())
++                    .setHandled(tabEvent.isHandled())
 +                    .build()
 +            );
 +        } else if (event instanceof org.bukkit.event.server.ServerCommandEvent commandEvent) {
@@ -1984,7 +2103,7 @@ index 14c24f1..effa0ef 100644
 +                    )
 +                    .build()
 +            );
-@@ -82,0 +417,28 @@ public class PatchBukkitEventFactory {
+@@ -82,0 +516,28 @@ public class PatchBukkitEventFactory {
 +    @Nullable
 +    private static Player getEventPlayer(@NotNull String uuidStr) {
 +        try {
@@ -2513,10 +2632,10 @@ index 12c48c0..d3addd5 100644
 @@ -11,0 +12 @@ message GetPatchBukkitConfigResponse {
 +  bool online_mode = 2;
 diff --git a/proto/patchbukkit/events/event.proto b/proto/patchbukkit/events/event.proto
-index f678892..872b6cc 100644
+index f678892..eaec953 100644
 --- a/proto/patchbukkit/events/event.proto
 +++ b/proto/patchbukkit/events/event.proto
-@@ -13,0 +14,9 @@ message Event {
+@@ -13,0 +14,13 @@ message Event {
 +    PlayerQuitEvent player_quit = 2;
 +    PlayerGameModeChangeEvent player_game_mode_change = 3;
 +    ServerCommandEvent server_command = 4;
@@ -2526,13 +2645,21 @@ index f678892..872b6cc 100644
 +    PlayerLoginEvent player_login = 8;
 +    AsyncPlayerPreLoginEvent async_player_pre_login = 9;
 +    PlayerChangedWorldEvent player_changed_world = 10;
-@@ -16,0 +26,4 @@ message Event {
++    PlayerCommandsSendEvent player_commands_send = 11;
++    PlayerCommandsSendEvent async_player_commands_send = 12;
++    AsyncTabCompleteEvent async_tab_complete = 13;
++    RemoteServerCommandEvent remote_server_command = 14;
+@@ -16,0 +30,8 @@ message Event {
 +message ServerCommandEvent {
 +  string command = 1;
 +}
 +
++message RemoteServerCommandEvent {
++  string command = 1;
++}
++
 diff --git a/proto/patchbukkit/events/player_events.proto b/proto/patchbukkit/events/player_events.proto
-index cd92e96..a298a7f 100644
+index cd92e96..9be7e2f 100644
 --- a/proto/patchbukkit/events/player_events.proto
 +++ b/proto/patchbukkit/events/player_events.proto
 @@ -8,0 +9,19 @@ option java_package = "patchbukkit.events";
@@ -2555,7 +2682,7 @@ index cd92e96..a298a7f 100644
 +  string kick_message = 7;
 +}
 +
-@@ -12,0 +32,32 @@ message PlayerJoinEvent {
+@@ -12,0 +32,44 @@ message PlayerJoinEvent {
 +
 +message PlayerChangedWorldEvent {
 +  patchbukkit.common.UUID player_uuid = 1;
@@ -2575,6 +2702,18 @@ index cd92e96..a298a7f 100644
 +message PlayerCommandPreprocessEvent {
 +  patchbukkit.common.UUID player_uuid = 1;
 +  string command = 2;
++}
++
++message PlayerCommandsSendEvent {
++  patchbukkit.common.UUID player_uuid = 1;
++  repeated string commands = 2;
++}
++
++message AsyncTabCompleteEvent {
++  patchbukkit.common.UUID player_uuid = 1;
++  string buffer = 2;
++  repeated string completions = 3;
++  bool handled = 4;
 +}
 +
 +message PlayerChatEvent {
@@ -2715,7 +2854,7 @@ index 484dc62..22d354c 100644
 -    fn get_client_side_parser(&self) -> ArgumentType<'_> {
 +    fn get_client_side_parser(&self) -> ArgumentType {
 diff --git a/rust/src/events/handler.rs b/rust/src/events/handler.rs
-index 6705e20..e55899d 100644
+index 6705e20..d577b0b 100644
 --- a/rust/src/events/handler.rs
 +++ b/rust/src/events/handler.rs
 @@ -12 +12,3 @@ use crate::java::jvm::commands::JvmCommand;
@@ -2723,14 +2862,15 @@ index 6705e20..e55899d 100644
 +use crate::proto::patchbukkit::common::{
 +    Location as ProtoLocation, Uuid, Vec3, World as ProtoWorld,
 +};
-@@ -14 +16,5 @@ use crate::proto::patchbukkit::events::event::Data;
+@@ -14 +16,6 @@ use crate::proto::patchbukkit::events::event::Data;
 -use crate::proto::patchbukkit::events::{Event, PlayerJoinEvent};
 +use crate::proto::patchbukkit::events::{
-+    AsyncPlayerPreLoginEvent, Event, PlayerChangedWorldEvent, PlayerChatEvent,
-+    PlayerCommandPreprocessEvent, PlayerGameModeChangeEvent, PlayerJoinEvent, PlayerLoginEvent,
-+    PlayerQuitEvent, PlayerRespawnEvent, ServerCommandEvent,
++    AsyncPlayerPreLoginEvent, AsyncTabCompleteEvent, Event, PlayerChangedWorldEvent,
++    PlayerChatEvent, PlayerCommandPreprocessEvent, PlayerCommandsSendEvent,
++    PlayerGameModeChangeEvent, PlayerJoinEvent, PlayerLoginEvent, PlayerQuitEvent,
++    PlayerRespawnEvent, RemoteServerCommandEvent, ServerCommandEvent,
 +};
-@@ -28,0 +35,99 @@ pub trait PatchBukkitEvent {
+@@ -28,0 +36,99 @@ pub trait PatchBukkitEvent {
 +
 +    fn carries_bukkit_cancellation(&self) -> bool {
 +        true
@@ -2830,7 +2970,7 @@ index 6705e20..e55899d 100644
 +    fn carries_bukkit_cancellation(&self) -> bool {
 +        false
 +    }
-@@ -54,0 +160,274 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent
+@@ -54,0 +161,410 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent
 +            _ => return None,
 +        }
 +
@@ -2979,6 +3119,115 @@ index 6705e20..e55899d 100644
 +    }
 +}
 +
++impl PatchBukkitEvent
++    for pumpkin::plugin::player::async_player_commands_send::AsyncPlayerCommandsSendEvent
++{
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::AsyncPlayerCommandsSend(PlayerCommandsSendEvent {
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
++                    commands: self.commands.clone(),
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        match data {
++            Data::AsyncPlayerCommandsSend(event) => {
++                server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
++                self.commands = event.commands;
++            }
++            _ => return None,
++        }
++
++        Some(())
++    }
++
++    fn carries_bukkit_cancellation(&self) -> bool {
++        false
++    }
++}
++
++impl PatchBukkitEvent for pumpkin::plugin::player::player_commands_send::PlayerCommandsSendEvent {
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::PlayerCommandsSend(PlayerCommandsSendEvent {
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
++                    commands: self.commands.clone(),
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        match data {
++            Data::PlayerCommandsSend(event) => {
++                server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
++                self.commands = event.commands;
++            }
++            _ => return None,
++        }
++
++        Some(())
++    }
++
++    fn carries_bukkit_cancellation(&self) -> bool {
++        false
++    }
++}
++
++impl PatchBukkitEvent for pumpkin::plugin::player::async_tab_complete::AsyncTabCompleteEvent {
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::AsyncTabComplete(AsyncTabCompleteEvent {
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
++                    buffer: self.buffer.clone(),
++                    completions: self.completions.clone(),
++                    handled: self.handled,
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        match data {
++            Data::AsyncTabComplete(event) => {
++                server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
++                if event.buffer != self.buffer {
++                    return None;
++                }
++                self.completions = event.completions;
++                self.handled = event.handled;
++            }
++            _ => return None,
++        }
++
++        Some(())
++    }
++}
++
 +impl PatchBukkitEvent for pumpkin::plugin::player::player_chat::PlayerChatEvent {
 +    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
 +        JvmEventPayload {
@@ -3105,7 +3354,34 @@ index 6705e20..e55899d 100644
 +                self.command = event.command;
 +            }
 +            _ => return None,
-@@ -77,0 +457,49 @@ impl<E: PatchBukkitEvent> PatchBukkitEventHandler<E> {
++        }
++
++        Some(())
++    }
++}
++
++impl PatchBukkitEvent for pumpkin::plugin::server::remote_server_command::RemoteServerCommandEvent {
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::RemoteServerCommand(RemoteServerCommandEvent {
++                    command: self.command.clone(),
++                })),
++            },
++            context: EventContext {
++                server,
++                player: None,
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
++        match data {
++            Data::RemoteServerCommand(event) => {
++                self.command = event.command;
++            }
++            _ => return None,
+@@ -77,0 +594,49 @@ impl<E: PatchBukkitEvent> PatchBukkitEventHandler<E> {
 +pub struct PatchBukkitNotificationHandler<E: PatchBukkitEvent> {
 +    plugin_name: String,
 +    command_tx: mpsc::Sender<JvmCommand>,
@@ -3155,7 +3431,7 @@ index 6705e20..e55899d 100644
 +    }
 +}
 +
-@@ -91,8 +519,3 @@ where
+@@ -91,8 +656,3 @@ where
 -            let (tx, rx) = oneshot::channel();
 -            if let Err(e) = command_tx
 -                .send(JvmCommand::FireEvent {
@@ -3167,15 +3443,15 @@ index 6705e20..e55899d 100644
 +            if let Some(cancelled) =
 +                forward_event_to_jvm(&self.plugin_name, &command_tx, server, event).await
 +                && event.carries_bukkit_cancellation()
-@@ -100,2 +523 @@ where
+@@ -100,2 +660 @@ where
 -                tracing::error!("Failed to send event to JVM worker: {e}");
 -                return;
 +                event.set_cancelled(cancelled);
-@@ -102,0 +525,3 @@ where
+@@ -102,0 +662,3 @@ where
 +        })
 +    }
 +}
-@@ -104,9 +529,14 @@ where
+@@ -104,9 +666,14 @@ where
 -            match rx.await {
 -                Ok(response) => {
 -                    event.set_cancelled(response.cancelled);
@@ -3295,7 +3571,7 @@ index eed3dec..b0d700d 100644
 +                .java
 +                .online_mode,
 diff --git a/rust/src/java/native_callbacks/events.rs b/rust/src/java/native_callbacks/events.rs
-index d71e36d..73674f8 100644
+index d71e36d..16a2c12 100644
 --- a/rust/src/java/native_callbacks/events.rs
 +++ b/rust/src/java/native_callbacks/events.rs
 @@ -7 +7 @@ use pumpkin_util::text::TextComponent;
@@ -3336,7 +3612,7 @@ index d71e36d..73674f8 100644
 +                        )
 +                        .await;
 +                }
-@@ -52,0 +87,109 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
+@@ -52,0 +87,177 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
 +                "org.bukkit.event.player.PlayerChangedWorldEvent" => {
 +                    context
 +                        .register_event::<
@@ -3399,6 +3675,57 @@ index d71e36d..73674f8 100644
 +                        )
 +                        .await;
 +                }
++                "com.destroystokyo.paper.event.brigadier.AsyncPlayerSendCommandsEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::async_player_commands_send::AsyncPlayerCommandsSendEvent,
++                            PatchBukkitNotificationHandler<
++                                pumpkin::plugin::player::async_player_commands_send::AsyncPlayerCommandsSendEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitNotificationHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
++                "org.bukkit.event.player.PlayerCommandSendEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::player_commands_send::PlayerCommandsSendEvent,
++                            PatchBukkitNotificationHandler<
++                                pumpkin::plugin::player::player_commands_send::PlayerCommandsSendEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitNotificationHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
++                "com.destroystokyo.paper.event.server.AsyncTabCompleteEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::async_tab_complete::AsyncTabCompleteEvent,
++                            PatchBukkitEventHandler<
++                                pumpkin::plugin::player::async_tab_complete::AsyncTabCompleteEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
 +                "org.bukkit.event.player.AsyncPlayerChatEvent" => {
 +                    context
 +                        .register_event::<
@@ -3446,7 +3773,24 @@ index d71e36d..73674f8 100644
 +                        )
 +                        .await;
 +                }
-@@ -86,0 +230 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
++                "org.bukkit.event.server.RemoteServerCommandEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::server::remote_server_command::RemoteServerCommandEvent,
++                            PatchBukkitEventHandler<
++                                pumpkin::plugin::server::remote_server_command::RemoteServerCommandEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
+@@ -86,0 +298 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
 +                _ => Some(false),
 diff --git a/rust/src/java/native_callbacks/location.rs b/rust/src/java/native_callbacks/location.rs
 index 7582945..631aaba 100644

@@ -4,7 +4,7 @@ use pumpkin_protocol::{
         ArgumentType, CCommands, ProtoNode, ProtoNodeType, StringProtoArgBehavior,
     },
 };
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use super::tree::{Node, NodeType};
 use crate::command::node::{
@@ -13,6 +13,8 @@ use crate::command::node::{
     tree::ROOT_NODE_ID,
 };
 use crate::entity::player::Player;
+use crate::plugin::player::async_player_commands_send::AsyncPlayerCommandsSendEvent;
+use crate::plugin::player::player_commands_send::PlayerCommandsSendEvent;
 use crate::server::Server;
 use pumpkin_protocol::bedrock::client::available_commands::{
     CAvailableCommands, Command, CommandEnum, CommandOverload, CommandParameter, arg_flags,
@@ -28,10 +30,47 @@ pub async fn send_c_commands_packet(
 ) {
     let cmd_src = super::CommandSender::Player(player.clone());
 
+    let fallback_dispatcher = &dispatcher.fallback_dispatcher;
+    let mut visible_commands = Vec::new();
+    for key in fallback_dispatcher.commands.keys() {
+        let Some(permission) = fallback_dispatcher.permissions.get(key) else {
+            continue;
+        };
+
+        if cmd_src.has_permission(server, permission.as_str()).await {
+            visible_commands.push(key.clone());
+        }
+    }
+
+    if let Some(root) = dispatcher.tree.iter().next() {
+        visible_commands.extend(root.children_ref().keys().cloned());
+    }
+    visible_commands.sort_unstable();
+    visible_commands.dedup();
+
+    let async_event = server
+        .plugin_manager
+        .fire(AsyncPlayerCommandsSendEvent::new(
+            player.clone(),
+            visible_commands,
+        ))
+        .await;
+    let sync_event = server
+        .plugin_manager
+        .fire(PlayerCommandsSendEvent::new(
+            player.clone(),
+            async_event.commands,
+        ))
+        .await;
+    let visible_commands: HashSet<String> = sync_event.commands.into_iter().collect();
+
     let mut first_level = Vec::new();
 
-    let fallback_dispatcher = &dispatcher.fallback_dispatcher;
     for key in fallback_dispatcher.commands.keys() {
+        if !visible_commands.contains(key) {
+            continue;
+        }
+
         let Ok(tree) = fallback_dispatcher.get_tree(key) else {
             continue;
         };
@@ -75,8 +114,11 @@ pub async fn send_c_commands_packet(
     for node in &dispatcher.tree {
         let children: Box<[VarInt]> = node
             .children_ref()
-            .values()
-            .copied()
+            .iter()
+            .filter(|(name, _)| {
+                !matches!(node, AttachedNode::Root(_)) || visible_commands.contains(name.as_str())
+            })
+            .map(|(_, id)| *id)
             .map(|id| resolve_node_id(id, node_id_offset, root_node_index))
             .map(|i| i.try_into().expect("i32 limit reached for ids"))
             .collect();

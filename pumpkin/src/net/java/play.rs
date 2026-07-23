@@ -21,6 +21,7 @@ use crate::error::PumpkinError;
 use crate::log_at_level;
 use crate::net::PlayerConfig;
 use crate::net::java::JavaClient;
+use crate::plugin::player::async_tab_complete::AsyncTabCompleteEvent;
 use crate::plugin::player::changed_main_hand::PlayerChangedMainHandEvent;
 use crate::plugin::player::fish::{PlayerFishEvent, PlayerFishState};
 use crate::plugin::player::item_held::PlayerItemHeldEvent;
@@ -58,8 +59,8 @@ use pumpkin_protocol::codec::var_ulong::VarULong;
 use pumpkin_protocol::java::client::play::{
     CBlockUpdate, CCommandSuggestions, CEntityPositionSync, CHeadRot, COpenSignEditor,
     CPingResponse, CPlayerInfoUpdate, CPlayerPosition, CSetCamera, CSetSelectedSlot,
-    CSystemChatMessage, CUpdateEntityPos, CUpdateEntityPosRot, CUpdateEntityRot, InitChat,
-    PlayerAction,
+    CSystemChatMessage, CUpdateEntityPos, CUpdateEntityPosRot, CUpdateEntityRot, CommandSuggestion,
+    InitChat, PlayerAction,
 };
 use pumpkin_protocol::java::server::play::{
     Action, ActionType, CommandBlockMode, FLAG_ON_GROUND, SAttack, SBundleItemSelected,
@@ -2754,26 +2755,47 @@ impl JavaClient {
         packet: SCommandSuggestion,
         server: &Arc<Server>,
     ) {
-        let Some(cmd) = &packet.command.get(1..) else {
+        let Some(cmd) = packet.command.strip_prefix('/') else {
             return;
         };
 
-        let Some((last_word_start, _)) = cmd.char_indices().rfind(|(_, c)| c.is_whitespace())
-        else {
-            return;
-        };
-
-        let suggestions = server
-            .command_dispatcher
-            .read()
-            .await
-            .suggest(cmd, &player.get_command_source(server).await)
+        let event = server
+            .plugin_manager
+            .fire(AsyncTabCompleteEvent::new(
+                player.clone(),
+                packet.command.clone(),
+            ))
             .await;
+
+        let suggestions = if event.cancelled {
+            Vec::new()
+        } else if event.handled {
+            event
+                .completions
+                .into_iter()
+                .map(|completion| CommandSuggestion::new(completion, None))
+                .collect()
+        } else {
+            server
+                .command_dispatcher
+                .read()
+                .await
+                .suggest(cmd, &player.get_command_source(server).await)
+                .await
+        };
+
+        let completion_start = packet
+            .command
+            .char_indices()
+            .rfind(|(_, c)| c.is_whitespace())
+            .map_or(1, |(index, character)| index + character.len_utf8());
 
         let response = CCommandSuggestions::new(
             packet.id,
-            (last_word_start + 2).try_into().unwrap(),
-            (cmd.len() - last_word_start - 1).try_into().unwrap(),
+            completion_start.try_into().unwrap(),
+            (packet.command.len() - completion_start)
+                .try_into()
+                .unwrap(),
             suggestions.into(),
         );
 

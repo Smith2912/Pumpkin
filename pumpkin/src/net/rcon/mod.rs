@@ -10,6 +10,7 @@ use tokio::{
 use tracing::{debug, error, info};
 
 use crate::command::CommandSender;
+use crate::plugin::server::remote_server_command::RemoteServerCommandEvent;
 use crate::{SHOULD_STOP, STOP_INTERRUPT, server::Server};
 
 pub mod packet;
@@ -128,17 +129,23 @@ impl RCONClient {
 
                     let command_source =
                         CommandSender::Rcon(output_clone).into_source(server).await;
+                    let event = server
+                        .plugin_manager
+                        .fire(RemoteServerCommandEvent::new(packet_body))
+                        .await;
 
-                    // Wait task complete before send output
-                    let _ = tokio::spawn(async move {
-                        server_clone
-                            .command_dispatcher
-                            .read()
-                            .await
-                            .handle_command(&command_source, &packet_body)
-                            .await;
-                    })
-                    .await;
+                    if !event.cancelled {
+                        // Wait task complete before send output
+                        let _ = tokio::spawn(async move {
+                            server_clone
+                                .command_dispatcher
+                                .read()
+                                .await
+                                .handle_command(&command_source, &event.command)
+                                .await;
+                        })
+                        .await;
+                    }
 
                     let output = output.lock().await;
                     for line in output.iter() {

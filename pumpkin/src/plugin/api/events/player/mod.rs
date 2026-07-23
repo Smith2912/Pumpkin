@@ -1,3 +1,5 @@
+pub mod async_player_commands_send;
+pub mod async_tab_complete;
 pub mod bedrock_form_response;
 pub mod changed_main_hand;
 pub mod custom_click_action;
@@ -11,6 +13,7 @@ pub mod player_change_world;
 pub mod player_changed_world;
 pub mod player_chat;
 pub mod player_command_send;
+pub mod player_commands_send;
 pub mod player_custom_payload;
 pub mod player_gamemode_change;
 pub mod player_interact_entity_event;
