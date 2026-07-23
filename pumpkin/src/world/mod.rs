@@ -615,13 +615,25 @@ impl World {
         chat_message: &SChatMessage,
         decorated_message: &TextComponent,
     ) {
+        let recipients = self.players.load().iter().cloned().collect::<Vec<_>>();
+        self.send_secure_player_chat(&recipients, sender, chat_message, decorated_message)
+            .await;
+    }
+
+    pub async fn send_secure_player_chat(
+        &self,
+        recipients: &[Arc<Player>],
+        sender: &Arc<Player>,
+        chat_message: &SChatMessage,
+        decorated_message: &TextComponent,
+    ) {
         let messages_sent: i32 = sender.chat_session.lock().await.messages_sent;
         let sender_last_seen = {
             let cache = sender.signature_cache.lock().await;
             cache.last_seen.clone()
         };
 
-        for recipient in self.players.load().iter() {
+        for recipient in recipients {
             let messages_received: i32 = recipient.chat_session.lock().await.messages_received;
             let packet = &CPlayerChatMessage::new(
                 VarInt(messages_received),

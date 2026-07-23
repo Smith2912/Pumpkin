@@ -1011,7 +1011,11 @@ impl BedrockClient {
 
         send_cancellable! {{
             server;
-            PlayerChatEvent::new(player.clone(), packet.message, vec![]);
+            PlayerChatEvent::new(
+                player.clone(),
+                packet.message,
+                server.get_all_players(),
+            );
 
             'after: {
                 info!("<chat> {}: {}", gameprofile.name, event.message);
@@ -1029,7 +1033,6 @@ impl BedrockClient {
                     &message,
                 );
 
-                let entity = &player.get_entity();
                 if server.basic_config.allow_chat_reports {
                     //TODO Alex help, what is this?
                     //world.broadcast_secure_player_chat(player, &message, decorated_message).await;
@@ -1043,7 +1046,12 @@ impl BedrockClient {
                         message, gameprofile.name.clone()
                     );
 
-                    entity.world.load().broadcast_editioned(&je_packet, &be_packet).await;
+                    for recipient in &event.recipients {
+                        recipient
+                            .client
+                            .enqueue_packet_editioned(&je_packet, &be_packet)
+                            .await;
+                    }
                 }
             }
         }}

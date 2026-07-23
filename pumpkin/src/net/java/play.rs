@@ -1409,7 +1409,11 @@ impl JavaClient {
 
         send_cancellable! {{
             server;
-            PlayerChatEvent::new(player.clone(), chat_message.message.to_string(), vec![]);
+            PlayerChatEvent::new(
+                player.clone(),
+                chat_message.message.to_string(),
+                server.get_all_players(),
+            );
 
             'after: {
                 info!("<chat> {}: {}", gameprofile.name, event.message);
@@ -1430,7 +1434,14 @@ impl JavaClient {
                 let entity = &player.get_entity();
                 let world = entity.world.load_full();
                 if server.basic_config.allow_chat_reports {
-                    world.broadcast_secure_player_chat(player, &chat_message, &decorated_message).await;
+                    world
+                        .send_secure_player_chat(
+                            &event.recipients,
+                            player,
+                            &chat_message,
+                            &decorated_message,
+                        )
+                        .await;
                 } else {
                     let je_packet = CSystemChatMessage::new(
                         &decorated_message,
@@ -1440,7 +1451,12 @@ impl JavaClient {
                         message, player.gameprofile.name.clone()
                     );
 
-                    world.broadcast_editioned(&je_packet, &be_packet).await;
+                    for recipient in &event.recipients {
+                        recipient
+                            .client
+                            .enqueue_packet_editioned(&je_packet, &be_packet)
+                            .await;
+                    }
                 }
             }
         }}
