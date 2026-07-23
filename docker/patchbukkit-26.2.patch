@@ -1594,6 +1594,132 @@ index 0000000..ed415a4
 +        }
 +    }
 +}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEntity.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEntity.java
+index c950b98..9b759b8 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEntity.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEntity.java
+@@ -23,6 +23,8 @@ import org.bukkit.entity.Pose;
+ import org.bukkit.entity.SpawnCategory;
+ import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason;
+ import org.bukkit.event.entity.EntityDamageEvent;
++import org.bukkit.event.player.PlayerChangedWorldEvent;
++import org.bukkit.event.player.PlayerTeleportEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
+ import org.bukkit.inventory.ItemStack;
+ import org.bukkit.metadata.MetadataValue;
+@@ -337,8 +339,70 @@ public class PatchBukkitEntity implements Entity {
+     @Override
+     public boolean teleport(@NotNull Location location, @NotNull TeleportCause cause,
+             @NotNull TeleportFlag @NotNull... teleportFlags) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'teleport'");
++        java.util.Objects.requireNonNull(location, "location");
++        java.util.Objects.requireNonNull(cause, "cause");
++        java.util.Objects.requireNonNull(teleportFlags, "teleportFlags");
++        location.checkFinite();
++
++        if (!(this instanceof Player player)) {
++            return false;
++        }
++        if (teleportFlags.length != 0) {
++            throw new UnsupportedOperationException(
++                "PatchBukkit does not yet support Paper teleport flags"
++            );
++        }
++
++        Location from = this.getLocation();
++        Location requested = location.clone();
++        if (requested.getWorld() == null) {
++            requested.setWorld(from.getWorld());
++        }
++
++        PlayerTeleportEvent event = new PlayerTeleportEvent(player, from, requested, cause);
++        Bukkit.getPluginManager().callEvent(event);
++        if (event.isCancelled() || event.getTo() == null) {
++            return false;
++        }
++
++        Location destination = event.getTo();
++        destination.checkFinite();
++        World destinationWorld = java.util.Objects.requireNonNull(
++            destination.getWorld(),
++            "teleport destination world"
++        );
++        World previousWorld = from.getWorld();
++
++        patchbukkit.player.TeleportPlayerResponse response =
++            NativeBridgeFfi.teleportPlayer(
++                patchbukkit.player.TeleportPlayerRequest.newBuilder()
++                    .setPlayerUuid(BridgeUtils.convertUuid(this.uuid))
++                    .setDestination(
++                        patchbukkit.common.Location.newBuilder()
++                            .setWorld(
++                                patchbukkit.common.World.newBuilder()
++                                    .setUuid(BridgeUtils.convertUuid(destinationWorld.getUID()))
++                                    .build()
++                            )
++                            .setPosition(
++                                patchbukkit.common.Vec3.newBuilder()
++                                    .setX(destination.getX())
++                                    .setY(destination.getY())
++                                    .setZ(destination.getZ())
++                                    .build()
++                            )
++                            .setYaw(destination.getYaw())
++                            .setPitch(destination.getPitch())
++                            .build()
++                    )
++                    .build()
++            );
++        boolean success = response != null && response.getSuccess();
++
++        if (success && previousWorld != null && !previousWorld.getUID().equals(destinationWorld.getUID())) {
++            Bukkit.getPluginManager().callEvent(new PlayerChangedWorldEvent(player, previousWorld));
++        }
++        return success;
+     }
+ 
+     @Override
+@@ -349,33 +413,29 @@ public class PatchBukkitEntity implements Entity {
+ 
+     @Override
+     public boolean teleport(@NotNull Location location) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'teleport'");
++        return this.teleport(location, TeleportCause.PLUGIN);
+     }
+ 
+     @Override
+     public boolean teleport(@NotNull Location location, @NotNull TeleportCause cause) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'teleport'");
++        return this.teleport(location, cause, new TeleportFlag[0]);
+     }
+ 
+     @Override
+     public boolean teleport(@NotNull Entity destination) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'teleport'");
++        return this.teleport(destination, TeleportCause.PLUGIN);
+     }
+ 
+     @Override
+     public boolean teleport(@NotNull Entity destination, @NotNull TeleportCause cause) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'teleport'");
++        java.util.Objects.requireNonNull(destination, "destination");
++        return this.teleport(destination.getLocation(), cause);
+     }
+ 
+     @Override
+     public @NotNull CompletableFuture<Boolean> teleportAsync(@NotNull Location loc, @NotNull TeleportCause cause,
+             @NotNull TeleportFlag @NotNull... teleportFlags) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'teleportAsync'");
++        return CompletableFuture.completedFuture(this.teleport(loc, cause, teleportFlags));
+     }
+ 
+     @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
 index e48457f..b1641c8 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
@@ -2715,7 +2841,7 @@ index e8c2c36..1c566bc 100644
  
      @Override
 diff --git a/proto/patchbukkit/bridge.proto b/proto/patchbukkit/bridge.proto
-index 85df0ae..820eb30 100644
+index 85df0ae..f59147d 100644
 --- a/proto/patchbukkit/bridge.proto
 +++ b/proto/patchbukkit/bridge.proto
 @@ -9,6 +9,7 @@ import "patchbukkit/config.proto";
@@ -2726,7 +2852,7 @@ index 85df0ae..820eb30 100644
  import "patchbukkit/registry.proto";
  import "patchbukkit/sound.proto";
  
-@@ -22,6 +23,12 @@ service NativeBridge {
+@@ -22,6 +23,13 @@ service NativeBridge {
    rpc SendMessage(patchbukkit.message.SendMessageRequest) returns (google.protobuf.Empty);
  
    rpc GetLocation(patchbukkit.common.UUID) returns (patchbukkit.common.Location);
@@ -2736,6 +2862,7 @@ index 85df0ae..820eb30 100644
 +  rpc SetPlayerGameMode(patchbukkit.player.SetPlayerGameModeRequest) returns (patchbukkit.player.SetPlayerGameModeResponse);
 +  rpc GetPlayerVitals(patchbukkit.common.UUID) returns (patchbukkit.player.PlayerVitals);
 +  rpc UpdatePlayerVitals(patchbukkit.player.UpdatePlayerVitalsRequest) returns (patchbukkit.player.UpdatePlayerVitalsResponse);
++  rpc TeleportPlayer(patchbukkit.player.TeleportPlayerRequest) returns (patchbukkit.player.TeleportPlayerResponse);
  
    rpc GetRegistryData(patchbukkit.registry.GetRegistryDataRequest) returns (patchbukkit.registry.GetRegistryDataResponse);
  
@@ -2843,10 +2970,10 @@ index cd92e96..c74ae7e 100644
 +}
 diff --git a/proto/patchbukkit/player.proto b/proto/patchbukkit/player.proto
 new file mode 100644
-index 0000000..6cbfa34
+index 0000000..95c9864
 --- /dev/null
 +++ b/proto/patchbukkit/player.proto
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,54 @@
 +syntax = "proto3";
 +
 +package patchbukkit.player;
@@ -2890,6 +3017,15 @@ index 0000000..6cbfa34
 +}
 +
 +message UpdatePlayerVitalsResponse {
++  bool success = 1;
++}
++
++message TeleportPlayerRequest {
++  patchbukkit.common.UUID player_uuid = 1;
++  patchbukkit.common.Location destination = 2;
++}
++
++message TeleportPlayerResponse {
 +  bool success = 1;
 +}
 diff --git a/proto/patchbukkit/registry.proto b/proto/patchbukkit/registry.proto
@@ -3661,18 +3797,21 @@ index 56698aa..d084ca1 100644
  
 diff --git a/rust/src/java/native_callbacks/player.rs b/rust/src/java/native_callbacks/player.rs
 new file mode 100644
-index 0000000..9ec2781
+index 0000000..e1d262f
 --- /dev/null
 +++ b/rust/src/java/native_callbacks/player.rs
-@@ -0,0 +1,112 @@
+@@ -0,0 +1,152 @@
 +use std::str::FromStr;
 +
-+use pumpkin_util::GameMode;
++use pumpkin_util::{GameMode, math::vector3::Vector3};
 +
 +use crate::java::native_callbacks::CALLBACK_CONTEXT;
 +use crate::proto::patchbukkit::{
 +    common::Uuid,
-+    player::{PlayerGameMode, PlayerVitals, SetPlayerGameModeRequest, UpdatePlayerVitalsRequest},
++    player::{
++        PlayerGameMode, PlayerVitals, SetPlayerGameModeRequest, TeleportPlayerRequest,
++        UpdatePlayerVitalsRequest,
++    },
 +};
 +
 +pub fn ffi_native_bridge_get_player_game_mode_impl(request: Uuid) -> Option<PlayerGameMode> {
@@ -3776,6 +3915,43 @@ index 0000000..9ec2781
 +    });
 +
 +    Some(true)
++}
++
++pub fn ffi_native_bridge_teleport_player_impl(request: TeleportPlayerRequest) -> Option<bool> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
++    let destination = request.destination?;
++    let world_uuid = uuid::Uuid::parse_str(&destination.world?.uuid?.value).ok()?;
++    let position = destination.position?;
++
++    if !position.x.is_finite()
++        || !position.y.is_finite()
++        || !position.z.is_finite()
++        || !destination.yaw.is_finite()
++        || !destination.pitch.is_finite()
++    {
++        return Some(false);
++    }
++
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++    let worlds = ctx.plugin_context.server.worlds.load();
++    let world = worlds
++        .iter()
++        .find(|candidate| candidate.uuid == world_uuid)
++        .cloned()?;
++    drop(worlds);
++
++    let success = tokio::task::block_in_place(|| {
++        ctx.runtime
++            .block_on(player.apply_teleport_after_external_event(
++                Vector3::new(position.x, position.y, position.z),
++                destination.yaw,
++                destination.pitch,
++                world,
++            ))
++    });
++
++    Some(success)
 +}
 diff --git a/rust/src/java/native_callbacks/registry.rs b/rust/src/java/native_callbacks/registry.rs
 index d403ca1..f39e935 100644

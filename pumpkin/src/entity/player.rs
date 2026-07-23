@@ -2595,6 +2595,47 @@ impl Player {
         }}
     }
 
+    /// Applies a Bukkit-originated teleport after the compatibility layer has
+    /// already fired and resolved its cancellable `PlayerTeleportEvent`.
+    ///
+    /// Same-world teleports intentionally bypass Pumpkin's native
+    /// `PlayerTeleportEvent` to avoid recursively re-entering the single JVM
+    /// worker that is waiting for this operation to complete. Cross-world
+    /// teleports still use [`Self::teleport_world`] so Pumpkin's world-change
+    /// lifecycle and chunk synchronization remain authoritative.
+    pub async fn apply_teleport_after_external_event(
+        self: &Arc<Self>,
+        position: Vector3<f64>,
+        yaw: f32,
+        pitch: f32,
+        world: Arc<World>,
+    ) -> bool {
+        if Arc::ptr_eq(&world, &self.world()) {
+            self.request_teleport(position, yaw, pitch).await;
+
+            let entity = self.get_entity();
+            let chunk_pos = entity.chunk_pos.load();
+            entity.world.load().broadcast_to_chunk_except(
+                chunk_pos,
+                &[entity.entity_uuid],
+                &CEntityPositionSync::new(
+                    entity.entity_id.into(),
+                    position,
+                    Vector3::new(0.0, 0.0, 0.0),
+                    yaw,
+                    pitch,
+                    entity.on_ground.load(Ordering::SeqCst),
+                ),
+            );
+
+            true
+        } else {
+            self.teleport_world(world.clone(), position, Some(yaw), Some(pitch))
+                .await;
+            Arc::ptr_eq(&world, &self.world())
+        }
+    }
+
     /// `yaw` and `pitch` are in degrees.
     /// Rarly used, for example when waking up the player from a bed or their first time spawn. Otherwise, the `teleport` method should be used.
     /// The player should respond with the `SConfirmTeleport` packet.
