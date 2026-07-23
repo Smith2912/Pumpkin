@@ -1,6 +1,7 @@
 use std::{
     any::Any,
     mem::{align_of, size_of},
+    sync::LazyLock,
 };
 
 use libloading::Library;
@@ -73,10 +74,13 @@ impl PluginLoader for NativePluginLoader {
             };
             validate_metadata_layout(plugin_metadata_size, plugin_metadata_align)?;
 
-            // 2. Extract Metadata (METADATA)
+            // 2. Extract Metadata (METADATA). The plugin macro exports a
+            // `LazyLock<PluginMetadata>`, so initialize and dereference that wrapper before
+            // cloning the metadata. Reading the symbol as a bare `PluginMetadata` interprets
+            // the lazy initializer state as strings and vectors, which is undefined behavior.
             let metadata = unsafe {
-                &**library
-                    .get::<*const PluginMetadata>(b"METADATA")
+                &***library
+                    .get::<*const LazyLock<PluginMetadata>>(b"METADATA")
                     .map_err(|_| LoaderError::MetadataMissing)?
             };
 
