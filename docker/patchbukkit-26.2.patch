@@ -84,16 +84,18 @@ index 032bce0..2b72119 100644
 +
  }
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
-index e8bd1a6..6860a72 100644
+index e8bd1a6..5f2da13 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
-@@ -1,11 +1,12 @@
+@@ -1,11 +1,14 @@
  package org.patchbukkit.testplugin.tests;
  
  import org.bukkit.Bukkit;
++import org.bukkit.Material;
 +import org.bukkit.NamespacedKey;
  import org.bukkit.Registry;
  import org.bukkit.Sound;
++import org.bukkit.Tag;
 +import org.bukkit.damage.DamageType;
  import org.patchbukkit.testplugin.ConformanceTest;
  import org.patchbukkit.testplugin.TestCategory;
@@ -101,18 +103,12 @@ index e8bd1a6..6860a72 100644
  
  import static org.patchbukkit.testplugin.TestAssertions.*;
  
-@@ -33,14 +34,23 @@ public final class RegistryTests {
+@@ -33,14 +36,46 @@ public final class RegistryTests {
          assertNotNull(stream, "Registry.SOUNDS.stream()");
      }
  
 -    @ConformanceTest(name = "Server.getRegistry(Sound.class) returns registry", category = TestCategory.REGISTRY,
 -            expectation = TestExpectation.EXPECT_UNSUPPORTED)
--    public void testServerGetRegistry() {
--        // Server.getRegistry() returns null in PatchBukkit — might throw or return null
--        Registry<Sound> reg = Bukkit.getServer().getRegistry(Sound.class);
--        if (reg == null) {
--            throw new UnsupportedOperationException("Server.getRegistry() returned null (not implemented)");
--        }
 +    @ConformanceTest(name = "Damage types are populated from Pumpkin", category = TestCategory.REGISTRY)
 +    public void testDamageTypes() {
 +        DamageType arrow = Registry.DAMAGE_TYPE.get(NamespacedKey.minecraft("arrow"));
@@ -125,12 +121,40 @@ index e8bd1a6..6860a72 100644
 +            "death.attack.arrow".equals(arrow.getTranslationKey()),
 +            "arrow translation key should match Pumpkin metadata"
 +        );
-     }
- 
++    }
++
 +    @ConformanceTest(name = "Server.getRegistry(Sound.class) returns registry", category = TestCategory.REGISTRY)
-+    public void testServerGetRegistry() {
+     public void testServerGetRegistry() {
+-        // Server.getRegistry() returns null in PatchBukkit — might throw or return null
+-        Registry<Sound> reg = Bukkit.getServer().getRegistry(Sound.class);
+-        if (reg == null) {
+-            throw new UnsupportedOperationException("Server.getRegistry() returned null (not implemented)");
+-        }
 +        Registry<Sound> registry = Bukkit.getServer().getRegistry(Sound.class);
 +        assertNotNull(registry, "Server.getRegistry(Sound.class)");
+     }
+ 
++    @ConformanceTest(name = "Bukkit block tags are populated from Pumpkin", category = TestCategory.REGISTRY)
++    public void testBlockTags() {
++        Tag<Material> logs = Bukkit.getTag(
++            Tag.REGISTRY_BLOCKS,
++            NamespacedKey.minecraft("logs"),
++            Material.class
++        );
++        assertNotNull(logs, "minecraft:logs block tag");
++        assertTrue(logs.isTagged(Material.OAK_LOG), "logs should include oak_log");
++    }
++
++    @ConformanceTest(name = "Server.getTags exposes Pumpkin tags", category = TestCategory.REGISTRY)
++    public void testTagIteration() {
++        boolean foundLogs = false;
++        for (Tag<Material> tag : Bukkit.getTags(Tag.REGISTRY_BLOCKS, Material.class)) {
++            if (tag.getKey().equals(NamespacedKey.minecraft("logs"))) {
++                foundLogs = true;
++                break;
++            }
++        }
++        assertTrue(foundLogs, "block tag iteration should include minecraft:logs");
 +    }
  }
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
@@ -914,7 +938,7 @@ index d90de1b..40e1ba2 100644
      public boolean isTransitiveDependency(
          PluginMeta pluginMeta,
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
-index d935769..bf655a0 100644
+index d935769..77abb17 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
 @@ -7,12 +7,15 @@ import io.papermc.paper.ban.BanListType;
@@ -941,7 +965,12 @@ index d935769..bf655a0 100644
  import java.util.function.Consumer;
  import java.util.logging.Level;
  import java.util.logging.Logger;
-@@ -97,6 +101,7 @@ import org.patchbukkit.scheduler.PatchBukkitScheduler;
+@@ -93,10 +97,12 @@ import org.jetbrains.annotations.Nullable;
+ import org.patchbukkit.command.PatchBukkitCommandMap;
+ import org.patchbukkit.command.PatchBukkitConsoleCommandSender;
+ import org.patchbukkit.events.PatchBukkitEventManager;
++import org.patchbukkit.registry.PatchBukkitLegacyTags;
+ import org.patchbukkit.scheduler.PatchBukkitScheduler;
  import org.patchbukkit.versioning.Versioning;
  
  import patchbukkit.bridge.NativeBridgeFfi;
@@ -949,7 +978,7 @@ index d935769..bf655a0 100644
  import patchbukkit.log.LogLevel;
  import patchbukkit.log.SendLogRequest;
  
-@@ -110,6 +115,8 @@ public class PatchBukkitServer implements Server {
+@@ -110,6 +116,8 @@ public class PatchBukkitServer implements Server {
      private final BukkitScheduler scheduler = new PatchBukkitScheduler();
      private final PatchBukkitPluginManager pluginManager = new PatchBukkitPluginManager(this);
      private final ServicesManager servicesManager = new PatchBukkitServicesManager();
@@ -958,7 +987,7 @@ index d935769..bf655a0 100644
  
  
      private final Map<UUID, Player> onlinePlayers = new java.util.concurrent.ConcurrentHashMap<>();
-@@ -141,11 +148,17 @@ public class PatchBukkitServer implements Server {
+@@ -141,11 +149,17 @@ public class PatchBukkitServer implements Server {
          root.addHandler(new java.util.logging.Handler() {
              @Override
              public void publish(java.util.logging.LogRecord record) {
@@ -977,7 +1006,7 @@ index d935769..bf655a0 100644
                                  .setLoggerName(record.getLoggerName())
                                  .build()
                  );
-@@ -181,6 +194,10 @@ public class PatchBukkitServer implements Server {
+@@ -181,6 +195,10 @@ public class PatchBukkitServer implements Server {
          this.pluginManager.registerPlugin(plugin);
      }
  
@@ -988,7 +1017,7 @@ index d935769..bf655a0 100644
      @Override
      public void sendPluginMessage(
          @NotNull Plugin source,
-@@ -211,10 +228,9 @@ public class PatchBukkitServer implements Server {
+@@ -211,10 +229,9 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @NotNull File getPluginsFolder() {
@@ -1002,7 +1031,7 @@ index d935769..bf655a0 100644
      }
  
      @Override
-@@ -234,10 +250,7 @@ public class PatchBukkitServer implements Server {
+@@ -234,10 +251,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @NotNull String getMinecraftVersion() {
@@ -1014,7 +1043,7 @@ index d935769..bf655a0 100644
      }
  
      @Override
-@@ -718,10 +731,7 @@ public class PatchBukkitServer implements Server {
+@@ -718,10 +732,7 @@ public class PatchBukkitServer implements Server {
          @NotNull CommandSender sender,
          @NotNull String commandLine
      ) throws CommandException {
@@ -1026,7 +1055,7 @@ index d935769..bf655a0 100644
      }
  
      @Override
-@@ -867,10 +877,9 @@ public class PatchBukkitServer implements Server {
+@@ -867,10 +878,9 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public boolean getOnlineMode() {
@@ -1040,7 +1069,7 @@ index d935769..bf655a0 100644
      }
  
      @Override
-@@ -1224,10 +1233,7 @@ public class PatchBukkitServer implements Server {
+@@ -1224,10 +1234,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public boolean isPrimaryThread() {
@@ -1052,7 +1081,7 @@ index d935769..bf655a0 100644
      }
  
      @Override
-@@ -1284,10 +1290,7 @@ public class PatchBukkitServer implements Server {
+@@ -1284,10 +1291,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @NotNull WarningState getWarningState() {
@@ -1064,7 +1093,31 @@ index d935769..bf655a0 100644
      }
  
      @Override
-@@ -1589,10 +1592,7 @@ public class PatchBukkitServer implements Server {
+@@ -1541,10 +1545,7 @@ public class PatchBukkitServer implements Server {
+         @NotNull NamespacedKey tag,
+         @NotNull Class<T> clazz
+     ) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getTag'"
+-        );
++        return PatchBukkitLegacyTags.getTag(registry, tag, clazz);
+     }
+ 
+     @Override
+@@ -1552,10 +1553,7 @@ public class PatchBukkitServer implements Server {
+         @NotNull String registry,
+         @NotNull Class<T> clazz
+     ) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getTags'"
+-        );
++        return PatchBukkitLegacyTags.getTags(registry, clazz);
+     }
+ 
+     @Override
+@@ -1589,10 +1587,7 @@ public class PatchBukkitServer implements Server {
      public <T extends Keyed> @Nullable Registry<T> getRegistry(
          @NotNull Class<T> tClass
      ) {
@@ -1076,7 +1129,7 @@ index d935769..bf655a0 100644
      }
  
      @Override
-@@ -1705,10 +1705,7 @@ public class PatchBukkitServer implements Server {
+@@ -1705,10 +1700,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public boolean isStopping() {
@@ -1408,6 +1461,206 @@ index 0000000..4e2745c
 +        }
 +    }
 +}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitLegacyTag.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitLegacyTag.java
+new file mode 100644
+index 0000000..f361212
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitLegacyTag.java
+@@ -0,0 +1,36 @@
++package org.patchbukkit.registry;
++
++import org.bukkit.Keyed;
++import org.bukkit.NamespacedKey;
++import org.bukkit.Tag;
++import org.jetbrains.annotations.NotNull;
++
++import java.util.Collections;
++import java.util.LinkedHashSet;
++import java.util.Objects;
++import java.util.Set;
++
++final class PatchBukkitLegacyTag<T extends Keyed> implements Tag<T> {
++    private final NamespacedKey key;
++    private final Set<T> values;
++
++    PatchBukkitLegacyTag(NamespacedKey key, Set<T> values) {
++        this.key = Objects.requireNonNull(key, "key");
++        this.values = Collections.unmodifiableSet(new LinkedHashSet<>(values));
++    }
++
++    @Override
++    public boolean isTagged(@NotNull T item) {
++        return values.contains(item);
++    }
++
++    @Override
++    public @NotNull Set<T> getValues() {
++        return values;
++    }
++
++    @Override
++    public @NotNull NamespacedKey getKey() {
++        return key;
++    }
++}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitLegacyTags.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitLegacyTags.java
+new file mode 100644
+index 0000000..88bc005
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitLegacyTags.java
+@@ -0,0 +1,152 @@
++package org.patchbukkit.registry;
++
++import org.bukkit.Fluid;
++import org.bukkit.GameEvent;
++import org.bukkit.Keyed;
++import org.bukkit.Material;
++import org.bukkit.NamespacedKey;
++import org.bukkit.Registry;
++import org.bukkit.Tag;
++import org.bukkit.entity.EntityType;
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.annotations.Nullable;
++import patchbukkit.bridge.NativeBridgeFfi;
++import patchbukkit.registry.GetRegistryDataRequest;
++import patchbukkit.registry.GetRegistryDataResponse;
++import patchbukkit.registry.RegistryTagData;
++import patchbukkit.registry.RegistryType;
++
++import java.util.Collections;
++import java.util.LinkedHashMap;
++import java.util.LinkedHashSet;
++import java.util.Map;
++import java.util.Set;
++import java.util.concurrent.ConcurrentHashMap;
++
++public final class PatchBukkitLegacyTags {
++    private static final Map<CacheKey, Map<NamespacedKey, Tag<?>>> CACHE =
++        new ConcurrentHashMap<>();
++
++    private PatchBukkitLegacyTags() {
++    }
++
++    public static <T extends Keyed> @Nullable Tag<T> getTag(
++        @NotNull String registry,
++        @NotNull NamespacedKey tag,
++        @NotNull Class<T> type
++    ) {
++        return getTagsFor(registry, type).get(tag);
++    }
++
++    public static <T extends Keyed> @NotNull Iterable<Tag<T>> getTags(
++        @NotNull String registry,
++        @NotNull Class<T> type
++    ) {
++        return Collections.unmodifiableCollection(getTagsFor(registry, type).values());
++    }
++
++    @SuppressWarnings("unchecked")
++    private static <T extends Keyed> Map<NamespacedKey, Tag<T>> getTagsFor(
++        String registry,
++        Class<T> type
++    ) {
++        CacheKey cacheKey = new CacheKey(registry, type);
++        return (Map<NamespacedKey, Tag<T>>) (Map<?, ?>) CACHE.computeIfAbsent(
++            cacheKey,
++            ignored -> loadTags(registry, type)
++        );
++    }
++
++    private static <T extends Keyed> Map<NamespacedKey, Tag<?>> loadTags(
++        String registry,
++        Class<T> type
++    ) {
++        RegistryType registryType = registryType(registry);
++        if (registryType == null || !supports(registry, type)) {
++            return Collections.emptyMap();
++        }
++
++        GetRegistryDataResponse response = NativeBridgeFfi.getRegistryData(
++            GetRegistryDataRequest.newBuilder().setRegistry(registryType).build()
++        );
++        if (response == null || !response.hasTagRegistry()) {
++            return Collections.emptyMap();
++        }
++
++        Map<NamespacedKey, Tag<?>> result = new LinkedHashMap<>();
++        for (RegistryTagData data : response.getTagRegistry().getTagsList()) {
++            NamespacedKey tagKey = namespacedKey(data.getName());
++            if (tagKey == null) {
++                continue;
++            }
++
++            Set<T> values = new LinkedHashSet<>();
++            for (String rawValue : data.getValuesList()) {
++                NamespacedKey valueKey = namespacedKey(rawValue);
++                T value = valueKey == null ? null : resolve(type, valueKey);
++                if (value != null) {
++                    values.add(value);
++                }
++            }
++            result.put(tagKey, new PatchBukkitLegacyTag<>(tagKey, values));
++        }
++        return Collections.unmodifiableMap(result);
++    }
++
++    private static @Nullable RegistryType registryType(String registry) {
++        return switch (registry) {
++            case "blocks" -> RegistryType.BLOCK_TAGS;
++            case "items" -> RegistryType.ITEM_TAGS;
++            case "fluids" -> RegistryType.FLUID_TAGS;
++            case "entity_types" -> RegistryType.ENTITY_TYPE_TAGS;
++            case "game_events" -> RegistryType.GAME_EVENT_TAGS;
++            default -> null;
++        };
++    }
++
++    private static boolean supports(String registry, Class<?> type) {
++        return ("blocks".equals(registry) && type == Material.class)
++            || ("items".equals(registry) && type == Material.class)
++            || ("fluids".equals(registry) && type == Fluid.class)
++            || ("entity_types".equals(registry) && type == EntityType.class)
++            || ("game_events".equals(registry) && type == GameEvent.class);
++    }
++
++    @SuppressWarnings("unchecked")
++    private static <T extends Keyed> @Nullable T resolve(
++        Class<T> type,
++        NamespacedKey key
++    ) {
++        if (type == Material.class) {
++            return (T) Material.matchMaterial(key.asString());
++        }
++        if (type == Fluid.class) {
++            return (T) findByKey(Fluid.values(), key);
++        }
++        if (type == EntityType.class) {
++            return (T) Registry.ENTITY_TYPE.get(key);
++        }
++        if (type == GameEvent.class) {
++            return (T) GameEvent.getByKey(key);
++        }
++        return null;
++    }
++
++    private static <T extends Keyed> @Nullable T findByKey(T[] values, NamespacedKey key) {
++        for (T value : values) {
++            if (value.getKey().equals(key)) {
++                return value;
++            }
++        }
++        return null;
++    }
++
++    private static @Nullable NamespacedKey namespacedKey(String raw) {
++        return raw.contains(":")
++            ? NamespacedKey.fromString(raw)
++            : NamespacedKey.minecraft(raw);
++    }
++
++    private record CacheKey(String registry, Class<?> type) {
++    }
++}
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
 index 854db6f..35f95bb 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
@@ -1456,26 +1709,44 @@ index 12c48c0..d3addd5 100644
 +  bool online_mode = 2;
  }
 diff --git a/proto/patchbukkit/registry.proto b/proto/patchbukkit/registry.proto
-index a7dac34..a502d8f 100644
+index a7dac34..4961ec9 100644
 --- a/proto/patchbukkit/registry.proto
 +++ b/proto/patchbukkit/registry.proto
-@@ -9,6 +9,7 @@ option java_package = "patchbukkit.registry";
+@@ -9,6 +9,12 @@ option java_package = "patchbukkit.registry";
  
  enum RegistryType {
    SOUND_EVENT = 0;
 +  DAMAGE_TYPE = 1;
++  BLOCK_TAGS = 2;
++  ITEM_TAGS = 3;
++  FLUID_TAGS = 4;
++  ENTITY_TYPE_TAGS = 5;
++  GAME_EVENT_TAGS = 6;
  }
  
  message GetRegistryDataRequest {
-@@ -18,6 +19,7 @@ message GetRegistryDataRequest {
+@@ -18,9 +24,20 @@ message GetRegistryDataRequest {
  message GetRegistryDataResponse {
    oneof registry {
      SoundEventRegistryData sound_event = 1;
 +    DamageTypeRegistryData damage_type = 2;
++    TagRegistryData tag_registry = 3;
    }
  }
  
-@@ -29,3 +31,37 @@ message SoundEvent {
++message RegistryTagData {
++  string name = 1;
++  repeated string values = 2;
++}
++
++message TagRegistryData {
++  repeated RegistryTagData tags = 1;
++}
++
+ message SoundEvent {
+   uint32 id = 1;
+   string name = 2;
+@@ -29,3 +46,37 @@ message SoundEvent {
  message SoundEventRegistryData {
    repeated SoundEvent sound_events = 1;
  }
@@ -1648,17 +1919,20 @@ index eed3dec..b0d700d 100644
          })
  }
 diff --git a/rust/src/java/native_callbacks/registry.rs b/rust/src/java/native_callbacks/registry.rs
-index d403ca1..d70c728 100644
+index d403ca1..bc16c47 100644
 --- a/rust/src/java/native_callbacks/registry.rs
 +++ b/rust/src/java/native_callbacks/registry.rs
-@@ -1,7 +1,62 @@
+@@ -1,7 +1,81 @@
  use crate::proto::patchbukkit::registry::{
 -    GetRegistryDataRequest, GetRegistryDataResponse, RegistryType, SoundEvent,
 -    SoundEventRegistryData, get_registry_data_response::Registry,
 +    DamageTypeData, DamageTypeRegistryData, GetRegistryDataRequest, GetRegistryDataResponse,
-+    RegistryType, SoundEvent, SoundEventRegistryData, get_registry_data_response::Registry,
++    RegistryTagData, RegistryType, SoundEvent, SoundEventRegistryData, TagRegistryData,
++    get_registry_data_response::Registry,
  };
 +use pumpkin_data::damage::{DamageEffects, DamageScaling, DamageType, DeathMessageType};
++use pumpkin_data::tag::{RegistryKey as PumpkinRegistryKey, get_registry_key_tags};
++use pumpkin_util::version::JavaMinecraftVersion;
 +
 +const DAMAGE_TYPE_NAMES: [&str; 51] = [
 +    "arrow",
@@ -1713,10 +1987,26 @@ index d403ca1..d70c728 100644
 +    "wither",
 +    "wither_skull",
 +];
++
++fn build_tag_registry(registry_key: PumpkinRegistryKey) -> Registry {
++    let tags = get_registry_key_tags(JavaMinecraftVersion::V_26_2, registry_key)
++        .map(|tag_map| {
++            tag_map
++                .entries()
++                .map(|(name, tag)| RegistryTagData {
++                    name: (*name).to_string(),
++                    values: tag.0.iter().map(|value| (*value).to_string()).collect(),
++                })
++                .collect()
++        })
++        .unwrap_or_default();
++
++    Registry::TagRegistry(TagRegistryData { tags })
++}
  
  pub fn ffi_native_bridge_get_registry_data_impl(
      request: GetRegistryDataRequest,
-@@ -19,6 +74,38 @@ pub fn ffi_native_bridge_get_registry_data_impl(
+@@ -19,6 +93,51 @@ pub fn ffi_native_bridge_get_registry_data_impl(
                  sound_events: sounds,
              })
          }
@@ -1751,6 +2041,19 @@ index d403ca1..d70c728 100644
 +                })
 +                .collect();
 +            Registry::DamageType(DamageTypeRegistryData { damage_types })
++        }
++        val if val == RegistryType::BlockTags as i32 => {
++            build_tag_registry(PumpkinRegistryKey::Block)
++        }
++        val if val == RegistryType::ItemTags as i32 => build_tag_registry(PumpkinRegistryKey::Item),
++        val if val == RegistryType::FluidTags as i32 => {
++            build_tag_registry(PumpkinRegistryKey::Fluid)
++        }
++        val if val == RegistryType::EntityTypeTags as i32 => {
++            build_tag_registry(PumpkinRegistryKey::EntityType)
++        }
++        val if val == RegistryType::GameEventTags as i32 => {
++            build_tag_registry(PumpkinRegistryKey::GameEvent)
 +        }
          _ => unreachable!(),
      };
