@@ -1594,6 +1594,37 @@ index 0000000..ed415a4
 +        }
 +    }
 +}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
+index 458bbb9..9fc1b52 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
+@@ -163,14 +163,12 @@ public class PatchBukkitPlayer
+ 
+     @Override
+     public boolean isOnline() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'isOnline'");
++        return org.bukkit.Bukkit.getPlayer(this.uuid) != null;
+     }
+ 
+     @Override
+     public boolean isConnected() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'isConnected'");
++        return this.isOnline();
+     }
+ 
+     @Override
+@@ -217,8 +215,7 @@ public class PatchBukkitPlayer
+ 
+     @Override
+     public @org.jspecify.annotations.Nullable Player getPlayer() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getPlayer'");
++        return org.bukkit.Bukkit.getPlayer(this.uuid);
+     }
+ 
+     @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
 index 14c24f1..e742661 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
