@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM eclipse-temurin:25-jdk-noble@sha256:3eb81ed94d8c1a34422f19f8188548bdf02cae69c91d0328afdbb7abed90f617 AS builder
 
 ARG PATCHBUKKIT_COMMIT=fcadfea17adf8ccde166b9e524f6d7029ead5a0e
@@ -32,7 +34,8 @@ COPY . /pumpkin
 RUN git -C /patchbukkit apply --unidiff-zero /pumpkin/docker/patchbukkit-26.2.patch
 
 # Build the Java bridge only after applying the compatibility/lifecycle patch.
-RUN cd /patchbukkit/java \
+RUN --mount=type=cache,id=s/c4f5b7dc-c554-4f52-a998-ab086c9613f2-/root/.gradle,target=/root/.gradle \
+    cd /patchbukkit/java \
     && ./gradlew --no-daemon jar
 
 # Railway builds from a source archive, which does not populate Git submodules.
@@ -48,7 +51,10 @@ RUN test -f pumpkin-plugin-wit/v0.1/world.wit || ( \
 # Build Pumpkin and PatchBukkit with one toolchain and the exact same local
 # Pumpkin packages. Native plugins are ABI-sensitive, so this version matching
 # is required even when their numeric plugin API version is unchanged.
-RUN cargo build --locked --release --package pumpkin \
+RUN --mount=type=cache,id=s/c4f5b7dc-c554-4f52-a998-ab086c9613f2-/usr/local/cargo/registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=s/c4f5b7dc-c554-4f52-a998-ab086c9613f2-/usr/local/cargo/git,target=/usr/local/cargo/git \
+    --mount=type=cache,id=s/c4f5b7dc-c554-4f52-a998-ab086c9613f2-/cargo-target,target=/cargo-target \
+    cargo build --locked --release --package pumpkin \
     && cp /cargo-target/release/pumpkin /pumpkin.release \
     && printf '\n[patch."https://github.com/Pumpkin-MC/Pumpkin.git"]\n\
 pumpkin = { path = "/pumpkin/pumpkin" }\n\

@@ -37,6 +37,15 @@ index d90de1b..fff84ba 100644
 +                    "Error enabling " + plugin.getName(),
 +                    ex
 +                );
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
+@@ -14 +14 @@ public final class UnsafeValuesTests {
+-    @ConformanceTest(name = "UnsafeValues.getDataVersion() returns positive int", category = TestCategory.UNSAFE_VALUES)
++    @ConformanceTest(name = "UnsafeValues.getDataVersion() matches Minecraft 26.2", category = TestCategory.UNSAFE_VALUES)
+@@ -18 +18 @@ public final class UnsafeValuesTests {
+-        assertTrue(version > 0, "getDataVersion() should be > 0, got " + version);
++        assertTrue(version == 4903, "getDataVersion() should be 4903, got " + version);
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
@@ -53,6 +62,18 @@ diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.ja
 @@ -148 +156 @@ public class PatchBukkitServer implements Server {
 -                                .setMessage(record.getMessage())
 +                                .setMessage(message)
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
+@@ -56,0 +57,4 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
++    // Minecraft Java Edition 26.2 world data version, from the official
++    // Mojang server version.json. Keep this aligned with Pumpkin's protocol.
++    private static final int DATA_VERSION = 4903;
++
+@@ -157,2 +162 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+-		// TODO Auto-generated method stub
+-		throw new UnsupportedOperationException("Unimplemented method 'getDataVersion'");
++		return DATA_VERSION;
 diff --git a/rust/src/commands/mod.rs b/rust/src/commands/mod.rs
 index 484dc62..22d354c 100644
 --- a/rust/src/commands/mod.rs
