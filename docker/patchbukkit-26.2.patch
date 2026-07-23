@@ -158,17 +158,36 @@ index e8bd1a6..5f2da13 100644
 +    }
  }
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
-index 1940bf5..c2ee4f6 100644
+index 1940bf5..0c185aa 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
-@@ -1,5 +1,6 @@
+@@ -1,6 +1,8 @@
  package org.patchbukkit.testplugin.tests;
  
 +import java.io.File;
  import org.bukkit.Bukkit;
++import org.bukkit.World;
  import org.bukkit.Server;
  import org.bukkit.command.CommandMap;
-@@ -39,12 +40,56 @@ public final class ServerTests {
+ import org.bukkit.command.ConsoleCommandSender;
+@@ -15,6 +17,16 @@ import static org.patchbukkit.testplugin.TestAssertions.*;
+ 
+ public final class ServerTests {
+ 
++    @ConformanceTest(name = "Server worlds expose Pumpkin metadata", category = TestCategory.SERVER)
++    public void testWorlds() {
++        assertTrue(!Bukkit.getWorlds().isEmpty(), "at least one world should be loaded");
++        World world = Bukkit.getWorlds().get(0);
++        assertNotNull(world.getUID(), "world UUID");
++        assertTrue(!world.getName().isBlank(), "world name");
++        assertTrue(world.getMaxHeight() > world.getMinHeight(), "world height range");
++        assertTrue(Bukkit.getWorld(world.getUID()) == world, "world lookup by UUID");
++    }
++
+     private final JavaPlugin plugin;
+ 
+     public ServerTests(JavaPlugin plugin) {
+@@ -39,12 +51,56 @@ public final class ServerTests {
          assertNotNull(version, "Server.getBukkitVersion()");
      }
  
@@ -225,7 +244,7 @@ index 1940bf5..c2ee4f6 100644
      @ConformanceTest(name = "Server.getConsoleSender() returns non-null", category = TestCategory.SERVER)
      public void testGetConsoleSender() {
          ConsoleCommandSender cs = Bukkit.getServer().getConsoleSender();
-@@ -75,6 +120,11 @@ public final class ServerTests {
+@@ -75,6 +131,11 @@ public final class ServerTests {
          assertNotNull(unsafe, "Server.getUnsafe()");
      }
  
@@ -938,7 +957,7 @@ index d90de1b..40e1ba2 100644
      public boolean isTransitiveDependency(
          PluginMeta pluginMeta,
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
-index d935769..77abb17 100644
+index d935769..9881ba6 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
 @@ -7,12 +7,15 @@ import io.papermc.paper.ban.BanListType;
@@ -965,20 +984,21 @@ index d935769..77abb17 100644
  import java.util.function.Consumer;
  import java.util.logging.Level;
  import java.util.logging.Logger;
-@@ -93,10 +97,12 @@ import org.jetbrains.annotations.Nullable;
+@@ -93,10 +97,13 @@ import org.jetbrains.annotations.Nullable;
  import org.patchbukkit.command.PatchBukkitCommandMap;
  import org.patchbukkit.command.PatchBukkitConsoleCommandSender;
  import org.patchbukkit.events.PatchBukkitEventManager;
 +import org.patchbukkit.registry.PatchBukkitLegacyTags;
  import org.patchbukkit.scheduler.PatchBukkitScheduler;
  import org.patchbukkit.versioning.Versioning;
++import org.patchbukkit.world.PatchBukkitWorld;
  
  import patchbukkit.bridge.NativeBridgeFfi;
 +import patchbukkit.common.EmptyRequest;
  import patchbukkit.log.LogLevel;
  import patchbukkit.log.SendLogRequest;
  
-@@ -110,6 +116,8 @@ public class PatchBukkitServer implements Server {
+@@ -110,6 +117,8 @@ public class PatchBukkitServer implements Server {
      private final BukkitScheduler scheduler = new PatchBukkitScheduler();
      private final PatchBukkitPluginManager pluginManager = new PatchBukkitPluginManager(this);
      private final ServicesManager servicesManager = new PatchBukkitServicesManager();
@@ -987,7 +1007,7 @@ index d935769..77abb17 100644
  
  
      private final Map<UUID, Player> onlinePlayers = new java.util.concurrent.ConcurrentHashMap<>();
-@@ -141,11 +149,17 @@ public class PatchBukkitServer implements Server {
+@@ -141,11 +150,17 @@ public class PatchBukkitServer implements Server {
          root.addHandler(new java.util.logging.Handler() {
              @Override
              public void publish(java.util.logging.LogRecord record) {
@@ -1006,7 +1026,7 @@ index d935769..77abb17 100644
                                  .setLoggerName(record.getLoggerName())
                                  .build()
                  );
-@@ -181,6 +195,10 @@ public class PatchBukkitServer implements Server {
+@@ -181,6 +196,10 @@ public class PatchBukkitServer implements Server {
          this.pluginManager.registerPlugin(plugin);
      }
  
@@ -1017,7 +1037,7 @@ index d935769..77abb17 100644
      @Override
      public void sendPluginMessage(
          @NotNull Plugin source,
-@@ -211,10 +229,9 @@ public class PatchBukkitServer implements Server {
+@@ -211,10 +230,9 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @NotNull File getPluginsFolder() {
@@ -1031,7 +1051,7 @@ index d935769..77abb17 100644
      }
  
      @Override
-@@ -234,10 +251,7 @@ public class PatchBukkitServer implements Server {
+@@ -234,10 +252,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @NotNull String getMinecraftVersion() {
@@ -1043,7 +1063,72 @@ index d935769..77abb17 100644
      }
  
      @Override
-@@ -718,10 +732,7 @@ public class PatchBukkitServer implements Server {
+@@ -531,10 +546,17 @@ public class PatchBukkitServer implements Server {
+ 
+     @Override
+     public @NotNull List<World> getWorlds() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getWorlds'"
++        var response = NativeBridgeFfi.getWorlds(
++            EmptyRequest.newBuilder().setPresent(true).build()
+         );
++        if (response == null) {
++            return Collections.emptyList();
++        }
++        return response.getWorldsList()
++            .stream()
++            .map(PatchBukkitWorld::getOrCreate)
++            .map(world -> (World) world)
++            .toList();
+     }
+ 
+     @Override
+@@ -587,26 +609,31 @@ public class PatchBukkitServer implements Server {
+ 
+     @Override
+     public @Nullable World getWorld(@NotNull String name) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getWorld'"
+-        );
++        return getWorlds()
++            .stream()
++            .filter(world -> world.getName().equalsIgnoreCase(name))
++            .findFirst()
++            .orElse(null);
+     }
+ 
+     @Override
+     public @Nullable World getWorld(@NotNull UUID uid) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getWorld'"
+-        );
++        return getWorlds()
++            .stream()
++            .filter(world -> world.getUID().equals(uid))
++            .findFirst()
++            .orElse(null);
+     }
+ 
+     @Override
+     public @Nullable World getWorld(@NotNull Key worldKey) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getWorld'"
+-        );
++        String key = worldKey.asString();
++        return getWorlds()
++            .stream()
++            .filter(world -> world.getName().equals(key)
++                || NamespacedKey.minecraft(world.getName()).asString().equals(key))
++            .findFirst()
++            .orElse(null);
+     }
+ 
+     @Override
+@@ -718,10 +745,7 @@ public class PatchBukkitServer implements Server {
          @NotNull CommandSender sender,
          @NotNull String commandLine
      ) throws CommandException {
@@ -1055,7 +1140,7 @@ index d935769..77abb17 100644
      }
  
      @Override
-@@ -867,10 +878,9 @@ public class PatchBukkitServer implements Server {
+@@ -867,10 +891,9 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public boolean getOnlineMode() {
@@ -1069,7 +1154,7 @@ index d935769..77abb17 100644
      }
  
      @Override
-@@ -1224,10 +1234,7 @@ public class PatchBukkitServer implements Server {
+@@ -1224,10 +1247,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public boolean isPrimaryThread() {
@@ -1081,7 +1166,7 @@ index d935769..77abb17 100644
      }
  
      @Override
-@@ -1284,10 +1291,7 @@ public class PatchBukkitServer implements Server {
+@@ -1284,10 +1304,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @NotNull WarningState getWarningState() {
@@ -1093,7 +1178,7 @@ index d935769..77abb17 100644
      }
  
      @Override
-@@ -1541,10 +1545,7 @@ public class PatchBukkitServer implements Server {
+@@ -1541,10 +1558,7 @@ public class PatchBukkitServer implements Server {
          @NotNull NamespacedKey tag,
          @NotNull Class<T> clazz
      ) {
@@ -1105,7 +1190,7 @@ index d935769..77abb17 100644
      }
  
      @Override
-@@ -1552,10 +1553,7 @@ public class PatchBukkitServer implements Server {
+@@ -1552,10 +1566,7 @@ public class PatchBukkitServer implements Server {
          @NotNull String registry,
          @NotNull Class<T> clazz
      ) {
@@ -1117,7 +1202,7 @@ index d935769..77abb17 100644
      }
  
      @Override
-@@ -1589,10 +1587,7 @@ public class PatchBukkitServer implements Server {
+@@ -1589,10 +1600,7 @@ public class PatchBukkitServer implements Server {
      public <T extends Keyed> @Nullable Registry<T> getRegistry(
          @NotNull Class<T> tClass
      ) {
@@ -1129,7 +1214,7 @@ index d935769..77abb17 100644
      }
  
      @Override
-@@ -1705,10 +1700,7 @@ public class PatchBukkitServer implements Server {
+@@ -1705,10 +1713,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public boolean isStopping() {
@@ -1463,10 +1548,10 @@ index 0000000..4e2745c
 +}
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitLegacyTag.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitLegacyTag.java
 new file mode 100644
-index 0000000..f361212
+index 0000000..3d8ffeb
 --- /dev/null
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitLegacyTag.java
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,61 @@
 +package org.patchbukkit.registry;
 +
 +import org.bukkit.Keyed;
@@ -1478,24 +1563,49 @@ index 0000000..f361212
 +import java.util.LinkedHashSet;
 +import java.util.Objects;
 +import java.util.Set;
++import java.util.function.Function;
 +
 +final class PatchBukkitLegacyTag<T extends Keyed> implements Tag<T> {
 +    private final NamespacedKey key;
-+    private final Set<T> values;
++    private final Set<NamespacedKey> valueKeys;
++    private final Function<NamespacedKey, T> resolver;
++    private volatile Set<T> values;
 +
-+    PatchBukkitLegacyTag(NamespacedKey key, Set<T> values) {
++    PatchBukkitLegacyTag(
++        NamespacedKey key,
++        Set<NamespacedKey> valueKeys,
++        Function<NamespacedKey, T> resolver
++    ) {
 +        this.key = Objects.requireNonNull(key, "key");
-+        this.values = Collections.unmodifiableSet(new LinkedHashSet<>(values));
++        this.valueKeys = Collections.unmodifiableSet(new LinkedHashSet<>(valueKeys));
++        this.resolver = Objects.requireNonNull(resolver, "resolver");
 +    }
 +
 +    @Override
 +    public boolean isTagged(@NotNull T item) {
-+        return values.contains(item);
++        return valueKeys.contains(item.getKey());
 +    }
 +
 +    @Override
 +    public @NotNull Set<T> getValues() {
-+        return values;
++        Set<T> resolved = values;
++        if (resolved != null) {
++            return resolved;
++        }
++
++        synchronized (this) {
++            if (values == null) {
++                Set<T> loaded = new LinkedHashSet<>();
++                for (NamespacedKey valueKey : valueKeys) {
++                    T value = resolver.apply(valueKey);
++                    if (value != null) {
++                        loaded.add(value);
++                    }
++                }
++                values = Collections.unmodifiableSet(loaded);
++            }
++            return values;
++        }
 +    }
 +
 +    @Override
@@ -1505,10 +1615,10 @@ index 0000000..f361212
 +}
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitLegacyTags.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitLegacyTags.java
 new file mode 100644
-index 0000000..88bc005
+index 0000000..fda3181
 --- /dev/null
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitLegacyTags.java
-@@ -0,0 +1,152 @@
+@@ -0,0 +1,154 @@
 +package org.patchbukkit.registry;
 +
 +import org.bukkit.Fluid;
@@ -1591,15 +1701,17 @@ index 0000000..88bc005
 +                continue;
 +            }
 +
-+            Set<T> values = new LinkedHashSet<>();
++            Set<NamespacedKey> valueKeys = new LinkedHashSet<>();
 +            for (String rawValue : data.getValuesList()) {
 +                NamespacedKey valueKey = namespacedKey(rawValue);
-+                T value = valueKey == null ? null : resolve(type, valueKey);
-+                if (value != null) {
-+                    values.add(value);
++                if (valueKey != null) {
++                    valueKeys.add(valueKey);
 +                }
 +            }
-+            result.put(tagKey, new PatchBukkitLegacyTag<>(tagKey, values));
++            result.put(
++                tagKey,
++                new PatchBukkitLegacyTag<>(tagKey, valueKeys, key -> resolve(type, key))
++            );
 +        }
 +        return Collections.unmodifiableMap(result);
 +    }
@@ -1685,11 +1797,167 @@ index 854db6f..35f95bb 100644
          )
      );
  
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
+index e8c2c36..1c566bc 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
+@@ -28,16 +28,28 @@ import org.bukkit.util.Vector;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
+ import org.jspecify.annotations.NonNull;
+-
+ public class PatchBukkitWorld
+     extends PatchBukkitRegionAccessor
+     implements World
+ {
+-    private static final Map<UUID, PatchBukkitWorld> instances = new HashMap<>();
+-    private UUID uuid;
++    private static final Map<UUID, PatchBukkitWorld> instances = new java.util.concurrent.ConcurrentHashMap<>();
++    private final UUID uuid;
++    private volatile String name;
++    private volatile String dimension;
++    private volatile int minHeight;
++    private volatile int maxHeight;
++    private volatile double spawnX;
++    private volatile double spawnY;
++    private volatile double spawnZ;
++    private volatile float spawnYaw;
++    private volatile float spawnPitch;
+ 
+     private PatchBukkitWorld(UUID uuid) {
+         this.uuid = uuid;
++        this.name = uuid.toString();
++        this.dimension = "minecraft:overworld";
++        this.minHeight = -64;
++        this.maxHeight = 320;
+     }
+ 
+     public static PatchBukkitWorld getOrCreate(UUID uuid) {
+@@ -48,6 +60,20 @@ public class PatchBukkitWorld
+         return getOrCreate(UUID.fromString(uuid));
+     }
+ 
++    public static PatchBukkitWorld getOrCreate(patchbukkit.common.World data) {
++        PatchBukkitWorld world = getOrCreate(data.getUuid().getValue());
++        world.name = data.getName();
++        world.dimension = data.getDimension();
++        world.minHeight = data.getMinHeight();
++        world.maxHeight = data.getMaxHeight();
++        world.spawnX = data.getSpawnX();
++        world.spawnY = data.getSpawnY();
++        world.spawnZ = data.getSpawnZ();
++        world.spawnYaw = data.getSpawnYaw();
++        world.spawnPitch = data.getSpawnPitch();
++        return world;
++    }
++
+     @Override
+     public boolean isVoidDamageEnabled() {
+         // TODO Auto-generated method stub
+@@ -590,9 +616,13 @@ public class PatchBukkitWorld
+ 
+     @Override
+     public @NotNull Location getSpawnLocation() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getSpawnLocation'"
++        return new Location(
++            this,
++            spawnX,
++            spawnY,
++            spawnZ,
++            spawnYaw,
++            spawnPitch
+         );
+     }
+ 
+@@ -1581,10 +1611,7 @@ public class PatchBukkitWorld
+ 
+     @Override
+     public @NotNull String getName() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getName'"
+-        );
++        return name;
+     }
+ 
+     @Override
+@@ -1594,10 +1621,12 @@ public class PatchBukkitWorld
+ 
+     @Override
+     public @NotNull Environment getEnvironment() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getEnvironment'"
+-        );
++        return switch (dimension) {
++            case "minecraft:overworld" -> Environment.NORMAL;
++            case "minecraft:the_nether" -> Environment.NETHER;
++            case "minecraft:the_end" -> Environment.THE_END;
++            default -> Environment.CUSTOM;
++        };
+     }
+ 
+     @Override
+@@ -1610,18 +1639,12 @@ public class PatchBukkitWorld
+ 
+     @Override
+     public int getMinHeight() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getMinHeight'"
+-        );
++        return minHeight;
+     }
+ 
+     @Override
+     public int getMaxHeight() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getMaxHeight'"
+-        );
++        return maxHeight;
+     }
+ 
+     @Override
+diff --git a/proto/patchbukkit/bridge.proto b/proto/patchbukkit/bridge.proto
+index 85df0ae..0a378f1 100644
+--- a/proto/patchbukkit/bridge.proto
++++ b/proto/patchbukkit/bridge.proto
+@@ -22,6 +22,7 @@ service NativeBridge {
+   rpc SendMessage(patchbukkit.message.SendMessageRequest) returns (google.protobuf.Empty);
+ 
+   rpc GetLocation(patchbukkit.common.UUID) returns (patchbukkit.common.Location);
++  rpc GetWorlds(patchbukkit.common.EmptyRequest) returns (patchbukkit.common.WorldList);
+ 
+   rpc GetRegistryData(patchbukkit.registry.GetRegistryDataRequest) returns (patchbukkit.registry.GetRegistryDataResponse);
+ 
 diff --git a/proto/patchbukkit/common/types.proto b/proto/patchbukkit/common/types.proto
-index 52ab136..024134a 100644
+index 52ab136..d9627ce 100644
 --- a/proto/patchbukkit/common/types.proto
 +++ b/proto/patchbukkit/common/types.proto
-@@ -26,4 +26,7 @@ message Location {
+@@ -17,6 +17,19 @@ message Vec3 {
+ 
+ message World {
+   UUID uuid = 1;
++  string name = 2;
++  string dimension = 3;
++  int32 min_height = 4;
++  int32 max_height = 5;
++  double spawn_x = 6;
++  double spawn_y = 7;
++  double spawn_z = 8;
++  float spawn_yaw = 9;
++  float spawn_pitch = 10;
++}
++
++message WorldList {
++  repeated World worlds = 1;
+ }
+ 
+ message Location {
+@@ -26,4 +39,7 @@ message Location {
    float pitch = 4;
  }
  
@@ -1918,6 +2186,51 @@ index eed3dec..b0d700d 100644
 +                .online_mode,
          })
  }
+diff --git a/rust/src/java/native_callbacks/location.rs b/rust/src/java/native_callbacks/location.rs
+index 7582945..631aaba 100644
+--- a/rust/src/java/native_callbacks/location.rs
++++ b/rust/src/java/native_callbacks/location.rs
+@@ -33,6 +33,7 @@ pub fn ffi_native_bridge_get_location_impl(entity_uuid: Uuid) -> Option<Location
+                 uuid: Some(Uuid {
+                     value: world.to_string(),
+                 }),
++                ..Default::default()
+             }),
+             position: Some(Vec3 {
+                 x: position.x,
+@@ -46,3 +47,32 @@ pub fn ffi_native_bridge_get_location_impl(entity_uuid: Uuid) -> Option<Location
+ 
+     None
+ }
++
++pub fn ffi_native_bridge_get_worlds_impl(
++    _request: crate::proto::patchbukkit::common::EmptyRequest,
++) -> Option<crate::proto::patchbukkit::common::WorldList> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let worlds = ctx.plugin_context.server.worlds.load();
++    let worlds = worlds
++        .iter()
++        .map(|world| {
++            let level_info = world.level_info.load();
++            World {
++                uuid: Some(Uuid {
++                    value: world.uuid.to_string(),
++                }),
++                name: world.get_world_name().to_string(),
++                dimension: world.dimension.minecraft_name.to_string(),
++                min_height: world.min_y,
++                max_height: world.min_y + world.dimension.height,
++                spawn_x: f64::from(level_info.spawn_x) + 0.5,
++                spawn_y: f64::from(level_info.spawn_y),
++                spawn_z: f64::from(level_info.spawn_z) + 0.5,
++                spawn_yaw: level_info.spawn_yaw,
++                spawn_pitch: level_info.spawn_pitch,
++            }
++        })
++        .collect();
++
++    Some(crate::proto::patchbukkit::common::WorldList { worlds })
++}
 diff --git a/rust/src/java/native_callbacks/registry.rs b/rust/src/java/native_callbacks/registry.rs
 index d403ca1..bc16c47 100644
 --- a/rust/src/java/native_callbacks/registry.rs
