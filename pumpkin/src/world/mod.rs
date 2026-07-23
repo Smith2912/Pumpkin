@@ -2657,7 +2657,9 @@ impl World {
         let velocity = player.living_entity.entity.velocity.load();
 
         debug!("Sending player teleport to {}", player.gameprofile.name);
-        player.request_teleport(position, yaw, pitch).await;
+        player
+            .apply_teleport_position_without_event(position, yaw, pitch)
+            .await;
 
         let gameprofile = &player.gameprofile;
         let bedrock_player_list = CPlayerList {
@@ -3625,7 +3627,9 @@ impl World {
         }
 
         // Send teleport packet after at least the center chunk was delivered
-        player.request_teleport(position, yaw, pitch).await;
+        player
+            .apply_teleport_position_without_event(position, yaw, pitch)
+            .await;
     }
 
     /// Returns true if enough players are sleeping and we should skip the night.

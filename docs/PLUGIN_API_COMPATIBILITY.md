@@ -192,6 +192,45 @@ This contract does not cover bucket placement, dispensers, sponge absorption,
 waterlogging, cauldron changes, entity movement in fluids, or plugins changing
 the destination block. Those paths remain separate, explicit milestones.
 
+## Player state and teleport batch gate
+
+The next player-state batch is complete only when one deployed commit passes
+all of these checks:
+
+1. A same-world Pumpkin teleport fires exactly one `PlayerTeleportEvent` with
+   the live player, world, origin, destination, yaw, pitch, and the narrowest
+   native cause Pumpkin knows. Cancellation prevents all position, rotation,
+   camera, and client-packet changes.
+2. Bukkit listeners may update the same-world destination coordinates, yaw,
+   and pitch, and Pumpkin applies those resolved values. A listener may not
+   replace the destination world on this native same-world path.
+3. Bukkit-originated player teleports fire the Bukkit event before entering
+   Pumpkin and then use a post-event native path. That path must not recursively
+   re-enter the JVM worker. Both same-world and cross-world plugin destinations
+   preserve the Bukkit listener's resolved location.
+4. Initial spawn, respawn synchronization, and the post-world-change client
+   handshake use the non-event position synchronizer and do not emit duplicate
+   or spurious teleport events.
+5. Java and Bedrock flight, sneak, sprint, and held-hotbar-slot transitions
+   fire their matching Bukkit events before mutation. Cancellation preserves
+   the previous state and sends the client correction required for flight or
+   held-slot changes.
+6. `PlayerExpChangeEvent` carries the real XP delta and a Bukkit listener's
+   updated amount is used by Pumpkin's level/point calculation.
+7. The conformance plugin registers all six new Bukkit event types. Live logs
+   contain native registrations with no matching unsupported-event warnings,
+   and no teleport action stalls the JVM worker.
+8. Human verification covers an Essentials teleport, a cancelled teleport, a
+   game-mode change out of spectator, a cancelled flight/held-slot transition,
+   and an XP award whose amount is visibly modified.
+
+Pumpkin-originated cross-world movement still uses the separate native
+`PlayerChangeWorldEvent`/`PlayerChangedWorldEvent` lifecycle and is not yet
+reported as a Bukkit `PlayerTeleportEvent`. Native callers that cannot identify
+a more specific reason use Bukkit's `UNKNOWN` cause. Teleport flags, relative
+teleports, vehicles/passengers, `PlayerMoveEvent`, portals, beds, and death
+transitions remain separate contracts.
+
 ## Human verification runbook
 
 Every compatibility change must leave evidence a maintainer can reproduce and

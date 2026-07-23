@@ -105,7 +105,7 @@ use crate::plugin::player::player_change_world::PlayerChangeWorldEvent;
 use crate::plugin::player::player_changed_world::PlayerChangedWorldEvent;
 use crate::plugin::player::player_gamemode_change::PlayerGamemodeChangeEvent;
 use crate::plugin::player::player_permission_check::PlayerPermissionCheckEvent;
-use crate::plugin::player::player_teleport::PlayerTeleportEvent;
+use crate::plugin::player::player_teleport::{PlayerTeleportEvent, TeleportCause};
 use crate::plugin::server::packet::PacketSentEvent;
 use crate::server::Server;
 use crate::world::World;
@@ -2604,6 +2604,18 @@ impl Player {
         yaw: Option<f32>,
         pitch: Option<f32>,
     ) {
+        self.teleport_world_with_notification(new_world, position, yaw, pitch, true)
+            .await;
+    }
+
+    async fn teleport_world_with_notification(
+        self: &Arc<Self>,
+        new_world: Arc<World>,
+        position: Vector3<f64>,
+        yaw: Option<f32>,
+        pitch: Option<f32>,
+        notify_changed_world: bool,
+    ) {
         let current_world = self.living_entity.entity.world.load_full();
         let yaw = yaw.unwrap_or(new_world.level_info.load().spawn_yaw);
         let pitch = pitch.unwrap_or(new_world.level_info.load().spawn_pitch);
@@ -2640,13 +2652,15 @@ impl Player {
 
                 self.chunk_manager.lock().await.change_world(&current_world.level, new_world.clone());
                 self.living_entity.entity.set_world(new_world.clone());
-                let _ = server
-                    .plugin_manager
-                    .fire(PlayerChangedWorldEvent::new(
-                        self.clone(),
-                        current_world.clone(),
-                    ))
-                    .await;
+                if notify_changed_world {
+                    let _ = server
+                        .plugin_manager
+                        .fire(PlayerChangedWorldEvent::new(
+                            self.clone(),
+                            current_world.clone(),
+                        ))
+                        .await;
+                }
 
                 if new_world.dimension == pumpkin_data::dimension::Dimension::THE_NETHER {
                     self.trigger_advancement(crate::entity::player::advancement::trigger::AdvancementTrigger::EnterDimension {
@@ -2704,7 +2718,9 @@ impl Player {
 
                 self.send_permission_lvl_update();
 
-                player.clone().request_teleport(position, yaw, pitch).await;
+                player
+                    .apply_teleport_position_without_event(position, yaw, pitch)
+                    .await;
                 player.get_entity().last_pos.store(position);
 
                 self.send_abilities_update().await;
@@ -2728,8 +2744,9 @@ impl Player {
     /// Same-world teleports intentionally bypass Pumpkin's native
     /// `PlayerTeleportEvent` to avoid recursively re-entering the single JVM
     /// worker that is waiting for this operation to complete. Cross-world
-    /// teleports still use [`Self::teleport_world`] so Pumpkin's world-change
-    /// lifecycle and chunk synchronization remain authoritative.
+    /// teleports retain Pumpkin's cancellable world-change and chunk
+    /// synchronization path, but defer the post-change Bukkit notification to
+    /// the calling JVM after this callback returns.
     pub async fn apply_teleport_after_external_event(
         self: &Arc<Self>,
         position: Vector3<f64>,
@@ -2738,7 +2755,8 @@ impl Player {
         world: Arc<World>,
     ) -> bool {
         if Arc::ptr_eq(&world, &self.world()) {
-            self.request_teleport(position, yaw, pitch).await;
+            self.apply_teleport_position_without_event(position, yaw, pitch)
+                .await;
 
             let entity = self.get_entity();
             let chunk_pos = entity.chunk_pos.load();
@@ -2757,49 +2775,103 @@ impl Player {
 
             true
         } else {
-            self.teleport_world(world.clone(), position, Some(yaw), Some(pitch))
-                .await;
+            self.teleport_world_with_notification(
+                world.clone(),
+                position,
+                Some(yaw),
+                Some(pitch),
+                false,
+            )
+            .await;
             Arc::ptr_eq(&world, &self.world())
         }
+    }
+
+    /// Applies the resolved position and orientation without firing a
+    /// [`PlayerTeleportEvent`].
+    ///
+    /// Callers must either have already resolved the appropriate source API
+    /// event or be performing a lifecycle synchronization (such as initial
+    /// spawn, respawn, or the post-world-change client handshake) that is not
+    /// itself a player teleport.
+    pub(crate) async fn apply_teleport_position_without_event(
+        self: &Arc<Self>,
+        position: Vector3<f64>,
+        yaw: f32,
+        pitch: f32,
+    ) {
+        let i = self.teleport_id_count.fetch_add(1, Ordering::Relaxed);
+        let teleport_id = i + 1;
+        self.living_entity.entity.set_pos(position);
+        let entity = &self.living_entity.entity;
+        entity.set_rotation(yaw, pitch);
+        *self.awaiting_teleport.lock().await = Some((teleport_id.into(), position));
+        self.client
+            .send_packet_now(&CPlayerPosition::new(
+                teleport_id.into(),
+                position,
+                Vector3::new(0.0, 0.0, 0.0),
+                yaw,
+                pitch,
+                // TODO
+                Vec::new(),
+            ))
+            .await;
     }
 
     /// `yaw` and `pitch` are in degrees.
     /// Rarly used, for example when waking up the player from a bed or their first time spawn. Otherwise, the `teleport` method should be used.
     /// The player should respond with the `SConfirmTeleport` packet.
-    pub async fn request_teleport(self: &Arc<Self>, position: Vector3<f64>, yaw: f32, pitch: f32) {
-        // This is the ultra special magic code used to create the teleport id
-        // This returns the old value
-        // This operation wraps around on overflow.
+    pub async fn request_teleport(
+        self: &Arc<Self>,
+        position: Vector3<f64>,
+        yaw: f32,
+        pitch: f32,
+    ) -> Option<Vector3<f64>> {
+        self.request_teleport_with_cause(position, yaw, pitch, TeleportCause::Unknown)
+            .await
+    }
+
+    /// Requests one cancellable native teleport and returns the final
+    /// listener-resolved position when it succeeds.
+    pub async fn request_teleport_with_cause(
+        self: &Arc<Self>,
+        position: Vector3<f64>,
+        yaw: f32,
+        pitch: f32,
+        cause: TeleportCause,
+    ) -> Option<Vector3<f64>> {
         let server = self.world().server.upgrade().unwrap();
+        let entity = &self.living_entity.entity;
+        let from_yaw = entity.yaw.load();
+        let from_pitch = entity.pitch.load();
         send_cancellable! {{
             server;
-            PlayerTeleportEvent {
-                player: self.clone(),
-                from: self.living_entity.entity.pos.load(),
-                to: position,
-                cancelled: false,
-            };
+            PlayerTeleportEvent::new(
+                self.clone(),
+                entity.pos.load(),
+                position,
+                Some(from_yaw),
+                Some(from_pitch),
+                Some(yaw),
+                Some(pitch),
+                cause,
+            );
 
             'after: {
                 let position = event.to;
-                let i = self
-                    .teleport_id_count
-                    .fetch_add(1, Ordering::Relaxed);
-                let teleport_id = i + 1;
-                self.living_entity.entity.set_pos(position);
-                let entity = &self.living_entity.entity;
-                entity.set_rotation(yaw, pitch);
-                *self.awaiting_teleport.lock().await = Some((teleport_id.into(), position));
-                self.client
-                    .send_packet_now(&CPlayerPosition::new(
-                        teleport_id.into(),
-                        position,
-                        Vector3::new(0.0, 0.0, 0.0),
-                        yaw,
-                        pitch,
-                        // TODO
-                        Vec::new(),
-                    )).await;
+                let resolved_yaw = event.to_yaw.unwrap_or(yaw);
+                let resolved_pitch = event.to_pitch.unwrap_or(pitch);
+                self.apply_teleport_position_without_event(
+                    position,
+                    resolved_yaw,
+                    resolved_pitch,
+                ).await;
+                Some(position)
+            }
+
+            'cancelled: {
+                None
             }
         }}
     }
@@ -4725,38 +4797,22 @@ impl EntityBase for Player {
                 // Same world
                 let yaw = yaw.unwrap_or(self.living_entity.entity.yaw.load());
                 let pitch = pitch.unwrap_or(self.living_entity.entity.pitch.load());
-                let server = self.world().server.upgrade().unwrap();
-                send_cancellable! {{
-                    server;
-                    PlayerTeleportEvent {
-                        player: self.clone(),
-                        from: self.living_entity.entity.pos.load(),
-                        to: position,
-                        cancelled: false,
-                    };
-                    'after: {
-                        let position = event.to;
-                        let entity = self.get_entity();
-                        self.request_teleport(position, yaw, pitch).await;
-                        let chunk_pos = entity.chunk_pos.load();
-                        entity
-                            .world
-                            .load()
-                            .broadcast_to_chunk_except(
-                                chunk_pos,
-                                &[self.living_entity.entity.entity_uuid],
-                                &CEntityPositionSync::new(
-                                    self.living_entity.entity.entity_id.into(),
-                                    position,
-                                    Vector3::new(0.0, 0.0, 0.0),
-                                    yaw,
-                                    pitch,
-                                    entity.on_ground.load(Ordering::SeqCst),
-                                )
-                            )
-                            ;
-                    }
-                }}
+                if let Some(position) = self.request_teleport(position, yaw, pitch).await {
+                    let entity = self.get_entity();
+                    let chunk_pos = entity.chunk_pos.load();
+                    entity.world.load().broadcast_to_chunk_except(
+                        chunk_pos,
+                        &[self.living_entity.entity.entity_uuid],
+                        &CEntityPositionSync::new(
+                            self.living_entity.entity.entity_id.into(),
+                            position,
+                            Vector3::new(0.0, 0.0, 0.0),
+                            entity.yaw.load(),
+                            entity.pitch.load(),
+                            entity.on_ground.load(Ordering::SeqCst),
+                        ),
+                    );
+                }
             } else {
                 self.teleport_world(world, position, yaw, pitch).await;
             }

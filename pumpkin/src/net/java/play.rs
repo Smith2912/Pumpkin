@@ -31,6 +31,7 @@ use crate::plugin::player::player_interact_entity_event::PlayerInteractEntityEve
 use crate::plugin::player::player_interact_event::{InteractAction, PlayerInteractEvent};
 use crate::plugin::player::player_interact_unknown_entity_event::PlayerInteractUnknownEntityEvent;
 use crate::plugin::player::player_move::PlayerMoveEvent;
+use crate::plugin::player::player_teleport::TeleportCause;
 use crate::plugin::player::player_toggle_flight_event::PlayerToggleFlightEvent;
 use crate::plugin::player::player_toggle_sneak_event::PlayerToggleSneakEvent;
 
@@ -2920,15 +2921,22 @@ impl JavaClient {
             let target_pitch = target_player.living_entity.entity.pitch.load();
 
             let target_id = target_player.living_entity.entity.entity_id;
-            player.camera_target_id.store(Some(target_id));
-            player
-                .client
-                .send_packet_now(&CSetCamera::new(target_id.into()))
-                .await;
-
-            player
-                .request_teleport(target_pos, target_yaw, target_pitch)
-                .await;
+            if player
+                .request_teleport_with_cause(
+                    target_pos,
+                    target_yaw,
+                    target_pitch,
+                    TeleportCause::Spectate,
+                )
+                .await
+                .is_some()
+            {
+                player.camera_target_id.store(Some(target_id));
+                player
+                    .client
+                    .send_packet_now(&CSetCamera::new(target_id.into()))
+                    .await;
+            }
         }
     }
 

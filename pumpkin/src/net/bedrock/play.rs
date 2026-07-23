@@ -57,6 +57,8 @@ use crate::{
         player_command_send::PlayerCommandSendEvent,
         player_interact_event::{InteractAction, PlayerInteractEvent},
         player_toggle_flight_event::PlayerToggleFlightEvent,
+        player_toggle_sneak_event::PlayerToggleSneakEvent,
+        player_toggle_sprint_event::PlayerToggleSprintEvent,
     },
     server::{Server, seasonal_events},
     world::chunker::{self},
@@ -341,16 +343,42 @@ impl BedrockClient {
 
         let input_data = packet.input_data;
 
-        if input_data.get(InputData::StartSprinting as usize) {
-            entity.set_sprinting(true).await;
+        let requested_sprinting = if input_data.get(InputData::StartSprinting as usize) {
+            Some(true)
         } else if input_data.get(InputData::StopSprinting as usize) {
-            entity.set_sprinting(false).await;
+            Some(false)
+        } else {
+            None
+        };
+        if let Some(requested_sprinting) = requested_sprinting
+            && entity.is_sprinting() != requested_sprinting
+        {
+            send_cancellable! {{
+                server;
+                PlayerToggleSprintEvent::new(player.clone(), requested_sprinting);
+                'after: {
+                    entity.set_sprinting(event.is_sprinting).await;
+                }
+            }}
         }
 
-        if input_data.get(InputData::StartSneaking as usize) {
-            entity.set_sneaking(true).await;
+        let requested_sneaking = if input_data.get(InputData::StartSneaking as usize) {
+            Some(true)
         } else if input_data.get(InputData::StopSneaking as usize) {
-            entity.set_sneaking(false).await;
+            Some(false)
+        } else {
+            None
+        };
+        if let Some(requested_sneaking) = requested_sneaking
+            && entity.is_sneaking() != requested_sneaking
+        {
+            send_cancellable! {{
+                server;
+                PlayerToggleSneakEvent::new(player.clone(), requested_sneaking);
+                'after: {
+                    entity.set_sneaking(event.is_sneaking).await;
+                }
+            }}
         }
 
         if input_data.get(InputData::StartFlying as usize) {
@@ -1831,14 +1859,29 @@ impl BedrockClient {
                     requested_flying,
                 ) = packet.value
                 {
-                    let mut abilities = player.abilities.lock().await;
-                    if abilities.allow_flying {
-                        abilities.flying = requested_flying;
-                    } else {
-                        abilities.flying = false;
+                    let (flying, allow_flying) = {
+                        let abilities = player.abilities.lock().await;
+                        (abilities.flying, abilities.allow_flying)
+                    };
+                    let new_flying = requested_flying && allow_flying;
+                    if flying != new_flying
+                        && let Some(server) = player.world().server.upgrade()
+                    {
+                        send_cancellable! {{
+                            server;
+                            PlayerToggleFlightEvent::new(player.clone(), new_flying);
+                            'after: {
+                                if event.is_flying {
+                                    player.living_entity.fall_distance.store(0.0);
+                                }
+                                player.abilities.lock().await.flying = event.is_flying;
+                                player.send_abilities_update().await;
+                            }
+                            'cancelled: {
+                                player.send_abilities_update().await;
+                            }
+                        }}
                     }
-                    drop(abilities);
-                    player.send_abilities_update().await;
                 }
             }
             _ => {

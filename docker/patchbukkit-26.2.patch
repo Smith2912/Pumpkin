@@ -45,10 +45,10 @@ index d225037..96de007 100644
  
          framework.registerSuite(new ServerTests(this));
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
-index 0ddff2f..258fde5 100644
+index 0ddff2f..e651991 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
-@@ -3,13 +3,38 @@ package org.patchbukkit.testplugin.tests;
+@@ -3,13 +3,44 @@ package org.patchbukkit.testplugin.tests;
  import org.bukkit.Bukkit;
  import org.bukkit.event.EventHandler;
  import org.bukkit.event.EventPriority;
@@ -67,11 +67,17 @@ index 0ddff2f..258fde5 100644
 +import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 +import org.bukkit.event.player.PlayerCommandSendEvent;
 +import org.bukkit.event.player.PlayerChangedWorldEvent;
++import org.bukkit.event.player.PlayerExpChangeEvent;
 +import org.bukkit.event.player.PlayerGameModeChangeEvent;
++import org.bukkit.event.player.PlayerItemHeldEvent;
 +import org.bukkit.event.player.PlayerLoginEvent;
 +import org.bukkit.event.player.PlayerInteractEvent;
 +import org.bukkit.event.player.PlayerQuitEvent;
 +import org.bukkit.event.player.PlayerRespawnEvent;
++import org.bukkit.event.player.PlayerTeleportEvent;
++import org.bukkit.event.player.PlayerToggleFlightEvent;
++import org.bukkit.event.player.PlayerToggleSneakEvent;
++import org.bukkit.event.player.PlayerToggleSprintEvent;
  import org.bukkit.event.server.PluginEnableEvent;
 +import org.bukkit.event.server.RemoteServerCommandEvent;
 +import org.bukkit.event.server.ServerCommandEvent;
@@ -87,7 +93,7 @@ index 0ddff2f..258fde5 100644
  import static org.patchbukkit.testplugin.TestAssertions.*;
  
  public final class EventSystemTests {
-@@ -31,6 +56,112 @@ public final class EventSystemTests {
+@@ -31,6 +62,136 @@ public final class EventSystemTests {
          Bukkit.getPluginManager().registerEvents(listener, plugin);
      }
  
@@ -112,6 +118,30 @@ index 0ddff2f..258fde5 100644
 +
 +            @EventHandler
 +            public void onPlayerGameModeChange(PlayerGameModeChangeEvent event) {
++            }
++
++            @EventHandler
++            public void onPlayerTeleport(PlayerTeleportEvent event) {
++            }
++
++            @EventHandler
++            public void onPlayerToggleFlight(PlayerToggleFlightEvent event) {
++            }
++
++            @EventHandler
++            public void onPlayerToggleSneak(PlayerToggleSneakEvent event) {
++            }
++
++            @EventHandler
++            public void onPlayerToggleSprint(PlayerToggleSprintEvent event) {
++            }
++
++            @EventHandler
++            public void onPlayerItemHeld(PlayerItemHeldEvent event) {
++            }
++
++            @EventHandler
++            public void onPlayerExpChange(PlayerExpChangeEvent event) {
 +            }
 +
 +            @EventHandler
@@ -200,7 +230,7 @@ index 0ddff2f..258fde5 100644
      @ConformanceTest(name = "registerEvent() with explicit priority", category = TestCategory.EVENT_SYSTEM)
      public void testRegisterEventWithPriority() {
          EventExecutor executor = (listener, event) -> {
-@@ -59,4 +190,17 @@ public final class EventSystemTests {
+@@ -59,4 +220,17 @@ public final class EventSystemTests {
                  true
          );
      }
@@ -2492,10 +2522,10 @@ index 458bbb9..de710c3 100644
  
      @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
-index 14c24f1..3a4fdcf 100644
+index 14c24f1..9c8750d 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
-@@ -5,14 +5,49 @@ import net.kyori.adventure.text.Component;
+@@ -5,14 +5,55 @@ import net.kyori.adventure.text.Component;
  import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
  import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
  import org.bukkit.Bukkit;
@@ -2528,12 +2558,18 @@ index 14c24f1..3a4fdcf 100644
 +import patchbukkit.events.PlayerChangedWorldEvent;
 +import patchbukkit.events.PlayerCommandPreprocessEvent;
 +import patchbukkit.events.PlayerCommandsSendEvent;
++import patchbukkit.events.PlayerExpChangeEvent;
 +import patchbukkit.events.PlayerGameModeChangeEvent;
++import patchbukkit.events.PlayerItemHeldEvent;
 +import patchbukkit.events.PlayerInteractEvent;
  import patchbukkit.events.PlayerJoinEvent;
 +import patchbukkit.events.PlayerLoginEvent;
 +import patchbukkit.events.PlayerQuitEvent;
 +import patchbukkit.events.PlayerRespawnEvent;
++import patchbukkit.events.PlayerTeleportEvent;
++import patchbukkit.events.PlayerToggleFlightEvent;
++import patchbukkit.events.PlayerToggleSneakEvent;
++import patchbukkit.events.PlayerToggleSprintEvent;
 +import patchbukkit.events.RemoteServerCommandEvent;
 +import patchbukkit.events.ServerCommandEvent;
  
@@ -2545,7 +2581,7 @@ index 14c24f1..3a4fdcf 100644
  import java.util.logging.Logger;
  
  public class PatchBukkitEventFactory {
-@@ -34,6 +69,75 @@ public class PatchBukkitEventFactory {
+@@ -34,6 +75,75 @@ public class PatchBukkitEventFactory {
          Event.DataCase dataCase = event.getDataCase();
  
          return switch (dataCase) {
@@ -2621,7 +2657,7 @@ index 14c24f1..3a4fdcf 100644
              case PLAYER_JOIN -> {
                  PlayerJoinEvent joinEvent = event.getPlayerJoin();
                  Player player = getPlayer(joinEvent.getPlayerUuid().getValue());
-@@ -42,6 +146,315 @@ public class PatchBukkitEventFactory {
+@@ -42,6 +152,385 @@ public class PatchBukkitEventFactory {
                  Component joinMessage = GsonComponentSerializer.gson().deserialize(joinEvent.getJoinMessage());
                  yield new org.bukkit.event.player.PlayerJoinEvent(player, joinMessage);
              }
@@ -2795,6 +2831,76 @@ index 14c24f1..3a4fdcf 100644
 +                    reason
 +                );
 +            }
++            case PLAYER_TELEPORT -> {
++                PlayerTeleportEvent teleportEvent = event.getPlayerTeleport();
++                Player player = getPlayer(teleportEvent.getPlayerUuid().getValue());
++                org.bukkit.Location from = createLocation(teleportEvent.getFrom());
++                org.bukkit.Location to = createLocation(teleportEvent.getTo());
++                if (player == null || from == null || to == null) yield null;
++
++                org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause;
++                try {
++                    cause = org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.valueOf(
++                        teleportEvent.getCause()
++                    );
++                } catch (IllegalArgumentException exception) {
++                    LOGGER.warning("EventFactory: Invalid PlayerTeleportEvent cause "
++                        + teleportEvent.getCause());
++                    yield null;
++                }
++                yield new org.bukkit.event.player.PlayerTeleportEvent(
++                    player,
++                    from,
++                    to,
++                    cause
++                );
++            }
++            case PLAYER_TOGGLE_FLIGHT -> {
++                PlayerToggleFlightEvent toggleEvent = event.getPlayerToggleFlight();
++                Player player = getPlayer(toggleEvent.getPlayerUuid().getValue());
++                if (player == null) yield null;
++                yield new org.bukkit.event.player.PlayerToggleFlightEvent(
++                    player,
++                    toggleEvent.getFlying()
++                );
++            }
++            case PLAYER_TOGGLE_SNEAK -> {
++                PlayerToggleSneakEvent toggleEvent = event.getPlayerToggleSneak();
++                Player player = getPlayer(toggleEvent.getPlayerUuid().getValue());
++                if (player == null) yield null;
++                yield new org.bukkit.event.player.PlayerToggleSneakEvent(
++                    player,
++                    toggleEvent.getSneaking()
++                );
++            }
++            case PLAYER_TOGGLE_SPRINT -> {
++                PlayerToggleSprintEvent toggleEvent = event.getPlayerToggleSprint();
++                Player player = getPlayer(toggleEvent.getPlayerUuid().getValue());
++                if (player == null) yield null;
++                yield new org.bukkit.event.player.PlayerToggleSprintEvent(
++                    player,
++                    toggleEvent.getSprinting()
++                );
++            }
++            case PLAYER_ITEM_HELD -> {
++                PlayerItemHeldEvent heldEvent = event.getPlayerItemHeld();
++                Player player = getPlayer(heldEvent.getPlayerUuid().getValue());
++                if (player == null) yield null;
++                yield new org.bukkit.event.player.PlayerItemHeldEvent(
++                    player,
++                    heldEvent.getPreviousSlot(),
++                    heldEvent.getNewSlot()
++                );
++            }
++            case PLAYER_EXP_CHANGE -> {
++                PlayerExpChangeEvent expEvent = event.getPlayerExpChange();
++                Player player = getPlayer(expEvent.getPlayerUuid().getValue());
++                if (player == null) yield null;
++                yield new org.bukkit.event.player.PlayerExpChangeEvent(
++                    player,
++                    expEvent.getAmount()
++                );
++            }
 +            case BLOCK_BREAK -> {
 +                BlockBreakEvent breakEvent = event.getBlockBreak();
 +                Player player = getPlayer(breakEvent.getPlayerUuid().getValue());
@@ -2937,7 +3043,7 @@ index 14c24f1..3a4fdcf 100644
              case DATA_NOT_SET -> {
                  LOGGER.warning("EventFactory: Received Event with no data");
                  yield null;
-@@ -58,7 +471,38 @@ public class PatchBukkitEventFactory {
+@@ -58,7 +547,38 @@ public class PatchBukkitEventFactory {
  
          Event.Builder eventBuilder = Event.newBuilder();
  
@@ -2977,7 +3083,7 @@ index 14c24f1..3a4fdcf 100644
              String joinMessage = GsonComponentSerializer.gson().serialize(joinEvent.joinMessage());
  
              eventBuilder.setPlayerJoin(
-@@ -69,6 +513,231 @@ public class PatchBukkitEventFactory {
+@@ -69,6 +589,292 @@ public class PatchBukkitEventFactory {
                      .setJoinMessage(joinMessage)
                      .build()
              );
@@ -3010,6 +3116,67 @@ index 14c24f1..3a4fdcf 100644
 +                        .setValue(gameModeEvent.getPlayer().getUniqueId().toString())
 +                        .build())
 +                    .setNewGameMode(gameModeEvent.getNewGameMode().name())
++                    .build()
++            );
++        } else if (event instanceof org.bukkit.event.player.PlayerTeleportEvent teleportEvent) {
++            org.bukkit.Location destination = java.util.Objects.requireNonNull(
++                teleportEvent.getTo(),
++                "PlayerTeleportEvent destination"
++            );
++            eventBuilder.setPlayerTeleport(
++                PlayerTeleportEvent.newBuilder()
++                    .setPlayerUuid(UUID.newBuilder()
++                        .setValue(teleportEvent.getPlayer().getUniqueId().toString())
++                        .build())
++                    .setFrom(toLocationReference(teleportEvent.getFrom()))
++                    .setTo(toLocationReference(destination))
++                    .setCause(teleportEvent.getCause().name())
++                    .build()
++            );
++        } else if (event instanceof org.bukkit.event.player.PlayerToggleFlightEvent toggleEvent) {
++            eventBuilder.setPlayerToggleFlight(
++                PlayerToggleFlightEvent.newBuilder()
++                    .setPlayerUuid(UUID.newBuilder()
++                        .setValue(toggleEvent.getPlayer().getUniqueId().toString())
++                        .build())
++                    .setFlying(toggleEvent.isFlying())
++                    .build()
++            );
++        } else if (event instanceof org.bukkit.event.player.PlayerToggleSneakEvent toggleEvent) {
++            eventBuilder.setPlayerToggleSneak(
++                PlayerToggleSneakEvent.newBuilder()
++                    .setPlayerUuid(UUID.newBuilder()
++                        .setValue(toggleEvent.getPlayer().getUniqueId().toString())
++                        .build())
++                    .setSneaking(toggleEvent.isSneaking())
++                    .build()
++            );
++        } else if (event instanceof org.bukkit.event.player.PlayerToggleSprintEvent toggleEvent) {
++            eventBuilder.setPlayerToggleSprint(
++                PlayerToggleSprintEvent.newBuilder()
++                    .setPlayerUuid(UUID.newBuilder()
++                        .setValue(toggleEvent.getPlayer().getUniqueId().toString())
++                        .build())
++                    .setSprinting(toggleEvent.isSprinting())
++                    .build()
++            );
++        } else if (event instanceof org.bukkit.event.player.PlayerItemHeldEvent heldEvent) {
++            eventBuilder.setPlayerItemHeld(
++                PlayerItemHeldEvent.newBuilder()
++                    .setPlayerUuid(UUID.newBuilder()
++                        .setValue(heldEvent.getPlayer().getUniqueId().toString())
++                        .build())
++                    .setPreviousSlot(heldEvent.getPreviousSlot())
++                    .setNewSlot(heldEvent.getNewSlot())
++                    .build()
++            );
++        } else if (event instanceof org.bukkit.event.player.PlayerExpChangeEvent expEvent) {
++            eventBuilder.setPlayerExpChange(
++                PlayerExpChangeEvent.newBuilder()
++                    .setPlayerUuid(UUID.newBuilder()
++                        .setValue(expEvent.getPlayer().getUniqueId().toString())
++                        .build())
++                    .setAmount(expEvent.getAmount())
 +                    .build()
 +            );
 +        } else if (event instanceof org.bukkit.event.server.RemoteServerCommandEvent commandEvent) {
@@ -3209,10 +3376,72 @@ index 14c24f1..3a4fdcf 100644
          }
  
          builder.setData(eventBuilder.build());
-@@ -76,10 +745,115 @@ public class PatchBukkitEventFactory {
+@@ -76,10 +882,177 @@ public class PatchBukkitEventFactory {
          return builder.build().toByteArray();
      }
  
++    @Nullable
++    private static org.bukkit.Location createLocation(
++        @NotNull patchbukkit.common.Location location
++    ) {
++        if (!location.hasWorld() || !location.getWorld().hasUuid() || !location.hasPosition()) {
++            LOGGER.warning("EventFactory: Location is missing its world or position");
++            return null;
++        }
++        org.bukkit.World world;
++        try {
++            world = Bukkit.getWorld(java.util.UUID.fromString(
++                location.getWorld().getUuid().getValue()
++            ));
++        } catch (IllegalArgumentException exception) {
++            LOGGER.warning("EventFactory: Invalid location world UUID "
++                + location.getWorld().getUuid().getValue());
++            return null;
++        }
++        if (world == null) {
++            LOGGER.warning("EventFactory: Location world is unavailable for UUID "
++                + location.getWorld().getUuid().getValue());
++            return null;
++        }
++        return new org.bukkit.Location(
++            world,
++            location.getPosition().getX(),
++            location.getPosition().getY(),
++            location.getPosition().getZ(),
++            location.getYaw(),
++            location.getPitch()
++        );
++    }
++
++    @NotNull
++    private static patchbukkit.common.Location toLocationReference(
++        @NotNull org.bukkit.Location location
++    ) {
++        org.bukkit.World world = java.util.Objects.requireNonNull(
++            location.getWorld(),
++            "event location world"
++        );
++        location.checkFinite();
++        return patchbukkit.common.Location.newBuilder()
++            .setWorld(
++                patchbukkit.common.World.newBuilder()
++                    .setUuid(UUID.newBuilder()
++                        .setValue(world.getUID().toString())
++                        .build())
++                    .build()
++            )
++            .setPosition(
++                patchbukkit.common.Vec3.newBuilder()
++                    .setX(location.getX())
++                    .setY(location.getY())
++                    .setZ(location.getZ())
++                    .build()
++            )
++            .setYaw(location.getYaw())
++            .setPitch(location.getPitch())
++            .build();
++    }
++
 +    @Nullable
 +    private static Block createBlock(@NotNull BlockReference reference) {
 +        if (!reference.hasPosition() || !reference.getPosition().hasWorldUuid()) {
@@ -6629,7 +6858,7 @@ index 0000000..c4cdcc3
 +  optional BlockReference clicked_block = 3;
 +}
 diff --git a/proto/patchbukkit/events/event.proto b/proto/patchbukkit/events/event.proto
-index f678892..3cd7132 100644
+index f678892..6e26726 100644
 --- a/proto/patchbukkit/events/event.proto
 +++ b/proto/patchbukkit/events/event.proto
 @@ -3,6 +3,7 @@ syntax = "proto3";
@@ -6640,7 +6869,7 @@ index f678892..3cd7132 100644
  import "patchbukkit/events/player_events.proto";
  
  option java_multiple_files = true;
-@@ -11,9 +12,38 @@ option java_package = "patchbukkit.events";
+@@ -11,9 +12,44 @@ option java_package = "patchbukkit.events";
  message Event {
    oneof data {
      PlayerJoinEvent player_join = 1;
@@ -6665,6 +6894,12 @@ index f678892..3cd7132 100644
 +    BlockRedstoneEvent block_redstone = 20;
 +    BlockIgniteEvent block_ignite = 21;
 +    BlockFromToEvent block_from_to = 22;
++    PlayerTeleportEvent player_teleport = 23;
++    PlayerToggleFlightEvent player_toggle_flight = 24;
++    PlayerToggleSneakEvent player_toggle_sneak = 25;
++    PlayerToggleSprintEvent player_toggle_sprint = 26;
++    PlayerItemHeldEvent player_item_held = 27;
++    PlayerExpChangeEvent player_exp_change = 28;
    }
  }
  
@@ -6680,10 +6915,10 @@ index f678892..3cd7132 100644
    string event_type = 1;
    string plugin_name = 2;
 diff --git a/proto/patchbukkit/events/player_events.proto b/proto/patchbukkit/events/player_events.proto
-index cd92e96..9be7e2f 100644
+index cd92e96..9f60a3f 100644
 --- a/proto/patchbukkit/events/player_events.proto
 +++ b/proto/patchbukkit/events/player_events.proto
-@@ -6,7 +6,70 @@ import "patchbukkit/common/types.proto";
+@@ -6,7 +6,103 @@ import "patchbukkit/common/types.proto";
  option java_multiple_files = true;
  option java_package = "patchbukkit.events";
  
@@ -6753,6 +6988,39 @@ index cd92e96..9be7e2f 100644
 +  patchbukkit.common.UUID player_uuid = 1;
 +  patchbukkit.common.Location respawn_location = 2;
 +  bool alive = 3;
++}
++
++message PlayerTeleportEvent {
++  patchbukkit.common.UUID player_uuid = 1;
++  patchbukkit.common.Location from = 2;
++  patchbukkit.common.Location to = 3;
++  string cause = 4;
++}
++
++message PlayerToggleFlightEvent {
++  patchbukkit.common.UUID player_uuid = 1;
++  bool flying = 2;
++}
++
++message PlayerToggleSneakEvent {
++  patchbukkit.common.UUID player_uuid = 1;
++  bool sneaking = 2;
++}
++
++message PlayerToggleSprintEvent {
++  patchbukkit.common.UUID player_uuid = 1;
++  bool sprinting = 2;
++}
++
++message PlayerItemHeldEvent {
++  patchbukkit.common.UUID player_uuid = 1;
++  uint32 previous_slot = 2;
++  uint32 new_slot = 3;
++}
++
++message PlayerExpChangeEvent {
++  patchbukkit.common.UUID player_uuid = 1;
++  int32 amount = 2;
 +}
 diff --git a/proto/patchbukkit/itemstack.proto b/proto/patchbukkit/itemstack.proto
 index 75429d3..25a6639 100644
@@ -10475,10 +10743,10 @@ index 484dc62..22d354c 100644
      }
  
 diff --git a/rust/src/events/handler.rs b/rust/src/events/handler.rs
-index 6705e20..2bfaa8e 100644
+index 6705e20..0d21379 100644
 --- a/rust/src/events/handler.rs
 +++ b/rust/src/events/handler.rs
-@@ -6,12 +6,25 @@ use pumpkin::entity::player::Player;
+@@ -6,12 +6,30 @@ use pumpkin::entity::player::Player;
  use pumpkin::plugin::{BoxFuture, Cancellable, EventHandler, Payload};
  use pumpkin::server::Server;
  use pumpkin_api_macros::with_runtime;
@@ -10499,14 +10767,19 @@ index 6705e20..2bfaa8e 100644
 +    BlockFromToEvent as ProtoBlockFromToEvent, BlockIgniteEvent as ProtoBlockIgniteEvent,
 +    BlockPlaceEvent as ProtoBlockPlaceEvent, BlockRedstoneEvent as ProtoBlockRedstoneEvent,
 +    BlockReference, Event, PlayerChangedWorldEvent, PlayerChatEvent, PlayerCommandPreprocessEvent,
-+    PlayerCommandsSendEvent, PlayerGameModeChangeEvent,
-+    PlayerInteractEvent as ProtoPlayerInteractEvent, PlayerJoinEvent, PlayerLoginEvent,
-+    PlayerQuitEvent, PlayerRespawnEvent, RemoteServerCommandEvent, ServerCommandEvent,
++    PlayerCommandsSendEvent, PlayerExpChangeEvent as ProtoPlayerExpChangeEvent,
++    PlayerGameModeChangeEvent, PlayerInteractEvent as ProtoPlayerInteractEvent,
++    PlayerItemHeldEvent as ProtoPlayerItemHeldEvent, PlayerJoinEvent, PlayerLoginEvent,
++    PlayerQuitEvent, PlayerRespawnEvent, PlayerTeleportEvent as ProtoPlayerTeleportEvent,
++    PlayerToggleFlightEvent as ProtoPlayerToggleFlightEvent,
++    PlayerToggleSneakEvent as ProtoPlayerToggleSneakEvent,
++    PlayerToggleSprintEvent as ProtoPlayerToggleSprintEvent, RemoteServerCommandEvent,
++    ServerCommandEvent,
 +};
  
  pub struct EventContext {
      pub server: Arc<Server>,
-@@ -26,17 +39,662 @@ pub struct JvmEventPayload {
+@@ -26,17 +44,944 @@ pub struct JvmEventPayload {
  pub trait PatchBukkitEvent {
      fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload;
      fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()>;
@@ -10535,6 +10808,45 @@ index 6705e20..2bfaa8e 100644
 +            z: position.0.z,
 +        }),
 +        material_key: format!("minecraft:{}", block.name),
++    }
++}
++
++fn location_reference(
++    world_uuid: uuid::Uuid,
++    position: pumpkin_util::math::vector3::Vector3<f64>,
++    yaw: f32,
++    pitch: f32,
++) -> ProtoLocation {
++    ProtoLocation {
++        world: Some(ProtoWorld {
++            uuid: Some(Uuid {
++                value: world_uuid.to_string(),
++            }),
++            ..Default::default()
++        }),
++        position: Some(Vec3 {
++            x: position.x,
++            y: position.y,
++            z: position.z,
++        }),
++        yaw,
++        pitch,
++    }
++}
++
++const fn teleport_cause_name(
++    cause: pumpkin::plugin::player::player_teleport::TeleportCause,
++) -> &'static str {
++    match cause {
++        pumpkin::plugin::player::player_teleport::TeleportCause::ChorusFruit => "CHORUS_FRUIT",
++        pumpkin::plugin::player::player_teleport::TeleportCause::Command => "COMMAND",
++        pumpkin::plugin::player::player_teleport::TeleportCause::EndGateway => "END_GATEWAY",
++        pumpkin::plugin::player::player_teleport::TeleportCause::EndPortal => "END_PORTAL",
++        pumpkin::plugin::player::player_teleport::TeleportCause::EntityPortal => "ENTITY_PORTAL",
++        pumpkin::plugin::player::player_teleport::TeleportCause::NetherPortal => "NETHER_PORTAL",
++        pumpkin::plugin::player::player_teleport::TeleportCause::Plugin => "PLUGIN",
++        pumpkin::plugin::player::player_teleport::TeleportCause::Spectate => "SPECTATE",
++        pumpkin::plugin::player::player_teleport::TeleportCause::Unknown => "UNKNOWN",
 +    }
 +}
 +
@@ -11153,31 +11465,30 @@ index 6705e20..2bfaa8e 100644
 +    fn carries_bukkit_cancellation(&self) -> bool {
 +        false
 +    }
- }
-
--impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent {
++}
++
 +impl PatchBukkitEvent
 +    for pumpkin::plugin::player::player_gamemode_change::PlayerGamemodeChangeEvent
 +{
-     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
-         JvmEventPayload {
-             event: Event {
--                data: Some(Data::PlayerJoin(PlayerJoinEvent {
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
 +                data: Some(Data::PlayerGameModeChange(PlayerGameModeChangeEvent {
-                     player_uuid: Some(Uuid {
-                         value: self.player.gameprofile.id.to_string(),
-                     }),
--                    join_message: serde_json::to_string(&self.join_message).unwrap(),
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
 +                    new_game_mode: self.new_gamemode.to_str().to_ascii_uppercase(),
-                 })),
-             },
-             context: EventContext {
-@@ -48,10 +706,311 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent
-
-     fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
-         match data {
--            Data::PlayerJoin(event) => {
--                self.join_message = serde_json::from_str(&event.join_message).ok()?;
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        match data {
 +            Data::PlayerGameModeChange(event) => {
 +                server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
 +            }
@@ -11185,6 +11496,256 @@ index 6705e20..2bfaa8e 100644
 +        }
 +
 +        Some(())
++    }
++}
++
++impl PatchBukkitEvent for pumpkin::plugin::player::player_teleport::PlayerTeleportEvent {
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        let entity = &self.player.living_entity.entity;
++        let from_yaw = self.from_yaw.unwrap_or_else(|| entity.yaw.load());
++        let from_pitch = self.from_pitch.unwrap_or_else(|| entity.pitch.load());
++        let to_yaw = self.to_yaw.unwrap_or(from_yaw);
++        let to_pitch = self.to_pitch.unwrap_or(from_pitch);
++        let cause = teleport_cause_name(self.cause);
++        let world_uuid = self.player.world().uuid;
++
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::PlayerTeleport(ProtoPlayerTeleportEvent {
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
++                    from: Some(location_reference(
++                        world_uuid, self.from, from_yaw, from_pitch,
++                    )),
++                    to: Some(location_reference(world_uuid, self.to, to_yaw, to_pitch)),
++                    cause: cause.to_owned(),
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        let Data::PlayerTeleport(event) = data else {
++            return None;
++        };
++        let player_uuid = uuid::Uuid::from_str(&event.player_uuid?.value).ok()?;
++        if player_uuid != self.player.gameprofile.id {
++            return None;
++        }
++        server.get_player_by_uuid(player_uuid)?;
++
++        let from = event.from?;
++        let from_world_uuid = uuid::Uuid::from_str(&from.world?.uuid?.value).ok()?;
++        let from_position = from.position?;
++        let to = event.to?;
++        let to_world_uuid = uuid::Uuid::from_str(&to.world?.uuid?.value).ok()?;
++        let to_position = to.position?;
++        let expected_world_uuid = self.player.world().uuid;
++        let expected_from_yaw = self
++            .from_yaw
++            .unwrap_or_else(|| self.player.living_entity.entity.yaw.load());
++        let expected_from_pitch = self
++            .from_pitch
++            .unwrap_or_else(|| self.player.living_entity.entity.pitch.load());
++
++        if from_world_uuid != expected_world_uuid
++            || to_world_uuid != expected_world_uuid
++            || from_position.x != self.from.x
++            || from_position.y != self.from.y
++            || from_position.z != self.from.z
++            || from.yaw != expected_from_yaw
++            || from.pitch != expected_from_pitch
++            || event.cause != teleport_cause_name(self.cause)
++            || !to_position.x.is_finite()
++            || !to_position.y.is_finite()
++            || !to_position.z.is_finite()
++            || !to.yaw.is_finite()
++            || !to.pitch.is_finite()
++        {
++            return None;
++        }
++
++        self.to =
++            pumpkin_util::math::vector3::Vector3::new(to_position.x, to_position.y, to_position.z);
++        self.to_yaw = Some(to.yaw);
++        self.to_pitch = Some(to.pitch);
++        Some(())
++    }
++}
++
++impl PatchBukkitEvent
++    for pumpkin::plugin::player::player_toggle_flight_event::PlayerToggleFlightEvent
++{
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::PlayerToggleFlight(ProtoPlayerToggleFlightEvent {
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
++                    flying: self.is_flying,
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        let Data::PlayerToggleFlight(event) = data else {
++            return None;
++        };
++        let player_uuid = uuid::Uuid::from_str(&event.player_uuid?.value).ok()?;
++        if player_uuid != self.player.gameprofile.id || event.flying != self.is_flying {
++            return None;
++        }
++        server.get_player_by_uuid(player_uuid)?;
++        Some(())
++    }
++}
++
++impl PatchBukkitEvent
++    for pumpkin::plugin::player::player_toggle_sneak_event::PlayerToggleSneakEvent
++{
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::PlayerToggleSneak(ProtoPlayerToggleSneakEvent {
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
++                    sneaking: self.is_sneaking,
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        let Data::PlayerToggleSneak(event) = data else {
++            return None;
++        };
++        let player_uuid = uuid::Uuid::from_str(&event.player_uuid?.value).ok()?;
++        if player_uuid != self.player.gameprofile.id || event.sneaking != self.is_sneaking {
++            return None;
++        }
++        server.get_player_by_uuid(player_uuid)?;
++        Some(())
++    }
++}
++
++impl PatchBukkitEvent
++    for pumpkin::plugin::player::player_toggle_sprint_event::PlayerToggleSprintEvent
++{
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::PlayerToggleSprint(ProtoPlayerToggleSprintEvent {
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
++                    sprinting: self.is_sprinting,
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        let Data::PlayerToggleSprint(event) = data else {
++            return None;
++        };
++        let player_uuid = uuid::Uuid::from_str(&event.player_uuid?.value).ok()?;
++        if player_uuid != self.player.gameprofile.id || event.sprinting != self.is_sprinting {
++            return None;
++        }
++        server.get_player_by_uuid(player_uuid)?;
++        Some(())
++    }
++}
++
++impl PatchBukkitEvent for pumpkin::plugin::player::item_held::PlayerItemHeldEvent {
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::PlayerItemHeld(ProtoPlayerItemHeldEvent {
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
++                    previous_slot: u32::from(self.previous_slot),
++                    new_slot: u32::from(self.new_slot),
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        let Data::PlayerItemHeld(event) = data else {
++            return None;
++        };
++        let player_uuid = uuid::Uuid::from_str(&event.player_uuid?.value).ok()?;
++        if player_uuid != self.player.gameprofile.id
++            || event.previous_slot != u32::from(self.previous_slot)
++            || event.new_slot != u32::from(self.new_slot)
++        {
++            return None;
++        }
++        server.get_player_by_uuid(player_uuid)?;
++        Some(())
++    }
+ }
+
+-impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent {
++impl PatchBukkitEvent for pumpkin::plugin::player::exp_change::PlayerExpChangeEvent {
+     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+         JvmEventPayload {
+             event: Event {
+-                data: Some(Data::PlayerJoin(PlayerJoinEvent {
++                data: Some(Data::PlayerExpChange(ProtoPlayerExpChangeEvent {
+                     player_uuid: Some(Uuid {
+                         value: self.player.gameprofile.id.to_string(),
+                     }),
+-                    join_message: serde_json::to_string(&self.join_message).unwrap(),
++                    amount: self.amount,
+                 })),
+             },
+             context: EventContext {
+@@ -46,12 +991,319 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent
+         }
+     }
+
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        let Data::PlayerExpChange(event) = data else {
++            return None;
++        };
++        let player_uuid = uuid::Uuid::from_str(&event.player_uuid?.value).ok()?;
++        if player_uuid != self.player.gameprofile.id {
++            return None;
++        }
++        server.get_player_by_uuid(player_uuid)?;
++        self.amount = event.amount;
++        Some(())
++    }
++
++    fn carries_bukkit_cancellation(&self) -> bool {
++        false
 +    }
 +}
 +
@@ -11208,8 +11769,10 @@ index 6705e20..2bfaa8e 100644
 +        }
 +    }
 +
-+    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
-+        match data {
+     fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
+         match data {
+-            Data::PlayerJoin(event) => {
+-                self.join_message = serde_json::from_str(&event.join_message).ok()?;
 +            Data::PlayerCommandPreprocess(event) => {
 +                self.command = event.command;
 +                server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
@@ -11486,7 +12049,7 @@ index 6705e20..2bfaa8e 100644
          }
  
          Some(())
-@@ -75,6 +1034,59 @@ impl<E: PatchBukkitEvent> PatchBukkitEventHandler<E> {
+@@ -75,6 +1327,72 @@ impl<E: PatchBukkitEvent> PatchBukkitEventHandler<E> {
      }
  }
  
@@ -11533,7 +12096,20 @@ index 6705e20..2bfaa8e 100644
 +    match rx.await {
 +        Ok(response) => {
 +            let cancelled = response.cancelled;
-+            event.apply_modifications(server, response.data?.data?);
++            let Some(data) = response.data.and_then(|event| event.data) else {
++                tracing::warn!(
++                    "JVM returned no event payload for {}",
++                    std::any::type_name::<E>()
++                );
++                return Some(true);
++            };
++            if event.apply_modifications(server, data).is_none() {
++                tracing::warn!(
++                    "Rejected invalid JVM event response for {}",
++                    std::any::type_name::<E>()
++                );
++                return Some(true);
++            }
 +            Some(cancelled)
 +        }
 +        Err(_) => {
@@ -11546,7 +12122,7 @@ index 6705e20..2bfaa8e 100644
  #[with_runtime(global)]
  impl<E> EventHandler<E> for PatchBukkitEventHandler<E>
  where
-@@ -88,28 +1100,30 @@ where
+@@ -88,28 +1406,30 @@ where
          let command_tx = self.command_tx.clone();
  
          Box::pin(async move {
@@ -11744,7 +12320,7 @@ index eed3dec..b0d700d 100644
          })
  }
 diff --git a/rust/src/java/native_callbacks/events.rs b/rust/src/java/native_callbacks/events.rs
-index d71e36d..9b2f202 100644
+index d71e36d..4f016d3 100644
 --- a/rust/src/java/native_callbacks/events.rs
 +++ b/rust/src/java/native_callbacks/events.rs
 @@ -4,7 +4,7 @@ use pumpkin::plugin::EventPriority;
@@ -11797,7 +12373,7 @@ index d71e36d..9b2f202 100644
                  "org.bukkit.event.player.PlayerJoinEvent" => {
                      context
                          .register_event::<
-@@ -50,6 +84,319 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
+@@ -50,6 +84,421 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                          )
                          .await;
                  }
@@ -11840,6 +12416,108 @@ index d71e36d..9b2f202 100644
 +                            PatchBukkitEventHandler<pumpkin::plugin::player::player_gamemode_change::PlayerGamemodeChangeEvent>,
 +                        >(
 +                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
++                "org.bukkit.event.player.PlayerTeleportEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::player_teleport::PlayerTeleportEvent,
++                            PatchBukkitEventHandler<
++                                pumpkin::plugin::player::player_teleport::PlayerTeleportEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
++                "org.bukkit.event.player.PlayerToggleFlightEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::player_toggle_flight_event::PlayerToggleFlightEvent,
++                            PatchBukkitEventHandler<
++                                pumpkin::plugin::player::player_toggle_flight_event::PlayerToggleFlightEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
++                "org.bukkit.event.player.PlayerToggleSneakEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::player_toggle_sneak_event::PlayerToggleSneakEvent,
++                            PatchBukkitEventHandler<
++                                pumpkin::plugin::player::player_toggle_sneak_event::PlayerToggleSneakEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
++                "org.bukkit.event.player.PlayerToggleSprintEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::player_toggle_sprint_event::PlayerToggleSprintEvent,
++                            PatchBukkitEventHandler<
++                                pumpkin::plugin::player::player_toggle_sprint_event::PlayerToggleSprintEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
++                "org.bukkit.event.player.PlayerItemHeldEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::item_held::PlayerItemHeldEvent,
++                            PatchBukkitEventHandler<
++                                pumpkin::plugin::player::item_held::PlayerItemHeldEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
++                "org.bukkit.event.player.PlayerExpChangeEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::exp_change::PlayerExpChangeEvent,
++                            PatchBukkitNotificationHandler<
++                                pumpkin::plugin::player::exp_change::PlayerExpChangeEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitNotificationHandler::new(
 +                                request.plugin_name.clone(),
 +                                command_tx.clone(),
 +                            )),
@@ -12117,7 +12795,7 @@ index d71e36d..9b2f202 100644
                  _ => {
                      tracing::warn!(
                          "Unsupported Bukkit event type '{}' from plugin '{}'",
-@@ -84,6 +431,7 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
+@@ -84,6 +533,7 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                      context.server.plugin_manager.fire(pumpkin_event).await;
                      Some(true)
                  }
