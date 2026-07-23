@@ -30,6 +30,25 @@ A compatibility milestone must satisfy all of these gates:
 - Paper API: Adventure audiences, asynchronous operations, command syncing,
   modern events, registries, profiles, and region-safe scheduling.
 
+## Build and deployment cadence
+
+Compatibility work ships in behavior-sized batches rather than one missing
+method per deployment. A batch must:
+
+1. Complete one user-visible workflow, including the adjacent reads, writes,
+   events, and state synchronization that a real plugin reaches.
+2. Keep unrelated API areas in separate commits so a maintainer can review,
+   revert, and verify the behavior independently.
+3. Pass the clean pinned-patch, Java/protobuf, Rust, and exact-source build
+   gates once for the complete batch.
+4. Produce one Railway deployment candidate and one focused live verification
+   record for that exact commit.
+5. Use live failures to choose the next batch instead of immediately shipping
+   another isolated stub replacement.
+
+Boot failures, data-loss risks, and similarly urgent regressions may ship as
+smaller hotfixes. Batch size never relaxes the release gates below.
+
 ## Real-plugin matrix
 
 - LuckPerms
