@@ -8,6 +8,7 @@ panel_root="${data_root}/.pufferpanel"
 config_file="${panel_root}/config.json"
 layout_marker="${panel_root}/layout-v1.complete"
 bootstrap_marker="${panel_root}/bootstrap-v1.complete"
+patchbukkit_layout_marker="${panel_root}/patchbukkit-layout-v2.complete"
 bootstrap_cookie="${panel_root}/bootstrap-cookie.txt"
 server_definition="${data_root}/${server_id}.json"
 server_import="${panel_root}/server-import-v1"
@@ -144,6 +145,22 @@ if [ ! -f "${bootstrap_marker}" ]; then
 
     touch "${bootstrap_marker}"
     trap - EXIT INT TERM
+fi
+
+# Pumpkin used to expose an empty native-plugin name, which made PatchBukkit
+# store its data at <server>/patchbukkit. Now that the native metadata is read
+# correctly, its canonical data folder is <server>/plugins/patchbukkit. Copy the
+# existing Bukkit plugins and their generated data into the canonical folder
+# once, retaining the legacy directory as a rollback copy.
+legacy_patchbukkit_plugins="${server_root}/patchbukkit/patchbukkit-plugins"
+patchbukkit_plugins="${server_root}/plugins/patchbukkit/patchbukkit-plugins"
+if [ ! -f "${patchbukkit_layout_marker}" ]; then
+    if [ -d "${legacy_patchbukkit_plugins}" ]; then
+        mkdir -p "${patchbukkit_plugins}"
+        cp -a "${legacy_patchbukkit_plugins}/." "${patchbukkit_plugins}/"
+    fi
+
+    touch "${patchbukkit_layout_marker}"
 fi
 
 # The Railway volume hides image files mounted at /pumpkin. Install the native
