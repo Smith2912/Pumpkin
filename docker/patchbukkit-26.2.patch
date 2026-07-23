@@ -45,10 +45,10 @@ index d2250375c315de9f9dbab10a165c9125ce1cf4d7..96de0074811674654727f1c88c400083
  
          framework.registerSuite(new ServerTests(this));
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
-index 0ddff2f37d5a28f2b5a99321934d582f33efdda4..8315463e8dfb3a082f2f84438a197e9c8466d23b 100644
+index 0ddff2f37d5a28f2b5a99321934d582f33efdda4..3d83aaf9c99b7de7d0920cad8f8e8f8a5222427d 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
-@@ -3,13 +3,32 @@ package org.patchbukkit.testplugin.tests;
+@@ -3,13 +3,33 @@ package org.patchbukkit.testplugin.tests;
  import org.bukkit.Bukkit;
  import org.bukkit.event.EventHandler;
  import org.bukkit.event.EventPriority;
@@ -56,6 +56,7 @@ index 0ddff2f37d5a28f2b5a99321934d582f33efdda4..8315463e8dfb3a082f2f84438a197e9c
 +import org.bukkit.event.HandlerList;
  import org.bukkit.event.Listener;
 +import org.bukkit.event.block.BlockBreakEvent;
++import org.bukkit.event.block.BlockPlaceEvent;
 +import org.bukkit.event.player.AsyncPlayerChatEvent;
 +import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 +import org.bukkit.event.player.PlayerCommandPreprocessEvent;
@@ -81,7 +82,7 @@ index 0ddff2f37d5a28f2b5a99321934d582f33efdda4..8315463e8dfb3a082f2f84438a197e9c
  import static org.patchbukkit.testplugin.TestAssertions.*;
  
  public final class EventSystemTests {
-@@ -31,6 +50,88 @@ public final class EventSystemTests {
+@@ -31,6 +51,92 @@ public final class EventSystemTests {
          Bukkit.getPluginManager().registerEvents(listener, plugin);
      }
  
@@ -137,6 +138,10 @@ index 0ddff2f37d5a28f2b5a99321934d582f33efdda4..8315463e8dfb3a082f2f84438a197e9c
 +            }
 +
 +            @EventHandler
++            public void onBlockPlace(BlockPlaceEvent event) {
++            }
++
++            @EventHandler
 +            public void onPlayerInteract(PlayerInteractEvent event) {
 +            }
 +
@@ -170,7 +175,7 @@ index 0ddff2f37d5a28f2b5a99321934d582f33efdda4..8315463e8dfb3a082f2f84438a197e9c
      @ConformanceTest(name = "registerEvent() with explicit priority", category = TestCategory.EVENT_SYSTEM)
      public void testRegisterEventWithPriority() {
          EventExecutor executor = (listener, event) -> {
-@@ -59,4 +160,17 @@ public final class EventSystemTests {
+@@ -59,4 +165,17 @@ public final class EventSystemTests {
                  true
          );
      }
@@ -2462,10 +2467,10 @@ index 458bbb9a008f7c9e2c132e5df0d4d92d45afbba7..de710c303bc6d0a9016987848c3ae624
  
      @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
-index 14c24f15f93fec102d9980e7c702fd9bc5bcf042..08eb6ef86d3da1e0be34cfbd7419bd5617878e21 100644
+index 14c24f15f93fec102d9980e7c702fd9bc5bcf042..68f744a960ad352709fad66009d02eb9dca54d84 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
-@@ -5,14 +5,42 @@ import net.kyori.adventure.text.Component;
+@@ -5,14 +5,44 @@ import net.kyori.adventure.text.Component;
  import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
  import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
  import org.bukkit.Bukkit;
@@ -2478,10 +2483,12 @@ index 14c24f15f93fec102d9980e7c702fd9bc5bcf042..08eb6ef86d3da1e0be34cfbd7419bd56
  import org.jetbrains.annotations.NotNull;
  import org.jetbrains.annotations.Nullable;
 +import org.patchbukkit.world.PatchBukkitBlock;
++import org.patchbukkit.world.PatchBukkitBlockState;
 +import org.patchbukkit.world.PatchBukkitWorld;
 +import patchbukkit.common.BlockPosition;
  import patchbukkit.common.UUID;
 +import patchbukkit.events.BlockBreakEvent;
++import patchbukkit.events.BlockPlaceEvent;
 +import patchbukkit.events.BlockReference;
  import patchbukkit.events.Event;
  import patchbukkit.events.FireEventResponse;
@@ -2508,7 +2515,7 @@ index 14c24f15f93fec102d9980e7c702fd9bc5bcf042..08eb6ef86d3da1e0be34cfbd7419bd56
  import java.util.logging.Logger;
  
  public class PatchBukkitEventFactory {
-@@ -34,6 +62,75 @@ public class PatchBukkitEventFactory {
+@@ -34,6 +64,75 @@ public class PatchBukkitEventFactory {
          Event.DataCase dataCase = event.getDataCase();
  
          return switch (dataCase) {
@@ -2584,7 +2591,7 @@ index 14c24f15f93fec102d9980e7c702fd9bc5bcf042..08eb6ef86d3da1e0be34cfbd7419bd56
              case PLAYER_JOIN -> {
                  PlayerJoinEvent joinEvent = event.getPlayerJoin();
                  Player player = getPlayer(joinEvent.getPlayerUuid().getValue());
-@@ -42,6 +139,214 @@ public class PatchBukkitEventFactory {
+@@ -42,6 +141,242 @@ public class PatchBukkitEventFactory {
                  Component joinMessage = GsonComponentSerializer.gson().deserialize(joinEvent.getJoinMessage());
                  yield new org.bukkit.event.player.PlayerJoinEvent(player, joinMessage);
              }
@@ -2770,6 +2777,34 @@ index 14c24f15f93fec102d9980e7c702fd9bc5bcf042..08eb6ef86d3da1e0be34cfbd7419bd56
 +                bukkitEvent.setDropItems(breakEvent.getDropItems());
 +                yield bukkitEvent;
 +            }
++            case BLOCK_PLACE -> {
++                BlockPlaceEvent placeEvent = event.getBlockPlace();
++                Player player = getPlayer(placeEvent.getPlayerUuid().getValue());
++                Block placedBlock = createBlock(placeEvent.getBlock());
++                Block replacedBlock = placeEvent.getBlock().hasPosition()
++                    ? createLiveBlock(placeEvent.getBlock().getPosition())
++                    : null;
++                if (player == null || placedBlock == null || replacedBlock == null) {
++                    yield null;
++                }
++
++                /*
++                 * Pumpkin exposes the placed position and the type of the block
++                 * placed against, but not that block's position, face, or hand.
++                 * Preserve the cancellation/canBuild contract now and use the
++                 * replaced block at the placed position as the safest location
++                 * placeholder until the native event carries those fields.
++                 */
++                yield new org.bukkit.event.block.BlockPlaceEvent(
++                    placedBlock,
++                    PatchBukkitBlockState.create(replacedBlock),
++                    replacedBlock,
++                    player.getInventory().getItemInMainHand(),
++                    player,
++                    placeEvent.getCanBuild(),
++                    EquipmentSlot.HAND
++                );
++            }
 +            case PLAYER_INTERACT -> {
 +                PlayerInteractEvent interactEvent = event.getPlayerInteract();
 +                Player player = getPlayer(interactEvent.getPlayerUuid().getValue());
@@ -2799,7 +2834,7 @@ index 14c24f15f93fec102d9980e7c702fd9bc5bcf042..08eb6ef86d3da1e0be34cfbd7419bd56
              case DATA_NOT_SET -> {
                  LOGGER.warning("EventFactory: Received Event with no data");
                  yield null;
-@@ -58,7 +363,38 @@ public class PatchBukkitEventFactory {
+@@ -58,7 +393,38 @@ public class PatchBukkitEventFactory {
  
          Event.Builder eventBuilder = Event.newBuilder();
  
@@ -2839,7 +2874,7 @@ index 14c24f15f93fec102d9980e7c702fd9bc5bcf042..08eb6ef86d3da1e0be34cfbd7419bd56
              String joinMessage = GsonComponentSerializer.gson().serialize(joinEvent.joinMessage());
  
              eventBuilder.setPlayerJoin(
-@@ -69,6 +405,174 @@ public class PatchBukkitEventFactory {
+@@ -69,6 +435,184 @@ public class PatchBukkitEventFactory {
                      .setJoinMessage(joinMessage)
                      .build()
              );
@@ -2999,6 +3034,16 @@ index 14c24f15f93fec102d9980e7c702fd9bc5bcf042..08eb6ef86d3da1e0be34cfbd7419bd56
 +                    .setDropItems(breakEvent.isDropItems())
 +                    .build()
 +            );
++        } else if (event instanceof org.bukkit.event.block.BlockPlaceEvent placeEvent) {
++            eventBuilder.setBlockPlace(
++                BlockPlaceEvent.newBuilder()
++                    .setPlayerUuid(UUID.newBuilder()
++                        .setValue(placeEvent.getPlayer().getUniqueId().toString())
++                        .build())
++                    .setBlock(toBlockReference(placeEvent.getBlockPlaced()))
++                    .setCanBuild(placeEvent.canBuild())
++                    .build()
++            );
 +        } else if (event instanceof org.bukkit.event.player.PlayerInteractEvent interactEvent) {
 +            PlayerInteractEvent.Builder interactBuilder = PlayerInteractEvent.newBuilder()
 +                .setPlayerUuid(UUID.newBuilder()
@@ -3014,7 +3059,7 @@ index 14c24f15f93fec102d9980e7c702fd9bc5bcf042..08eb6ef86d3da1e0be34cfbd7419bd56
          }
  
          builder.setData(eventBuilder.build());
-@@ -76,10 +580,86 @@ public class PatchBukkitEventFactory {
+@@ -76,10 +620,115 @@ public class PatchBukkitEventFactory {
          return builder.build().toByteArray();
      }
  
@@ -3046,6 +3091,35 @@ index 14c24f15f93fec102d9980e7c702fd9bc5bcf042..08eb6ef86d3da1e0be34cfbd7419bd56
 +            position.getY(),
 +            position.getZ(),
 +            reference.getMaterialKey()
++        );
++    }
++
++    @Nullable
++    private static Block createLiveBlock(@NotNull BlockPosition position) {
++        if (!position.hasWorldUuid()) {
++            LOGGER.warning("EventFactory: Live block reference is missing its world");
++            return null;
++        }
++        org.bukkit.World world;
++        try {
++            world = Bukkit.getWorld(java.util.UUID.fromString(
++                position.getWorldUuid().getValue()
++            ));
++        } catch (IllegalArgumentException exception) {
++            LOGGER.warning("EventFactory: Invalid live block world UUID "
++                + position.getWorldUuid().getValue());
++            return null;
++        }
++        if (!(world instanceof PatchBukkitWorld patchWorld)) {
++            LOGGER.warning("EventFactory: Live block world is unavailable for UUID "
++                + position.getWorldUuid().getValue());
++            return null;
++        }
++        return PatchBukkitBlock.create(
++            patchWorld,
++            position.getX(),
++            position.getY(),
++            position.getZ()
 +        );
 +    }
 +
@@ -6017,6 +6091,101 @@ index 0000000000000000000000000000000000000000..e13d58673bb3cf245d60742231a605f8
 +        return result;
 +    }
 +}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitBlockState.java b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitBlockState.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..aa400d64c328dd184a17b93c7e177c978f03f94e
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitBlockState.java
+@@ -0,0 +1,89 @@
++package org.patchbukkit.world;
++
++import java.lang.reflect.InvocationHandler;
++import java.lang.reflect.Method;
++import java.lang.reflect.Proxy;
++import java.util.Objects;
++import org.bukkit.Location;
++import org.bukkit.block.Block;
++import org.bukkit.block.BlockState;
++import org.bukkit.metadata.MetadataValue;
++import org.bukkit.plugin.Plugin;
++
++/**
++ * Immutable Bukkit snapshot facade for a block captured before a native event mutation.
++ *
++ * <p>The facade deliberately exposes only snapshot reads that PatchBukkit can answer
++ * without inventing server state. Write methods fail explicitly until Pumpkin exposes
++ * a block-state write contract.</p>
++ */
++public final class PatchBukkitBlockState implements InvocationHandler {
++    private final Block block;
++
++    private PatchBukkitBlockState(Block block) {
++        this.block = Objects.requireNonNull(block, "block");
++    }
++
++    public static BlockState create(Block block) {
++        return (BlockState) Proxy.newProxyInstance(
++            BlockState.class.getClassLoader(),
++            new Class<?>[] { BlockState.class },
++            new PatchBukkitBlockState(block)
++        );
++    }
++
++    @Override
++    @SuppressWarnings("deprecation")
++    public Object invoke(Object proxy, Method method, Object[] arguments) {
++        Object[] args = arguments == null ? new Object[0] : arguments;
++        return switch (method.getName()) {
++            case "getBlock" -> this.block;
++            case "getType" -> this.block.getType();
++            case "getBlockData" -> this.block.getBlockData().clone();
++            case "getData" -> this.block.getType().getNewData((byte) 0);
++            case "getRawData", "getLightLevel" -> (byte) 0;
++            case "getWorld" -> this.block.getWorld();
++            case "getX" -> this.block.getX();
++            case "getY" -> this.block.getY();
++            case "getZ" -> this.block.getZ();
++            case "getLocation" -> getLocation(args);
++            case "isPlaced" -> true;
++            case "hasMetadata" -> this.block.hasMetadata((String) args[0]);
++            case "getMetadata" -> this.block.getMetadata((String) args[0]);
++            case "setMetadata" -> {
++                this.block.setMetadata((String) args[0], (MetadataValue) args[1]);
++                yield null;
++            }
++            case "removeMetadata" -> {
++                this.block.removeMetadata((String) args[0], (Plugin) args[1]);
++                yield null;
++            }
++            case "hashCode" -> Objects.hash(
++                this.block.getWorld().getUID(),
++                this.block.getX(),
++                this.block.getY(),
++                this.block.getZ(),
++                this.block.getType()
++            );
++            case "equals" -> proxy == args[0];
++            case "toString" -> "PatchBukkitBlockState{" + this.block + "}";
++            case "setType", "setBlockData", "setRawData", "update" ->
++                throw unsupported(method);
++            default -> throw unsupported(method);
++        };
++    }
++
++    private Location getLocation(Object[] args) {
++        if (args.length == 0) {
++            return this.block.getLocation();
++        }
++        return this.block.getLocation((Location) args[0]);
++    }
++
++    private static UnsupportedOperationException unsupported(Method method) {
++        return new UnsupportedOperationException(
++            "BlockState method '" + method.getName()
++                + "' requires a native snapshot or write contract that PatchBukkit does not yet expose"
++        );
++    }
++}
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
 index e8c2c36e741efe5d2b3d52f3bf75a944afa1f614..4766cfa513aefbae49a185a9969fc54603d58673 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
@@ -6244,10 +6413,10 @@ index 12c48c047ff187a57c64e55758e0867f429c35f0..d3addd5d3c7127fb5c1cafb1b073e8bd
  }
 diff --git a/proto/patchbukkit/events/block_events.proto b/proto/patchbukkit/events/block_events.proto
 new file mode 100644
-index 0000000000000000000000000000000000000000..55bc00497809280c49b3cf69d27e360e2eb43305
+index 0000000000000000000000000000000000000000..ca0ad48f1d5875a1e8c4b8037d061d5477a10210
 --- /dev/null
 +++ b/proto/patchbukkit/events/block_events.proto
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,32 @@
 +syntax = "proto3";
 +
 +package patchbukkit.events;
@@ -6269,13 +6438,19 @@ index 0000000000000000000000000000000000000000..55bc00497809280c49b3cf69d27e360e
 +  bool drop_items = 4;
 +}
 +
++message BlockPlaceEvent {
++  patchbukkit.common.UUID player_uuid = 1;
++  BlockReference block = 2;
++  bool can_build = 3;
++}
++
 +message PlayerInteractEvent {
 +  patchbukkit.common.UUID player_uuid = 1;
 +  string action = 2;
 +  optional BlockReference clicked_block = 3;
 +}
 diff --git a/proto/patchbukkit/events/event.proto b/proto/patchbukkit/events/event.proto
-index f678892e55a10a485c5cb078e41018c2011cd8c8..843c033e45911f92676e08189318811f5f22f1ca 100644
+index f678892e55a10a485c5cb078e41018c2011cd8c8..06543ea1281662d87f6a50b6f28e6f887dafc547 100644
 --- a/proto/patchbukkit/events/event.proto
 +++ b/proto/patchbukkit/events/event.proto
 @@ -3,6 +3,7 @@ syntax = "proto3";
@@ -6286,7 +6461,7 @@ index f678892e55a10a485c5cb078e41018c2011cd8c8..843c033e45911f92676e08189318811f
  import "patchbukkit/events/player_events.proto";
  
  option java_multiple_files = true;
-@@ -11,9 +12,32 @@ option java_package = "patchbukkit.events";
+@@ -11,9 +12,33 @@ option java_package = "patchbukkit.events";
  message Event {
    oneof data {
      PlayerJoinEvent player_join = 1;
@@ -6305,6 +6480,7 @@ index f678892e55a10a485c5cb078e41018c2011cd8c8..843c033e45911f92676e08189318811f
 +    RemoteServerCommandEvent remote_server_command = 14;
 +    BlockBreakEvent block_break = 15;
 +    PlayerInteractEvent player_interact = 16;
++    BlockPlaceEvent block_place = 17;
    }
  }
  
@@ -10115,10 +10291,10 @@ index 484dc62a8fcd2d766938ef048eb43b54d4f06194..22d354c332b62c7ff8aa4c4948a9d6a2
      }
  
 diff --git a/rust/src/events/handler.rs b/rust/src/events/handler.rs
-index 6705e20c842b3f59782cc8f7d29f03011386ea6c..2c451dde1b7dc0b03ec77223338bf3257fdc3881 100644
+index 6705e20c842b3f59782cc8f7d29f03011386ea6c..da0880ec4f75791b867385e7af5c01269d70db41 100644
 --- a/rust/src/events/handler.rs
 +++ b/rust/src/events/handler.rs
-@@ -6,12 +6,22 @@ use pumpkin::entity::player::Player;
+@@ -6,12 +6,23 @@ use pumpkin::entity::player::Player;
  use pumpkin::plugin::{BoxFuture, Cancellable, EventHandler, Payload};
  use pumpkin::server::Server;
  use pumpkin_api_macros::with_runtime;
@@ -10135,15 +10311,16 @@ index 6705e20c842b3f59782cc8f7d29f03011386ea6c..2c451dde1b7dc0b03ec77223338bf325
 -use crate::proto::patchbukkit::events::{Event, PlayerJoinEvent};
 +use crate::proto::patchbukkit::events::{
 +    AsyncPlayerPreLoginEvent, AsyncTabCompleteEvent, BlockBreakEvent as ProtoBlockBreakEvent,
-+    BlockReference, Event, PlayerChangedWorldEvent, PlayerChatEvent, PlayerCommandPreprocessEvent,
-+    PlayerCommandsSendEvent, PlayerGameModeChangeEvent,
-+    PlayerInteractEvent as ProtoPlayerInteractEvent, PlayerJoinEvent, PlayerLoginEvent,
-+    PlayerQuitEvent, PlayerRespawnEvent, RemoteServerCommandEvent, ServerCommandEvent,
++    BlockPlaceEvent as ProtoBlockPlaceEvent, BlockReference, Event, PlayerChangedWorldEvent,
++    PlayerChatEvent, PlayerCommandPreprocessEvent, PlayerCommandsSendEvent,
++    PlayerGameModeChangeEvent, PlayerInteractEvent as ProtoPlayerInteractEvent, PlayerJoinEvent,
++    PlayerLoginEvent, PlayerQuitEvent, PlayerRespawnEvent, RemoteServerCommandEvent,
++    ServerCommandEvent,
 +};
  
  pub struct EventContext {
      pub server: Arc<Server>,
-@@ -26,6 +36,245 @@ pub struct JvmEventPayload {
+@@ -26,6 +37,291 @@ pub struct JvmEventPayload {
  pub trait PatchBukkitEvent {
      fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload;
      fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()>;
@@ -10225,6 +10402,52 @@ index 6705e20c842b3f59782cc8f7d29f03011386ea6c..2c451dde1b7dc0b03ec77223338bf325
 +
 +    fn should_forward(&self) -> bool {
 +        self.player.is_some()
++    }
++}
++
++impl PatchBukkitEvent for pumpkin::plugin::block::block_place::BlockPlaceEvent {
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::BlockPlace(ProtoBlockPlaceEvent {
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
++                    block: Some(block_reference(
++                        self.player.world().uuid,
++                        &self.block_position,
++                        self.block_placed,
++                    )),
++                    can_build: self.can_build,
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        let Data::BlockPlace(event) = data else {
++            return None;
++        };
++        let player_uuid = uuid::Uuid::parse_str(&event.player_uuid?.value).ok()?;
++        if player_uuid != self.player.gameprofile.id {
++            return None;
++        }
++        server.get_player_by_uuid(player_uuid)?;
++
++        let position = event.block?.position?;
++        if position.x != self.block_position.0.x
++            || position.y != self.block_position.0.y
++            || position.z != self.block_position.0.z
++        {
++            return None;
++        }
++
++        self.can_build = event.can_build;
++        Some(())
 +    }
 +}
 +
@@ -10389,7 +10612,7 @@ index 6705e20c842b3f59782cc8f7d29f03011386ea6c..2c451dde1b7dc0b03ec77223338bf325
  }
  
  impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent {
-@@ -52,6 +301,416 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent
+@@ -52,6 +348,416 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent
                  self.join_message = serde_json::from_str(&event.join_message).ok()?;
                  server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
              }
@@ -10806,7 +11029,7 @@ index 6705e20c842b3f59782cc8f7d29f03011386ea6c..2c451dde1b7dc0b03ec77223338bf325
          }
  
          Some(())
-@@ -75,6 +734,59 @@ impl<E: PatchBukkitEvent> PatchBukkitEventHandler<E> {
+@@ -75,6 +781,59 @@ impl<E: PatchBukkitEvent> PatchBukkitEventHandler<E> {
      }
  }
  
@@ -10866,7 +11089,7 @@ index 6705e20c842b3f59782cc8f7d29f03011386ea6c..2c451dde1b7dc0b03ec77223338bf325
  #[with_runtime(global)]
  impl<E> EventHandler<E> for PatchBukkitEventHandler<E>
  where
-@@ -88,28 +800,30 @@ where
+@@ -88,28 +847,30 @@ where
          let command_tx = self.command_tx.clone();
  
          Box::pin(async move {
@@ -11064,7 +11287,7 @@ index eed3decebb19927ebf20818c133e0c417280ffde..b0d700db907de60611f6f97613807086
          })
  }
 diff --git a/rust/src/java/native_callbacks/events.rs b/rust/src/java/native_callbacks/events.rs
-index d71e36d4bd8c7ba1a14120667d5585494b3c0b6a..6584c4ba54ce6ff5ebfb015d57920eecbe205d24 100644
+index d71e36d4bd8c7ba1a14120667d5585494b3c0b6a..a41eca7ecc5571087081191e757dcfd2db9bd325 100644
 --- a/rust/src/java/native_callbacks/events.rs
 +++ b/rust/src/java/native_callbacks/events.rs
 @@ -4,7 +4,7 @@ use pumpkin::plugin::EventPriority;
@@ -11117,7 +11340,7 @@ index d71e36d4bd8c7ba1a14120667d5585494b3c0b6a..6584c4ba54ce6ff5ebfb015d57920eec
                  "org.bukkit.event.player.PlayerJoinEvent" => {
                      context
                          .register_event::<
-@@ -50,6 +84,217 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
+@@ -50,6 +84,234 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                          )
                          .await;
                  }
@@ -11283,6 +11506,23 @@ index d71e36d4bd8c7ba1a14120667d5585494b3c0b6a..6584c4ba54ce6ff5ebfb015d57920eec
 +                        )
 +                        .await;
 +                }
++                "org.bukkit.event.block.BlockPlaceEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::block::block_place::BlockPlaceEvent,
++                            PatchBukkitEventHandler<
++                                pumpkin::plugin::block::block_place::BlockPlaceEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
 +                "org.bukkit.event.player.PlayerInteractEvent" => {
 +                    context
 +                        .register_event::<
@@ -11335,7 +11575,7 @@ index d71e36d4bd8c7ba1a14120667d5585494b3c0b6a..6584c4ba54ce6ff5ebfb015d57920eec
                  _ => {
                      tracing::warn!(
                          "Unsupported Bukkit event type '{}' from plugin '{}'",
-@@ -84,6 +329,7 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
+@@ -84,6 +346,7 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                      context.server.plugin_manager.fire(pumpkin_event).await;
                      Some(true)
                  }

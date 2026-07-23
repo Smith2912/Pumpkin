@@ -96,7 +96,8 @@ commit passes all of these checks:
 2. Display name, lore, enchantments, durability damage, repair cost, and
    unbreakable state round-trip from Pumpkin to Bukkit and back.
 3. `Registry.ENCHANTMENT` is populated from Pumpkin and Bukkit's built-in
-   enchantment constants use those registry instances.
+   enchantment constants use those registry instances without recursive static
+   initialization.
 4. Applying supported metadata preserves every unrelated native item
    component.
 5. Unsupported metadata mutations fail explicitly rather than appearing to
@@ -131,12 +132,15 @@ only when one deployed commit passes all of these checks:
    conformance block-read check, and live protected build/break/interact
    workflow all pass.
 
-The first slice covers live block reads, `BlockBreakEvent`, and
-`PlayerInteractEvent`. Block placement still needs Pumpkin to expose the
-clicked-block position, face, hand, and replaced state. Burn, ignite, flow,
-piston, explosion, entity-damage, hanging, dispense, craft, pickup, and drop
-events remain separate native contracts and are not represented as complete
-by listener registration alone.
+The first slice covers live block reads, `BlockBreakEvent`,
+`BlockPlaceEvent`, and `PlayerInteractEvent`. Placement carries the real
+placed position, placed material, player, cancellation, `canBuild`, and the
+live replaced block state. Pumpkin does not yet expose the placed-against
+position, face, or hand, so those fields use documented placeholders and are
+not counted as complete. Burn, ignite, flow, piston, explosion,
+entity-damage, hanging, dispense, craft, pickup, and drop events remain
+separate native contracts and are not represented as complete by listener
+registration alone.
 
 ## Human verification runbook
 
