@@ -271,6 +271,41 @@ remain synchronous inside the Java command map. The kick event's reason and
 cancellation are bridged in this batch; custom kick leave-message propagation
 remains a separate quit-lifecycle milestone.
 
+## Server settings snapshot batch gate
+
+The server-settings batch used by Essentials and administration plugins is
+complete only when one deployed commit passes all of these checks:
+
+1. One native configuration snapshot supplies Bukkit's player limit, Java
+   port and bind address, view and simulation distances, MOTD, online mode,
+   global flight policy, hardcore state, default game mode, forced-game-mode
+   flag, End/Nether flags, IP logging policy, world type, structure generation,
+   maximum world size, and spawn-protection radius.
+2. Values come from Pumpkin's active configuration or an explicitly documented
+   Pumpkin capability. The bridge must not keep a second Java settings cache.
+   Pumpkin has no global anti-flight kick policy, so `getAllowFlight` is true;
+   it has no spawn-protection radius, so `getSpawnRadius` is zero.
+3. Unsigned native player limits cannot wrap into negative Bukkit values.
+   Ports and distances preserve their configured values.
+4. Bukkit `getDefaultGameMode` and `setDefaultGameMode` round-trip through
+   Pumpkin's live default-game-mode lock. Invalid names are rejected by the
+   native bridge and do not change the current value.
+5. The conformance suite reads every exposed setting and temporarily changes
+   the default game mode, verifies the native update, and restores the original
+   value in a `finally` block.
+6. The pinned patch applies cleanly and the clean replay passes the full Java,
+   protobuf, test-plugin, and Rust bridge builds.
+7. Human verification runs `/pbtest server`, compares the reported port,
+   player limit, distances, and MOTD with the reviewed Pumpkin configuration,
+   and confirms a newly joining player receives the selected default game
+   mode.
+
+Runtime changes to maximum players, MOTD, spawn radius, and the immutable base
+configuration are not claimed by this gate. Their Bukkit setters remain
+explicitly unsupported until Pumpkin owns mutable runtime state for the login
+limit, status response, and world policy. `setDefaultGameMode` changes the live
+value for this process and resets from configuration after restart.
+
 ## Human verification runbook
 
 Every compatibility change must leave evidence a maintainer can reproduce and

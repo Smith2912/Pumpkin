@@ -493,15 +493,16 @@ index e8bd1a6..89d8a40 100644
 +    }
  }
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
-index 1940bf5..0130f08 100644
+index 1940bf5..8f61b9c 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
-@@ -1,10 +1,15 @@
+@@ -1,10 +1,16 @@
  package org.patchbukkit.testplugin.tests;
  
 +import java.io.File;
 +import java.lang.reflect.Modifier;
  import org.bukkit.Bukkit;
++import org.bukkit.GameMode;
 +import org.bukkit.World;
  import org.bukkit.Server;
 +import org.bukkit.block.Block;
@@ -512,7 +513,7 @@ index 1940bf5..0130f08 100644
  import org.bukkit.scheduler.BukkitScheduler;
  import org.patchbukkit.testplugin.ConformanceTest;
  import org.patchbukkit.testplugin.TestCategory;
-@@ -15,6 +20,30 @@ import static org.patchbukkit.testplugin.TestAssertions.*;
+@@ -15,6 +21,30 @@ import static org.patchbukkit.testplugin.TestAssertions.*;
  
  public final class ServerTests {
  
@@ -543,7 +544,7 @@ index 1940bf5..0130f08 100644
      private final JavaPlugin plugin;
  
      public ServerTests(JavaPlugin plugin) {
-@@ -39,12 +68,72 @@ public final class ServerTests {
+@@ -39,12 +69,72 @@ public final class ServerTests {
          assertNotNull(version, "Server.getBukkitVersion()");
      }
  
@@ -616,13 +617,53 @@ index 1940bf5..0130f08 100644
      @ConformanceTest(name = "Server.getConsoleSender() returns non-null", category = TestCategory.SERVER)
      public void testGetConsoleSender() {
          ConsoleCommandSender cs = Bukkit.getServer().getConsoleSender();
-@@ -75,6 +164,11 @@ public final class ServerTests {
+@@ -75,6 +165,51 @@ public final class ServerTests {
          assertNotNull(unsafe, "Server.getUnsafe()");
      }
  
 +    @ConformanceTest(name = "Server.getOnlineMode() is implemented", category = TestCategory.SERVER)
 +    public void testGetOnlineMode() {
 +        Bukkit.getServer().getOnlineMode();
++    }
++
++    @ConformanceTest(name = "Server configuration snapshot exposes native settings", category = TestCategory.SERVER)
++    public void testNativeServerConfigurationSnapshot() {
++        Server server = Bukkit.getServer();
++        assertTrue(server.getMaxPlayers() >= 0, "max players should be non-negative");
++        assertTrue(server.getPort() >= 0 && server.getPort() <= 65535, "port should be valid");
++        assertTrue(server.getViewDistance() > 0, "view distance should be positive");
++        assertTrue(server.getSimulationDistance() > 0, "simulation distance should be positive");
++        assertNotNull(server.getIp(), "server IP");
++        assertNotNull(server.getMotd(), "server MOTD");
++        assertTrue(!server.getWorldType().isBlank(), "world type should not be blank");
++        assertTrue(server.getMaxWorldSize() > 0, "max world size should be positive");
++        assertTrue(server.getSpawnRadius() >= 0, "spawn radius should be non-negative");
++        server.getAllowFlight();
++        server.getAllowEnd();
++        server.getAllowNether();
++        server.getGenerateStructures();
++        server.isHardcore();
++        server.isLoggingIPs();
++        server.forcesDefaultGameMode();
++    }
++
++    @ConformanceTest(name = "Server default game mode round-trips through Pumpkin", category = TestCategory.SERVER)
++    public void testDefaultGameModeRoundTrip() {
++        Server server = Bukkit.getServer();
++        GameMode original = server.getDefaultGameMode();
++        GameMode replacement = original == GameMode.CREATIVE
++            ? GameMode.SURVIVAL
++            : GameMode.CREATIVE;
++
++        try {
++            server.setDefaultGameMode(replacement);
++            assertTrue(
++                server.getDefaultGameMode() == replacement,
++                "default game mode should reflect the native update"
++            );
++        } finally {
++            server.setDefaultGameMode(original);
++        }
 +    }
 +
      @ConformanceTest(name = "Server.suggestPlayerNamesWhenNullTabCompletions() returns boolean", category = TestCategory.SERVER)
@@ -1368,10 +1409,10 @@ index d90de1b..645ffa2 100644
      public boolean isTransitiveDependency(
          PluginMeta pluginMeta,
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
-index d935769..8f1a4d6 100644
+index d935769..8296285 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
-@@ -7,12 +7,15 @@ import io.papermc.paper.ban.BanListType;
+@@ -7,26 +7,32 @@ import io.papermc.paper.ban.BanListType;
  import io.papermc.paper.configuration.ServerConfiguration;
  import io.papermc.paper.datapack.DatapackManager;
  import io.papermc.paper.math.Position;
@@ -1387,7 +1428,9 @@ index d935769..8f1a4d6 100644
  import java.net.InetAddress;
  import java.util.Collection;
  import java.util.Collections;
-@@ -21,6 +24,7 @@ import java.util.List;
+ import java.util.Iterator;
+ import java.util.List;
++import java.util.Locale;
  import java.util.Map;
  import java.util.Set;
  import java.util.UUID;
@@ -1395,7 +1438,14 @@ index d935769..8f1a4d6 100644
  import java.util.function.Consumer;
  import java.util.logging.Level;
  import java.util.logging.Logger;
-@@ -70,6 +74,7 @@ import org.bukkit.inventory.Inventory;
+ import net.kyori.adventure.audience.Audience;
+ import net.kyori.adventure.key.Key;
+ import net.kyori.adventure.text.Component;
++import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+ import org.bukkit.BanList;
+ import org.bukkit.GameMode;
+ import org.bukkit.Keyed;
+@@ -70,6 +76,7 @@ import org.bukkit.inventory.Inventory;
  import org.bukkit.inventory.InventoryHolder;
  import org.bukkit.inventory.ItemCraftResult;
  import org.bukkit.inventory.ItemFactory;
@@ -1403,7 +1453,7 @@ index d935769..8f1a4d6 100644
  import org.bukkit.inventory.ItemStack;
  import org.bukkit.inventory.Merchant;
  import org.bukkit.inventory.Recipe;
-@@ -93,10 +98,13 @@ import org.jetbrains.annotations.Nullable;
+@@ -93,10 +100,15 @@ import org.jetbrains.annotations.Nullable;
  import org.patchbukkit.command.PatchBukkitCommandMap;
  import org.patchbukkit.command.PatchBukkitConsoleCommandSender;
  import org.patchbukkit.events.PatchBukkitEventManager;
@@ -1414,10 +1464,12 @@ index d935769..8f1a4d6 100644
  
  import patchbukkit.bridge.NativeBridgeFfi;
 +import patchbukkit.common.EmptyRequest;
++import patchbukkit.config.GetPatchBukkitConfigResponse;
++import patchbukkit.config.SetServerDefaultGameModeRequest;
  import patchbukkit.log.LogLevel;
  import patchbukkit.log.SendLogRequest;
  
-@@ -110,10 +118,13 @@ public class PatchBukkitServer implements Server {
+@@ -110,10 +122,13 @@ public class PatchBukkitServer implements Server {
      private final BukkitScheduler scheduler = new PatchBukkitScheduler();
      private final PatchBukkitPluginManager pluginManager = new PatchBukkitPluginManager(this);
      private final ServicesManager servicesManager = new PatchBukkitServicesManager();
@@ -1431,7 +1483,7 @@ index d935769..8f1a4d6 100644
  
      private static final Logger logger = Logger.getLogger("Minecraft");
  
-@@ -141,11 +152,17 @@ public class PatchBukkitServer implements Server {
+@@ -141,11 +156,17 @@ public class PatchBukkitServer implements Server {
          root.addHandler(new java.util.logging.Handler() {
              @Override
              public void publish(java.util.logging.LogRecord record) {
@@ -1450,7 +1502,24 @@ index d935769..8f1a4d6 100644
                                  .setLoggerName(record.getLoggerName())
                                  .build()
                  );
-@@ -163,6 +180,44 @@ public class PatchBukkitServer implements Server {
+@@ -155,6 +176,16 @@ public class PatchBukkitServer implements Server {
+         });
+     }
+
++    private GetPatchBukkitConfigResponse nativeConfig() {
++        return NativeBridgeFfi.getPatchBukkitConfig(
++            EmptyRequest.newBuilder().setPresent(true).build()
++        );
++    }
++
++    private static int clampUnsignedInt(int value) {
++        return (int) Math.min(Integer.toUnsignedLong(value), Integer.MAX_VALUE);
++    }
++
+     /**
+      * Called from Rust when a player joins the Pumpkin server
+      */
+@@ -163,6 +194,44 @@ public class PatchBukkitServer implements Server {
          this.onlinePlayersByName.put(player.getName().toLowerCase(), player);
      }
  
@@ -1495,7 +1564,7 @@ index d935769..8f1a4d6 100644
      public PatchBukkitEventManager getEventManager() {
          return this.pluginManager.getEventManager();
      }
-@@ -171,6 +226,7 @@ public class PatchBukkitServer implements Server {
+@@ -171,6 +240,7 @@ public class PatchBukkitServer implements Server {
       * Called from Rust when a player leaves
       */
      public void unregisterPlayer(UUID uuid) {
@@ -1503,7 +1572,7 @@ index d935769..8f1a4d6 100644
          Player p = this.onlinePlayers.remove(uuid);
          if (p != null) {
              this.onlinePlayersByName.remove(p.getName().toLowerCase());
-@@ -181,6 +237,10 @@ public class PatchBukkitServer implements Server {
+@@ -181,6 +251,10 @@ public class PatchBukkitServer implements Server {
          this.pluginManager.registerPlugin(plugin);
      }
  
@@ -1514,7 +1583,7 @@ index d935769..8f1a4d6 100644
      @Override
      public void sendPluginMessage(
          @NotNull Plugin source,
-@@ -211,10 +271,9 @@ public class PatchBukkitServer implements Server {
+@@ -211,10 +285,9 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @NotNull File getPluginsFolder() {
@@ -1528,7 +1597,7 @@ index d935769..8f1a4d6 100644
      }
  
      @Override
-@@ -234,10 +293,7 @@ public class PatchBukkitServer implements Server {
+@@ -234,10 +307,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @NotNull String getMinecraftVersion() {
@@ -1540,7 +1609,110 @@ index d935769..8f1a4d6 100644
      }
  
      @Override
-@@ -531,10 +587,17 @@ public class PatchBukkitServer implements Server {
+@@ -247,10 +317,7 @@ public class PatchBukkitServer implements Server {
+
+     @Override
+     public int getMaxPlayers() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getMaxPlayers'"
+-        );
++        return clampUnsignedInt(nativeConfig().getMaxPlayers());
+     }
+
+     @Override
+@@ -263,80 +330,52 @@ public class PatchBukkitServer implements Server {
+
+     @Override
+     public int getPort() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getPort'"
+-        );
++        return nativeConfig().getPort();
+     }
+
+     @Override
+     public int getViewDistance() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getViewDistance'"
+-        );
++        return nativeConfig().getViewDistance();
+     }
+
+     @Override
+     public int getSimulationDistance() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getSimulationDistance'"
+-        );
++        return nativeConfig().getSimulationDistance();
+     }
+
+     @Override
+     public @NotNull String getIp() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getIp'");
++        return nativeConfig().getIp();
+     }
+
+     @Override
+     public @NotNull String getWorldType() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getWorldType'"
+-        );
++        return nativeConfig().getWorldType();
+     }
+
+     @Override
+     public boolean getGenerateStructures() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getGenerateStructures'"
+-        );
++        return nativeConfig().getGenerateStructures();
+     }
+
+     @Override
+     public int getMaxWorldSize() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getMaxWorldSize'"
+-        );
++        return nativeConfig().getMaxWorldSize();
+     }
+
+     @Override
+     public boolean getAllowEnd() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getAllowEnd'"
+-        );
++        return nativeConfig().getAllowEnd();
+     }
+
+     @Override
+     public boolean getAllowNether() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getAllowNether'"
+-        );
++        return nativeConfig().getAllowNether();
+     }
+
+     @Override
+     public boolean isLoggingIPs() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'isLoggingIPs'"
+-        );
++        return nativeConfig().getLoggingIps();
+     }
+
+     @Override
+@@ -531,10 +570,17 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @NotNull List<World> getWorlds() {
@@ -1561,7 +1733,7 @@ index d935769..8f1a4d6 100644
      }
  
      @Override
-@@ -587,26 +650,31 @@ public class PatchBukkitServer implements Server {
+@@ -587,26 +633,31 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @Nullable World getWorld(@NotNull String name) {
@@ -1605,7 +1777,7 @@ index d935769..8f1a4d6 100644
      }
  
      @Override
-@@ -718,10 +786,7 @@ public class PatchBukkitServer implements Server {
+@@ -718,10 +769,7 @@ public class PatchBukkitServer implements Server {
          @NotNull CommandSender sender,
          @NotNull String commandLine
      ) throws CommandException {
@@ -1617,7 +1789,19 @@ index d935769..8f1a4d6 100644
      }
  
      @Override
-@@ -867,10 +932,9 @@ public class PatchBukkitServer implements Server {
+@@ -827,10 +875,7 @@ public class PatchBukkitServer implements Server {
+
+     @Override
+     public int getSpawnRadius() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getSpawnRadius'"
+-        );
++        return nativeConfig().getSpawnRadius();
+     }
+
+     @Override
+@@ -867,10 +912,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public boolean getOnlineMode() {
@@ -1625,13 +1809,71 @@ index d935769..8f1a4d6 100644
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getOnlineMode'"
 -        );
-+        return NativeBridgeFfi
-+            .getPatchBukkitConfig(EmptyRequest.newBuilder().setPresent(true).build())
-+            .getOnlineMode();
++        return nativeConfig().getOnlineMode();
+     }
+
+     @Override
+@@ -883,18 +925,12 @@ public class PatchBukkitServer implements Server {
+
+     @Override
+     public boolean getAllowFlight() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getAllowFlight'"
+-        );
++        return nativeConfig().getAllowFlight();
+     }
+
+     @Override
+     public boolean isHardcore() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'isHardcore'"
+-        );
++        return nativeConfig().getHardcore();
      }
  
      @Override
-@@ -1224,10 +1288,7 @@ public class PatchBukkitServer implements Server {
+@@ -1043,26 +1079,27 @@ public class PatchBukkitServer implements Server {
+
+     @Override
+     public @NotNull GameMode getDefaultGameMode() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getDefaultGameMode'"
++        return GameMode.valueOf(
++            nativeConfig().getDefaultGameMode().toUpperCase(Locale.ROOT)
+         );
+     }
+
+     @Override
+     public void setDefaultGameMode(@NotNull GameMode mode) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'setDefaultGameMode'"
+-        );
++        Preconditions.checkNotNull(mode, "Game mode cannot be null");
++        boolean accepted = NativeBridgeFfi.setServerDefaultGameMode(
++            SetServerDefaultGameModeRequest.newBuilder()
++                .setGameMode(mode.name().toLowerCase(Locale.ROOT))
++                .build()
++        ).getSuccess();
++        if (!accepted) {
++            throw new IllegalStateException("Native server rejected default game mode");
++        }
+     }
+
+     @Override
+     public boolean forcesDefaultGameMode() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'forcesDefaultGameMode'"
+-        );
++        return nativeConfig().getForceDefaultGameMode();
+     }
+
+     @Override
+@@ -1224,16 +1261,12 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public boolean isPrimaryThread() {
@@ -1643,7 +1885,26 @@ index d935769..8f1a4d6 100644
      }
  
      @Override
-@@ -1284,18 +1345,12 @@ public class PatchBukkitServer implements Server {
+     public @NotNull Component motd() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'motd'");
++        return LegacyComponentSerializer.legacySection().deserialize(getMotd());
+     }
+
+     @Override
+@@ -1252,10 +1285,7 @@ public class PatchBukkitServer implements Server {
+
+     @Override
+     public @NotNull String getMotd() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getMotd'"
+-        );
++        return nativeConfig().getMotd();
+     }
+
+     @Override
+@@ -1284,18 +1314,12 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public @NotNull WarningState getWarningState() {
@@ -1664,7 +1925,7 @@ index d935769..8f1a4d6 100644
      }
  
      @Override
-@@ -1541,10 +1596,7 @@ public class PatchBukkitServer implements Server {
+@@ -1541,10 +1565,7 @@ public class PatchBukkitServer implements Server {
          @NotNull NamespacedKey tag,
          @NotNull Class<T> clazz
      ) {
@@ -1676,7 +1937,7 @@ index d935769..8f1a4d6 100644
      }
  
      @Override
-@@ -1552,10 +1604,7 @@ public class PatchBukkitServer implements Server {
+@@ -1552,10 +1573,7 @@ public class PatchBukkitServer implements Server {
          @NotNull String registry,
          @NotNull Class<T> clazz
      ) {
@@ -1688,7 +1949,7 @@ index d935769..8f1a4d6 100644
      }
  
      @Override
-@@ -1589,10 +1638,7 @@ public class PatchBukkitServer implements Server {
+@@ -1589,10 +1607,7 @@ public class PatchBukkitServer implements Server {
      public <T extends Keyed> @Nullable Registry<T> getRegistry(
          @NotNull Class<T> tClass
      ) {
@@ -1700,7 +1961,7 @@ index d935769..8f1a4d6 100644
      }
  
      @Override
-@@ -1705,10 +1751,7 @@ public class PatchBukkitServer implements Server {
+@@ -1705,10 +1720,7 @@ public class PatchBukkitServer implements Server {
  
      @Override
      public boolean isStopping() {
@@ -6886,7 +7147,7 @@ index e8c2c36..4766cfa 100644
  
      @Override
 diff --git a/proto/patchbukkit/bridge.proto b/proto/patchbukkit/bridge.proto
-index 85df0ae..05b780e 100644
+index 85df0ae..c59cdcb 100644
 --- a/proto/patchbukkit/bridge.proto
 +++ b/proto/patchbukkit/bridge.proto
 @@ -9,6 +9,8 @@ import "patchbukkit/config.proto";
@@ -6922,6 +7183,12 @@ index 85df0ae..05b780e 100644
  
    rpc GetRegistryData(patchbukkit.registry.GetRegistryDataRequest) returns (patchbukkit.registry.GetRegistryDataResponse);
  
+@@ -31,4 +50,5 @@ service NativeBridge {
+   rpc SendLog(patchbukkit.log.SendLogRequest) returns (google.protobuf.Empty);
+
+   rpc GetPatchBukkitConfig(patchbukkit.common.EmptyRequest) returns (patchbukkit.config.GetPatchBukkitConfigResponse);
++  rpc SetServerDefaultGameMode(patchbukkit.config.SetServerDefaultGameModeRequest) returns (patchbukkit.config.SetServerDefaultGameModeResponse);
+ }
 diff --git a/proto/patchbukkit/common/types.proto b/proto/patchbukkit/common/types.proto
 index 52ab136..d1fade8 100644
 --- a/proto/patchbukkit/common/types.proto
@@ -6969,14 +7236,39 @@ index 52ab136..d1fade8 100644
 +  bool present = 1;
 +}
 diff --git a/proto/patchbukkit/config.proto b/proto/patchbukkit/config.proto
-index 12c48c0..d3addd5 100644
+index 12c48c0..14f5a74 100644
 --- a/proto/patchbukkit/config.proto
 +++ b/proto/patchbukkit/config.proto
-@@ -9,4 +9,5 @@ option java_package = "patchbukkit.config";
+@@ -9,4 +9,30 @@ option java_package = "patchbukkit.config";
  
  message GetPatchBukkitConfigResponse {
    string minimum_supported_plugin_api = 1;
 +  bool online_mode = 2;
++  uint32 max_players = 3;
++  uint32 port = 4;
++  uint32 view_distance = 5;
++  uint32 simulation_distance = 6;
++  string ip = 7;
++  bool allow_flight = 8;
++  bool hardcore = 9;
++  string default_game_mode = 10;
++  bool force_default_game_mode = 11;
++  string motd = 12;
++  uint32 spawn_radius = 13;
++  bool allow_end = 14;
++  bool allow_nether = 15;
++  bool logging_ips = 16;
++  string world_type = 17;
++  bool generate_structures = 18;
++  uint32 max_world_size = 19;
++}
++
++message SetServerDefaultGameModeRequest {
++  string game_mode = 1;
++}
++
++message SetServerDefaultGameModeResponse {
++  bool success = 1;
  }
 diff --git a/proto/patchbukkit/events/block_events.proto b/proto/patchbukkit/events/block_events.proto
 new file mode 100644
@@ -12554,21 +12846,90 @@ index 0000000..a37c488
 +    })
 +}
 diff --git a/rust/src/java/native_callbacks/config.rs b/rust/src/java/native_callbacks/config.rs
-index eed3dec..b0d700d 100644
+index eed3dec..6c4efc6 100644
 --- a/rust/src/java/native_callbacks/config.rs
 +++ b/rust/src/java/native_callbacks/config.rs
-@@ -15,5 +15,12 @@ pub fn ffi_native_bridge_get_patch_bukkit_config_impl(
-                 .minimum_supported_plugin_api
-                 .clone()
-                 .unwrap_or("0.0.0".to_string()),
-+            online_mode: context
-+                .plugin_context
-+                .server
-+                .advanced_config
-+                .networking
-+                .java
-+                .online_mode,
+@@ -1,19 +1,71 @@
++use std::str::FromStr;
++
++use pumpkin_util::GameMode;
++
+ use crate::{
+     java::native_callbacks::CALLBACK_CONTEXT,
+-    proto::patchbukkit::{common::EmptyRequest, config::GetPatchBukkitConfigResponse},
++    proto::patchbukkit::{
++        common::EmptyRequest,
++        config::{GetPatchBukkitConfigResponse, SetServerDefaultGameModeRequest},
++    },
+ };
+
+ pub fn ffi_native_bridge_get_patch_bukkit_config_impl(
+     _request: EmptyRequest,
+ ) -> Option<GetPatchBukkitConfigResponse> {
+-    CALLBACK_CONTEXT
+-        .get()
+-        .map(|context| GetPatchBukkitConfigResponse {
+-            minimum_supported_plugin_api: context
+-                .config
+-                .settings
+-                .minimum_supported_plugin_api
+-                .clone()
+-                .unwrap_or("0.0.0".to_string()),
++    let context = CALLBACK_CONTEXT.get()?;
++    let server = &context.plugin_context.server;
++    let java = &server.advanced_config.networking.java;
++    let default_game_mode = tokio::task::block_in_place(|| {
++        context
++            .runtime
++            .block_on(async { server.defaultgamemode.lock().await.gamemode })
++    });
++
++    Some(GetPatchBukkitConfigResponse {
++        minimum_supported_plugin_api: context
++            .config
++            .settings
++            .minimum_supported_plugin_api
++            .clone()
++            .unwrap_or("0.0.0".to_string()),
++        online_mode: java.online_mode,
++        max_players: java.max_players,
++        port: u32::from(java.address.port()),
++        view_distance: u32::from(java.view_distance.get()),
++        simulation_distance: u32::from(java.simulation_distance.get()),
++        ip: java.address.ip().to_string(),
++        // Pumpkin grants or denies flight per-player and has no global
++        // anti-flight kick policy, so the Bukkit server policy is permissive.
++        allow_flight: true,
++        hardcore: server.basic_config.hardcore,
++        default_game_mode: default_game_mode.name().to_owned(),
++        force_default_game_mode: server.basic_config.force_gamemode,
++        motd: java.motd.clone(),
++        // Pumpkin does not currently enforce a vanilla spawn-protection radius.
++        spawn_radius: 0,
++        allow_end: server.basic_config.allow_end,
++        allow_nether: server.basic_config.allow_nether,
++        logging_ips: !server.basic_config.scrub_ips,
++        world_type: "DEFAULT".to_owned(),
++        // Pumpkin always generates world structures and uses the vanilla border.
++        generate_structures: true,
++        max_world_size: 29_999_984,
++    })
++}
++
++pub fn ffi_native_bridge_set_server_default_game_mode_impl(
++    request: SetServerDefaultGameModeRequest,
++) -> Option<bool> {
++    let context = CALLBACK_CONTEXT.get()?;
++    let game_mode = GameMode::from_str(&request.game_mode.to_ascii_lowercase()).ok()?;
++    let server = &context.plugin_context.server;
++
++    tokio::task::block_in_place(|| {
++        context.runtime.block_on(async {
++            server.defaultgamemode.lock().await.gamemode = game_mode;
          })
++    });
++
++    Some(true)
  }
 diff --git a/rust/src/java/native_callbacks/events.rs b/rust/src/java/native_callbacks/events.rs
 index d71e36d..4f016d3 100644
