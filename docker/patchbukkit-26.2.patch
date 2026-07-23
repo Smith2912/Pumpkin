@@ -1,5 +1,5 @@
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
-index d2250375c315de9f9dbab10a165c9125ce1cf4d7..ed666556085ceec4251a9112891b13a8e0484ece 100644
+index d225037..ed66655 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
 @@ -8,6 +8,17 @@ import org.patchbukkit.testplugin.tests.*;
@@ -21,7 +21,7 @@ index d2250375c315de9f9dbab10a165c9125ce1cf4d7..ed666556085ceec4251a9112891b13a8
      public void onEnable() {
          TestFramework framework = new TestFramework(getLogger());
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
-index 032bce02481cc9c7f0c95ca50d6df1fb974fe0a1..2b72119d0483478d125aab471f90f89691d4b072 100644
+index 032bce0..2b72119 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
 @@ -3,9 +3,14 @@ package org.patchbukkit.testplugin.tests;
@@ -83,8 +83,44 @@ index 032bce02481cc9c7f0c95ca50d6df1fb974fe0a1..2b72119d0483478d125aab471f90f896
 +    }
 +
  }
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
+index e8bd1a6..0a816fc 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
+@@ -1,8 +1,10 @@
+ package org.patchbukkit.testplugin.tests;
+ 
+ import org.bukkit.Bukkit;
++import org.bukkit.NamespacedKey;
+ import org.bukkit.Registry;
+ import org.bukkit.Sound;
++import org.bukkit.damage.DamageType;
+ import org.patchbukkit.testplugin.ConformanceTest;
+ import org.patchbukkit.testplugin.TestCategory;
+ import org.patchbukkit.testplugin.TestExpectation;
+@@ -33,6 +35,20 @@ public final class RegistryTests {
+         assertNotNull(stream, "Registry.SOUNDS.stream()");
+     }
+ 
++    @ConformanceTest(name = "Damage types are populated from Pumpkin", category = TestCategory.REGISTRY)
++    public void testDamageTypes() {
++        DamageType arrow = Registry.DAMAGE_TYPE.get(NamespacedKey.minecraft("arrow"));
++        assertNotNull(arrow, "minecraft:arrow damage type");
++        assertTrue(
++            DamageType.ARROW == arrow,
++            "DamageType.ARROW should use the registry instance"
++        );
++        assertTrue(
++            "death.attack.arrow".equals(arrow.getTranslationKey()),
++            "arrow translation key should match Pumpkin metadata"
++        );
++    }
++
+     @ConformanceTest(name = "Server.getRegistry(Sound.class) returns registry", category = TestCategory.REGISTRY,
+             expectation = TestExpectation.EXPECT_UNSUPPORTED)
+     public void testServerGetRegistry() {
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
-index 1940bf54213f88a47dbb0a48afbe8b519c55432d..553a40d85d2645bb17eb077a4c8f66523bf0917e 100644
+index 1940bf5..553a40d 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
 @@ -1,5 +1,6 @@
@@ -141,7 +177,7 @@ index 1940bf54213f88a47dbb0a48afbe8b519c55432d..553a40d85d2645bb17eb077a4c8f6652
      public void testSuggestPlayerNames() {
          boolean result = Bukkit.getServer().suggestPlayerNamesWhenNullTabCompletions();
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
-index 3a6b9c4fc24bc61ace3e61a8e6858549f9124d11..fcd1ec17fdd988a7fab67cf9dde16208e65a9baf 100644
+index 3a6b9c4..fcd1ec1 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
 @@ -11,11 +11,11 @@ import static org.patchbukkit.testplugin.TestAssertions.*;
@@ -160,7 +196,7 @@ index 3a6b9c4fc24bc61ace3e61a8e6858549f9124d11..fcd1ec17fdd988a7fab67cf9dde16208
      @ConformanceTest(name = "UnsafeValues.isSupportedApiVersion(\"1.21\") returns true", category = TestCategory.UNSAFE_VALUES)
 diff --git a/java/patchbukkit/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/java/patchbukkit/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9f759b8a172601bab826853686b5e0a7ba71f5a7
+index 0000000..9f759b8
 --- /dev/null
 +++ b/java/patchbukkit/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 @@ -0,0 +1,16 @@
@@ -182,7 +218,7 @@ index 0000000000000000000000000000000000000000..9f759b8a172601bab826853686b5e0a7
 +}
 diff --git a/java/patchbukkit/src/main/java/org/bukkit/plugin/SimplePluginManager.java b/java/patchbukkit/src/main/java/org/bukkit/plugin/SimplePluginManager.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..735217e21407b0ef5c468dff7826d1fee28cd620
+index 0000000..735217e
 --- /dev/null
 +++ b/java/patchbukkit/src/main/java/org/bukkit/plugin/SimplePluginManager.java
 @@ -0,0 +1,214 @@
@@ -401,7 +437,7 @@ index 0000000000000000000000000000000000000000..735217e21407b0ef5c468dff7826d1fe
 +    }
 +}
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginClassLoader.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginClassLoader.java
-index 21009c40b856febd090c87253c3dc60ca4340feb..0fd46d7c39e0e1c93f4dffd1f06d485ee0f56c7a 100644
+index 21009c4..0fd46d7 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginClassLoader.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginClassLoader.java
 @@ -10,12 +10,18 @@ import java.net.MalformedURLException;
@@ -606,7 +642,7 @@ index 21009c40b856febd090c87253c3dc60ca4340feb..0fd46d7c39e0e1c93f4dffd1f06d485e
      }
  }
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginLoader.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginLoader.java
-index 4a32cd43f4a45767e35d18921782dde052972abc..fb6c5feb88e7024ed806ad33fe086d3892ea471b 100644
+index 4a32cd4..fb6c5fe 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginLoader.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginLoader.java
 @@ -25,7 +25,7 @@ public class PatchBukkitPluginLoader implements PluginLoader {
@@ -649,7 +685,7 @@ index 4a32cd43f4a45767e35d18921782dde052972abc..fb6c5feb88e7024ed806ad33fe086d38
  
              Class<?> jarClass = Class.forName(mainClass, true, classLoader);
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
-index d90de1bc0af0e6d25e3f89b5d900fabbfb52cf1e..40e1ba2f80c5b2103fdac1ee11db54f925f492e1 100644
+index d90de1b..40e1ba2 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
 @@ -1,38 +1,30 @@
@@ -801,7 +837,7 @@ index d90de1bc0af0e6d25e3f89b5d900fabbfb52cf1e..40e1ba2f80c5b2103fdac1ee11db54f9
      public boolean isTransitiveDependency(
          PluginMeta pluginMeta,
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
-index d935769c48fad836d915921a2e9b2cddf21fa616..0ffc746cadfffac7002d2b5490ef2fe0402affe6 100644
+index d935769..0ffc746 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
 @@ -13,6 +13,8 @@ import io.papermc.paper.threadedregions.scheduler.RegionScheduler;
@@ -932,7 +968,7 @@ index d935769c48fad836d915921a2e9b2cddf21fa616..0ffc746cadfffac7002d2b5490ef2fe0
  
      @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
-index 53a254cf13a0998f2be353df309d9c3e7fd20bb7..9742416af83e7dc73cb6262a60b8fa8f5fb68b57 100644
+index 53a254c..9742416 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
 @@ -54,6 +54,10 @@ import patchbukkit.common.EmptyRequest;
@@ -967,8 +1003,137 @@ index 53a254cf13a0998f2be353df309d9c3e7fd20bb7..9742416af83e7dc73cb6262a60b8fa8f
  	}
  
  	@Override
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitDamageType.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitDamageType.java
+new file mode 100644
+index 0000000..4e2745c
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitDamageType.java
+@@ -0,0 +1,99 @@
++package org.patchbukkit.registry;
++
++import java.util.Objects;
++import org.bukkit.NamespacedKey;
++import org.bukkit.Registry;
++import org.bukkit.Sound;
++import org.bukkit.damage.DamageEffect;
++import org.bukkit.damage.DamageScaling;
++import org.bukkit.damage.DamageType;
++import org.bukkit.damage.DeathMessageType;
++import org.jetbrains.annotations.NotNull;
++import patchbukkit.registry.DamageTypeData;
++
++final class PatchBukkitDamageType implements DamageType {
++    private final NamespacedKey key;
++    private final String translationKey;
++    private final DamageScaling scaling;
++    private final DamageEffect effect;
++    private final DeathMessageType deathMessageType;
++    private final float exhaustion;
++
++    PatchBukkitDamageType(DamageTypeData data) {
++        this.key = Objects.requireNonNull(NamespacedKey.minecraft(data.getName()));
++        this.translationKey = data.getTranslationKey();
++        this.scaling = switch (data.getScaling()) {
++            case DAMAGE_SCALING_ALWAYS -> DamageScaling.ALWAYS;
++            case DAMAGE_SCALING_WHEN_CAUSED_BY_LIVING_NON_PLAYER ->
++                DamageScaling.WHEN_CAUSED_BY_LIVING_NON_PLAYER;
++            default -> DamageScaling.NEVER;
++        };
++        this.effect = PatchBukkitDamageEffect.fromName(
++            data.getEffect().name().substring("DAMAGE_EFFECT_".length()).toLowerCase()
++        );
++        this.deathMessageType = switch (data.getDeathMessageType()) {
++            case DEATH_MESSAGE_FALL_VARIANTS -> DeathMessageType.FALL_VARIANTS;
++            case DEATH_MESSAGE_INTENTIONAL_GAME_DESIGN ->
++                DeathMessageType.INTENTIONAL_GAME_DESIGN;
++            default -> DeathMessageType.DEFAULT;
++        };
++        this.exhaustion = data.getExhaustion();
++    }
++
++    @Override
++    public @NotNull NamespacedKey getKey() {
++        return key;
++    }
++
++    @Override
++    public @NotNull String getTranslationKey() {
++        return translationKey;
++    }
++
++    @Override
++    public @NotNull DamageScaling getDamageScaling() {
++        return scaling;
++    }
++
++    @Override
++    public @NotNull DamageEffect getDamageEffect() {
++        return effect;
++    }
++
++    @Override
++    public @NotNull DeathMessageType getDeathMessageType() {
++        return deathMessageType;
++    }
++
++    @Override
++    public float getExhaustion() {
++        return exhaustion;
++    }
++
++    private enum PatchBukkitDamageEffect implements DamageEffect {
++        HURT("entity.player.hurt"),
++        THORNS("enchant.thorns.hit"),
++        DROWNING("entity.player.hurt_drown"),
++        BURNING("entity.player.hurt_on_fire"),
++        POKING("entity.player.hurt_sweet_berry_bush"),
++        FREEZING("entity.player.hurt_freeze");
++
++        private final NamespacedKey soundKey;
++
++        PatchBukkitDamageEffect(String soundName) {
++            this.soundKey = NamespacedKey.minecraft(soundName);
++        }
++
++        static DamageEffect fromName(String name) {
++            return valueOf(name.toUpperCase());
++        }
++
++        @Override
++        public @NotNull Sound getSound() {
++            return Objects.requireNonNull(
++                Registry.SOUNDS.get(soundKey),
++                () -> "Missing damage-effect sound " + soundKey
++            );
++        }
++    }
++}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
+index 854db6f..35f95bb 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
+@@ -5,6 +5,7 @@ import io.papermc.paper.registry.RegistryKey;
+ import org.bukkit.Keyed;
+ import org.bukkit.Registry;
+ import org.bukkit.Sound;
++import org.bukkit.damage.DamageType;
+ import org.jspecify.annotations.Nullable;
+ 
+ import com.google.gson.JsonObject;
+@@ -32,6 +33,11 @@ public class PatchBukkitRegistryAccess implements RegistryAccess {
+                 data.getName(),
+                 data.getId()
+             )
++        ),
++        RegistryKey.DAMAGE_TYPE, new RegistryFactory<>(
++            RegistryType.DAMAGE_TYPE,
++            response -> response.getDamageType().getDamageTypesList(),
++            PatchBukkitDamageType::new
+         )
+     );
+ 
 diff --git a/proto/patchbukkit/common/types.proto b/proto/patchbukkit/common/types.proto
-index 52ab1365751b462cf499432cdb716f259a39ba93..024134af2a5a18c0f5f302c8cab22e56873928f5 100644
+index 52ab136..024134a 100644
 --- a/proto/patchbukkit/common/types.proto
 +++ b/proto/patchbukkit/common/types.proto
 @@ -26,4 +26,7 @@ message Location {
@@ -981,7 +1146,7 @@ index 52ab1365751b462cf499432cdb716f259a39ba93..024134af2a5a18c0f5f302c8cab22e56
 +  bool present = 1;
 +}
 diff --git a/proto/patchbukkit/config.proto b/proto/patchbukkit/config.proto
-index 12c48c047ff187a57c64e55758e0867f429c35f0..d3addd5d3c7127fb5c1cafb1b073e8bdb7660173 100644
+index 12c48c0..d3addd5 100644
 --- a/proto/patchbukkit/config.proto
 +++ b/proto/patchbukkit/config.proto
 @@ -9,4 +9,5 @@ option java_package = "patchbukkit.config";
@@ -990,8 +1155,66 @@ index 12c48c047ff187a57c64e55758e0867f429c35f0..d3addd5d3c7127fb5c1cafb1b073e8bd
    string minimum_supported_plugin_api = 1;
 +  bool online_mode = 2;
  }
+diff --git a/proto/patchbukkit/registry.proto b/proto/patchbukkit/registry.proto
+index a7dac34..a502d8f 100644
+--- a/proto/patchbukkit/registry.proto
++++ b/proto/patchbukkit/registry.proto
+@@ -9,6 +9,7 @@ option java_package = "patchbukkit.registry";
+ 
+ enum RegistryType {
+   SOUND_EVENT = 0;
++  DAMAGE_TYPE = 1;
+ }
+ 
+ message GetRegistryDataRequest {
+@@ -18,6 +19,7 @@ message GetRegistryDataRequest {
+ message GetRegistryDataResponse {
+   oneof registry {
+     SoundEventRegistryData sound_event = 1;
++    DamageTypeRegistryData damage_type = 2;
+   }
+ }
+ 
+@@ -29,3 +31,37 @@ message SoundEvent {
+ message SoundEventRegistryData {
+   repeated SoundEvent sound_events = 1;
+ }
++
++enum DamageScalingKind {
++  DAMAGE_SCALING_NEVER = 0;
++  DAMAGE_SCALING_WHEN_CAUSED_BY_LIVING_NON_PLAYER = 1;
++  DAMAGE_SCALING_ALWAYS = 2;
++}
++
++enum DamageEffectKind {
++  DAMAGE_EFFECT_HURT = 0;
++  DAMAGE_EFFECT_THORNS = 1;
++  DAMAGE_EFFECT_DROWNING = 2;
++  DAMAGE_EFFECT_BURNING = 3;
++  DAMAGE_EFFECT_POKING = 4;
++  DAMAGE_EFFECT_FREEZING = 5;
++}
++
++enum DeathMessageTypeKind {
++  DEATH_MESSAGE_DEFAULT = 0;
++  DEATH_MESSAGE_FALL_VARIANTS = 1;
++  DEATH_MESSAGE_INTENTIONAL_GAME_DESIGN = 2;
++}
++
++message DamageTypeData {
++  string name = 1;
++  string translation_key = 2;
++  DamageScalingKind scaling = 3;
++  DamageEffectKind effect = 4;
++  DeathMessageTypeKind death_message_type = 5;
++  float exhaustion = 6;
++}
++
++message DamageTypeRegistryData {
++  repeated DamageTypeData damage_types = 1;
++}
 diff --git a/rust/src/commands/mod.rs b/rust/src/commands/mod.rs
-index 484dc62a8fcd2d766938ef048eb43b54d4f06194..22d354c332b62c7ff8aa4c4948a9d6a261866bdd 100644
+index 484dc62..22d354c 100644
 --- a/rust/src/commands/mod.rs
 +++ b/rust/src/commands/mod.rs
 @@ -34,7 +34,7 @@ pub struct AnyCommandNode {
@@ -1004,7 +1227,7 @@ index 484dc62a8fcd2d766938ef048eb43b54d4f06194..22d354c332b62c7ff8aa4c4948a9d6a2
      }
  
 diff --git a/rust/src/java/jar.rs b/rust/src/java/jar.rs
-index f94134eea61bcec90450bb8abadf2d9fec1cad11..c60e6a23cbf53178ee5a964d4cfe8df4a9c71b45 100644
+index f94134e..c60e6a2 100644
 --- a/rust/src/java/jar.rs
 +++ b/rust/src/java/jar.rs
 @@ -1,28 +1,41 @@
@@ -1095,7 +1318,7 @@ index f94134eea61bcec90450bb8abadf2d9fec1cad11..c60e6a23cbf53178ee5a964d4cfe8df4
 +    }
 +}
 diff --git a/rust/src/java/jvm/worker.rs b/rust/src/java/jvm/worker.rs
-index 4fe3703ef7ca92c266b7c376861de9d8b0e7cc3b..85ac936d762e810191bbfc8d310cec9667b94c64 100644
+index 4fe3703..85ac936 100644
 --- a/rust/src/java/jvm/worker.rs
 +++ b/rust/src/java/jvm/worker.rs
 @@ -224,7 +224,7 @@ impl JvmWorker {
@@ -1108,7 +1331,7 @@ index 4fe3703ef7ca92c266b7c376861de9d8b0e7cc3b..85ac936d762e810191bbfc8d310cec96
      jvm.invoke_static(
          "org.bukkit.Bukkit",
 diff --git a/rust/src/java/native_callbacks/config.rs b/rust/src/java/native_callbacks/config.rs
-index eed3decebb19927ebf20818c133e0c417280ffde..b0d700db907de60611f6f976138070861570a8ef 100644
+index eed3dec..b0d700d 100644
 --- a/rust/src/java/native_callbacks/config.rs
 +++ b/rust/src/java/native_callbacks/config.rs
 @@ -15,5 +15,12 @@ pub fn ffi_native_bridge_get_patch_bukkit_config_impl(
@@ -1124,8 +1347,116 @@ index eed3decebb19927ebf20818c133e0c417280ffde..b0d700db907de60611f6f97613807086
 +                .online_mode,
          })
  }
+diff --git a/rust/src/java/native_callbacks/registry.rs b/rust/src/java/native_callbacks/registry.rs
+index d403ca1..d70c728 100644
+--- a/rust/src/java/native_callbacks/registry.rs
++++ b/rust/src/java/native_callbacks/registry.rs
+@@ -1,7 +1,62 @@
+ use crate::proto::patchbukkit::registry::{
+-    GetRegistryDataRequest, GetRegistryDataResponse, RegistryType, SoundEvent,
+-    SoundEventRegistryData, get_registry_data_response::Registry,
++    DamageTypeData, DamageTypeRegistryData, GetRegistryDataRequest, GetRegistryDataResponse,
++    RegistryType, SoundEvent, SoundEventRegistryData, get_registry_data_response::Registry,
+ };
++use pumpkin_data::damage::{DamageEffects, DamageScaling, DamageType, DeathMessageType};
++
++const DAMAGE_TYPE_NAMES: [&str; 51] = [
++    "arrow",
++    "bad_respawn_point",
++    "cactus",
++    "campfire",
++    "cramming",
++    "dragon_breath",
++    "drown",
++    "dry_out",
++    "ender_pearl",
++    "explosion",
++    "fall",
++    "falling_anvil",
++    "falling_block",
++    "falling_stalactite",
++    "fireball",
++    "fireworks",
++    "fly_into_wall",
++    "freeze",
++    "generic",
++    "generic_kill",
++    "hot_floor",
++    "in_fire",
++    "in_wall",
++    "indirect_magic",
++    "lava",
++    "lightning_bolt",
++    "mace_smash",
++    "magic",
++    "mob_attack",
++    "mob_attack_no_aggro",
++    "mob_projectile",
++    "on_fire",
++    "out_of_world",
++    "outside_border",
++    "player_attack",
++    "player_explosion",
++    "sonic_boom",
++    "spear",
++    "spit",
++    "stalagmite",
++    "starve",
++    "sting",
++    "sulfur_cube_hot",
++    "sweet_berry_bush",
++    "thorns",
++    "thrown",
++    "trident",
++    "unattributed_fireball",
++    "wind_charge",
++    "wither",
++    "wither_skull",
++];
+ 
+ pub fn ffi_native_bridge_get_registry_data_impl(
+     request: GetRegistryDataRequest,
+@@ -19,6 +74,38 @@ pub fn ffi_native_bridge_get_registry_data_impl(
+                 sound_events: sounds,
+             })
+         }
++        val if val == RegistryType::DamageType as i32 => {
++            let damage_types = DAMAGE_TYPE_NAMES
++                .iter()
++                .filter_map(|name| {
++                    DamageType::from_name(name).map(|damage_type| (*name, damage_type))
++                })
++                .map(|(name, damage_type)| DamageTypeData {
++                    name: name.to_string(),
++                    translation_key: format!("death.attack.{}", damage_type.message_id),
++                    scaling: match damage_type.scaling {
++                        DamageScaling::Never => 0,
++                        DamageScaling::WhenCausedByLivingNonPlayer => 1,
++                        DamageScaling::Always => 2,
++                    },
++                    effect: match damage_type.effects.unwrap_or(DamageEffects::Hurt) {
++                        DamageEffects::Hurt => 0,
++                        DamageEffects::Thorns => 1,
++                        DamageEffects::Drowning => 2,
++                        DamageEffects::Burning => 3,
++                        DamageEffects::Poking => 4,
++                        DamageEffects::Freezing => 5,
++                    },
++                    death_message_type: match damage_type.death_message_type {
++                        DeathMessageType::Default => 0,
++                        DeathMessageType::FallVariants => 1,
++                        DeathMessageType::IntentionalGameDesign => 2,
++                    },
++                    exhaustion: damage_type.exhaustion,
++                })
++                .collect();
++            Registry::DamageType(DamageTypeRegistryData { damage_types })
++        }
+         _ => unreachable!(),
+     };
+ 
 diff --git a/rust/src/java/plugin/manager.rs b/rust/src/java/plugin/manager.rs
-index 875493476b22e29f7049cde10d818b06d7045241..6c02a675067dbfe46184750e706c97a37d59aa57 100644
+index 8754934..6c02a67 100644
 --- a/rust/src/java/plugin/manager.rs
 +++ b/rust/src/java/plugin/manager.rs
 @@ -273,6 +273,8 @@ impl PluginManager {
