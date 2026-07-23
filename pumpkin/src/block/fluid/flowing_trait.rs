@@ -37,6 +37,26 @@ pub trait FlowingFluid: Send + Sync {
     }
 
     fn get_max_flow_distance(&self, world: &World) -> i32;
+
+    /// Fires the native fluid movement contract before a target is mutated.
+    fn allow_flow<'a>(
+        &'a self,
+        world: &'a Arc<World>,
+        from_position: &'a BlockPos,
+        to_position: &'a BlockPos,
+    ) -> impl std::future::Future<Output = bool> + Send + 'a {
+        async move {
+            let Some(server) = world.server.upgrade() else {
+                return true;
+            };
+            let event = crate::plugin::block::block_from_to::BlockFromToEvent::new(
+                world.clone(),
+                *from_position,
+                *to_position,
+            );
+            !server.plugin_manager.fire(event).await.cancelled
+        }
+    }
     fn can_convert_to_source(&self, world: &Arc<World>) -> bool;
 
     /// Returns true if `state_id` represents the given fluid — either as a direct fluid state
@@ -164,6 +184,9 @@ pub trait FlowingFluid: Send + Sync {
 
             // Try to flow down first
             if is_hole {
+                if !self.allow_flow(world, block_pos, &below_pos).await {
+                    return;
+                }
                 let falling_props = self.get_flowing(fluid, Level::L8, true);
                 self.spread_to(world, fluid, &below_pos, falling_props.to_state_id(fluid))
                     .await;
@@ -504,7 +527,9 @@ pub trait FlowingFluid: Send + Sync {
             for &(direction, state_id) in spread_dirs.iter().take(count) {
                 let side_pos = block_pos.offset(direction.to_offset());
 
-                self.spread_to(world, fluid, &side_pos, state_id).await;
+                if self.allow_flow(world, block_pos, &side_pos).await {
+                    self.spread_to(world, fluid, &side_pos, state_id).await;
+                }
             }
         }
     }

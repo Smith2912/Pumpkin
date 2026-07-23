@@ -137,7 +137,7 @@ The first slice covers live block reads, `BlockBreakEvent`,
 placed position, placed material, player, cancellation, `canBuild`, and the
 live replaced block state. Pumpkin does not yet expose the placed-against
 position, face, or hand, so those fields use documented placeholders and are
-not counted as complete. Flow, piston, explosion,
+not counted as complete. Piston, explosion,
 entity-damage, hanging, dispense, craft, pickup, and drop events remain
 separate native contracts and are not represented as complete by listener
 registration alone.
@@ -172,6 +172,25 @@ flow, pistons, explosions, arbitrary redstone components, or fire paths other
 than the natural scheduled fire-spread path. Those remain explicit contracts
 rather than being inferred from `BlockBurnEvent` and `BlockIgniteEvent`
 support.
+
+## Fluid-flow event batch gate
+
+The native fluid contract is complete for ordinary water and lava spreading
+only when:
+
+1. Every downward and horizontal target selected by Pumpkin fires
+   `BlockFromToEvent` with the real world and exact source/target positions.
+2. Bukkit cancellation prevents that target mutation before block replacement,
+   lava/water conversion, or fluid tick scheduling.
+3. Cancelling one horizontal target does not suppress independent flow targets
+   selected during the same tick.
+4. The conformance plugin registers the event, live logs contain its native
+   registration without an unsupported warning, and a human can visibly keep
+   water and lava out of protected target blocks.
+
+This contract does not cover bucket placement, dispensers, sponge absorption,
+waterlogging, cauldron changes, entity movement in fluids, or plugins changing
+the destination block. Those paths remain separate, explicit milestones.
 
 ## Human verification runbook
 
