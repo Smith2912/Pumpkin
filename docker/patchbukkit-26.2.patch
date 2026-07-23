@@ -70,7 +70,7 @@ diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.ja
 -            "Unimplemented method 'getOnlineMode'"
 -        );
 +        return NativeBridgeFfi
-+            .getPatchBukkitConfig(EmptyRequest.newBuilder().build())
++            .getPatchBukkitConfig(EmptyRequest.newBuilder().setPresent(true).build())
 +            .getOnlineMode();
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
@@ -80,6 +80,11 @@ diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeVal
 +    // Mojang server version.json. Keep this aligned with Pumpkin's protocol.
 +    private static final int DATA_VERSION = 4903;
 +
+@@ -63 +67,3 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+-        var minimumApi = NativeBridgeFfi.getPatchBukkitConfig(EmptyRequest.newBuilder().build()).getMinimumSupportedPluginApi();
++        var minimumApi = NativeBridgeFfi
++            .getPatchBukkitConfig(EmptyRequest.newBuilder().setPresent(true).build())
++            .getMinimumSupportedPluginApi();
 @@ -157,2 +162 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
 -		// TODO Auto-generated method stub
 -		throw new UnsupportedOperationException("Unimplemented method 'getDataVersion'");
@@ -122,6 +127,15 @@ diff --git a/proto/patchbukkit/config.proto b/proto/patchbukkit/config.proto
 +++ b/proto/patchbukkit/config.proto
 @@ -11,0 +12 @@ message GetPatchBukkitConfigResponse {
 +  bool online_mode = 2;
+diff --git a/proto/patchbukkit/common/types.proto b/proto/patchbukkit/common/types.proto
+--- a/proto/patchbukkit/common/types.proto
++++ b/proto/patchbukkit/common/types.proto
+@@ -29 +29,4 @@ message Location {
+-message EmptyRequest {}
++message EmptyRequest {
++  // Ensures the request serializes to at least one byte for the FFI transport.
++  bool present = 1;
++}
 diff --git a/rust/src/java/native_callbacks/config.rs b/rust/src/java/native_callbacks/config.rs
 --- a/rust/src/java/native_callbacks/config.rs
 +++ b/rust/src/java/native_callbacks/config.rs
