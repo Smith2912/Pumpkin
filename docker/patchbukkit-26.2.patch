@@ -72,6 +72,12 @@ diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.ja
 +        return NativeBridgeFfi
 +            .getPatchBukkitConfig(EmptyRequest.newBuilder().setPresent(true).build())
 +            .getOnlineMode();
+@@ -1287,4 +1295 @@ public class PatchBukkitServer implements Server {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getWarningState'"
+-        );
++        return WarningState.DEFAULT;
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
@@ -122,6 +128,11 @@ diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplug
 +        Bukkit.getServer().getOnlineMode();
 +    }
 +
++    @ConformanceTest(name = "Server.getWarningState() is implemented", category = TestCategory.SERVER)
++    public void testGetWarningState() {
++        assertNotNull(Bukkit.getServer().getWarningState(), "Server.getWarningState()");
++    }
++
 diff --git a/proto/patchbukkit/config.proto b/proto/patchbukkit/config.proto
 --- a/proto/patchbukkit/config.proto
 +++ b/proto/patchbukkit/config.proto
@@ -147,3 +158,78 @@ diff --git a/rust/src/java/native_callbacks/config.rs b/rust/src/java/native_cal
 +                .networking
 +                .java
 +                .online_mode,
+diff --git a/rust/src/java/jar.rs b/rust/src/java/jar.rs
+--- a/rust/src/java/jar.rs
++++ b/rust/src/java/jar.rs
+@@ -2 +2 @@ use std::{
+-    fs::File,
++    fs::{self, File},
+@@ -8 +7,0 @@ use anyhow::Result;
+-use glob::glob;
+@@ -14,12 +13,26 @@ pub fn discover_jar_files(plugin_folder: &Path) -> impl Iterator<Item = PathBuf>
+-    let pattern = format!("{}/**/*.jar", plugin_folder.display());
+-
+-    glob(&pattern)
+-        .expect("Invalid glob pattern")
+-        .filter_map(|entry| {
+-            entry
+-                .map_err(|e| tracing::error!("Glob error: {e:?}"))
+-                .ok()?
+-                .canonicalize()
+-                .map_err(|e| tracing::error!("Canonicalize error: {e:?}"))
+-                .ok()
+-        })
++    let jars = match fs::read_dir(plugin_folder) {
++        Ok(entries) => entries
++            .filter_map(|entry| {
++                let path = entry
++                    .map_err(|error| tracing::error!("Read directory error: {error:?}"))
++                    .ok()?
++                    .path();
++                if !path.is_file()
++                    || !path
++                        .extension()
++                        .is_some_and(|extension| extension.eq_ignore_ascii_case("jar"))
++                {
++                    return None;
++                }
++                path.canonicalize()
++                    .map_err(|error| tracing::error!("Canonicalize error: {error:?}"))
++                    .ok()
++            })
++            .collect(),
++        Err(error) => {
++            tracing::error!("Failed to read plugin directory: {error:?}");
++            Vec::new()
++        }
++    };
++
++    jars.into_iter()
+@@ -53,0 +67,27 @@ pub fn read_configs_from_jar<P: AsRef<Path>>(
++
++#[cfg(test)]
++mod tests {
++    use super::discover_jar_files;
++    use std::fs;
++
++    #[test]
++    fn discovery_ignores_nested_dependency_jars() {
++        let root = std::env::temp_dir().join(format!(
++            "patchbukkit-jar-discovery-{}",
++            uuid::Uuid::new_v4()
++        ));
++        let nested = root.join("PluginData").join("libs");
++        fs::create_dir_all(&nested).expect("create test directories");
++        fs::write(root.join("plugin.jar"), []).expect("create plugin jar");
++        fs::write(nested.join("dependency.jar"), []).expect("create dependency jar");
++
++        let jars: Vec<_> = discover_jar_files(&root).collect();
++
++        assert_eq!(jars.len(), 1);
++        assert_eq!(
++            jars[0].file_name().and_then(|name| name.to_str()),
++            Some("plugin.jar")
++        );
++        fs::remove_dir_all(root).expect("remove test directories");
++    }
++}
