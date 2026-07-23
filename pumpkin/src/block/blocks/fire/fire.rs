@@ -18,6 +18,7 @@ use crate::block::{
     BlockBehaviour, BlockFuture, BrokenArgs, CanPlaceAtArgs, GetStateForNeighborUpdateArgs,
     OnEntityCollisionArgs, OnScheduledTickArgs, PlacedArgs,
 };
+use crate::plugin::block::block_ignite::BlockIgniteEvent;
 use crate::world::World;
 use crate::world::portal::nether::NetherPortal;
 
@@ -148,26 +149,47 @@ impl FireBlock {
         )
     }
 
-    async fn try_spreading_fire(&self, world: &Arc<World>, pos: &BlockPos, chance: i32, age: u8) {
-        let block = world.get_block(pos);
+    async fn try_spreading_fire(
+        &self,
+        world: &Arc<World>,
+        target_pos: &BlockPos,
+        igniting_pos: &BlockPos,
+        chance: i32,
+        age: u8,
+    ) {
+        let block = world.get_block(target_pos);
         let odds = Self::get_burn_odds(block);
         if rand::rng().random_range(0..chance) < odds {
             let old_block = block;
+            if let Some(server) = world.server.upgrade() {
+                let event = crate::plugin::block::block_burn::BlockBurnEvent::new(
+                    world.clone(),
+                    *igniting_pos,
+                    *target_pos,
+                    &Block::FIRE,
+                    old_block,
+                );
+                let event = server.plugin_manager.fire(event).await;
+                if event.cancelled {
+                    return;
+                }
+            }
             if rand::rng().random_range(0..(age + 10) as i32) < 5
-                && !Self::is_near_rain(world.as_ref(), pos)
+                && !Self::is_near_rain(world.as_ref(), target_pos)
             {
                 let new_age = (age + (rand::rng().random_range(0..5) / 4)).min(15) as u8;
-                let state_id = self.get_state_for_position(world.as_ref(), &Block::FIRE, pos);
+                let state_id =
+                    self.get_state_for_position(world.as_ref(), &Block::FIRE, target_pos);
                 let mut fire_props = FireProperties::from_state_id(state_id, &Block::FIRE);
                 fire_props.age = new_age;
                 let new_state_id = fire_props.to_state_id(&Block::FIRE);
                 world
-                    .set_block_state(pos, new_state_id, BlockFlags::NOTIFY_NEIGHBORS)
+                    .set_block_state(target_pos, new_state_id, BlockFlags::NOTIFY_NEIGHBORS)
                     .await;
             } else {
                 world
                     .set_block_state(
-                        pos,
+                        target_pos,
                         Block::AIR.default_state.id,
                         BlockFlags::NOTIFY_NEIGHBORS,
                     )
@@ -175,7 +197,7 @@ impl FireBlock {
             }
 
             if old_block == &Block::TNT {
-                TNTBlock::prime(world, pos).await;
+                TNTBlock::prime(world, target_pos).await;
             }
         }
     }
@@ -370,6 +392,7 @@ impl BlockBehaviour for FireBlock {
             self.try_spreading_fire(
                 world,
                 &pos.offset(BlockDirection::East.to_offset()),
+                pos,
                 300 + extra,
                 new_age,
             )
@@ -377,6 +400,7 @@ impl BlockBehaviour for FireBlock {
             self.try_spreading_fire(
                 world,
                 &pos.offset(BlockDirection::West.to_offset()),
+                pos,
                 300 + extra,
                 new_age,
             )
@@ -384,6 +408,7 @@ impl BlockBehaviour for FireBlock {
             self.try_spreading_fire(
                 world,
                 &pos.offset(BlockDirection::Down.to_offset()),
+                pos,
                 250 + extra,
                 new_age,
             )
@@ -391,6 +416,7 @@ impl BlockBehaviour for FireBlock {
             self.try_spreading_fire(
                 world,
                 &pos.offset(BlockDirection::Up.to_offset()),
+                pos,
                 250 + extra,
                 new_age,
             )
@@ -398,6 +424,7 @@ impl BlockBehaviour for FireBlock {
             self.try_spreading_fire(
                 world,
                 &pos.offset(BlockDirection::North.to_offset()),
+                pos,
                 300 + extra,
                 new_age,
             )
@@ -405,6 +432,7 @@ impl BlockBehaviour for FireBlock {
             self.try_spreading_fire(
                 world,
                 &pos.offset(BlockDirection::South.to_offset()),
+                pos,
                 300 + extra,
                 new_age,
             )
@@ -458,6 +486,17 @@ impl BlockBehaviour for FireBlock {
                                     && rand::rng().random_range(0..rate) <= odds
                                     && !Self::is_near_rain(world.as_ref(), &offset_pos)
                                 {
+                                    if let Some(server) = world.server.upgrade() {
+                                        let event = BlockIgniteEvent::spread(
+                                            world.clone(),
+                                            offset_pos,
+                                            *pos,
+                                        );
+                                        let event = server.plugin_manager.fire(event).await;
+                                        if event.cancelled {
+                                            continue;
+                                        }
+                                    }
                                     let spread_age = (new_age + rand::rng().random_range(0..5) / 4)
                                         .min(15)
                                         as u8;

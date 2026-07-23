@@ -97,6 +97,9 @@ impl ToFromWasmEvent for BlockBurnEvent {
     fn from_wasm_event(event: Event, _state: &mut PluginHostState) -> Self {
         match event {
             Event::BlockBurnEvent(data) => Self {
+                world: None,
+                igniting_block_position: None,
+                block_position: None,
                 igniting_block: from_wasm_block_name(&data.igniting_block),
                 block: from_wasm_block_name(&data.block),
                 cancelled: data.cancelled,
@@ -124,6 +127,8 @@ impl ToFromWasmEvent for BlockCanBuildEvent {
     fn from_wasm_event(event: Event, state: &mut PluginHostState) -> Self {
         match event {
             Event::BlockCanBuildEvent(data) => Self {
+                world: None,
+                block_position: None,
                 block_to_build: from_wasm_block_name(&data.block_to_build),
                 buildable: data.buildable,
                 player: consume_player(state, &data.player),

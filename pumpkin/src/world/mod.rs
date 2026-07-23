@@ -43,9 +43,11 @@ use crate::{
     plugin::{
         block::block_break::BlockBreakEvent,
         player::{
-            player_change_world::PlayerChangeWorldEvent, player_join::PlayerJoinEvent,
+            player_change_world::PlayerChangeWorldEvent,
+            player_changed_world::PlayerChangedWorldEvent, player_join::PlayerJoinEvent,
             player_leave::PlayerLeaveEvent, player_respawn::PlayerRespawnEvent,
         },
+        weather::{thunder_change::ThunderChangeEvent, weather_change::WeatherChangeEvent},
     },
     server::Server,
 };
@@ -615,13 +617,25 @@ impl World {
         chat_message: &SChatMessage,
         decorated_message: &TextComponent,
     ) {
+        let recipients = self.players.load().iter().cloned().collect::<Vec<_>>();
+        self.send_secure_player_chat(&recipients, sender, chat_message, decorated_message)
+            .await;
+    }
+
+    pub async fn send_secure_player_chat(
+        &self,
+        recipients: &[Arc<Player>],
+        sender: &Arc<Player>,
+        chat_message: &SChatMessage,
+        decorated_message: &TextComponent,
+    ) {
         let messages_sent: i32 = sender.chat_session.lock().await.messages_sent;
         let sender_last_seen = {
             let cache = sender.signature_cache.lock().await;
             cache.last_seen.clone()
         };
 
-        for recipient in self.players.load().iter() {
+        for recipient in recipients {
             let messages_received: i32 = recipient.chat_session.lock().await.messages_received;
             let packet = &CPlayerChatMessage::new(
                 VarInt(messages_received),
@@ -1107,8 +1121,8 @@ impl World {
         }
     }
 
-    async fn tick_environment(&self) {
-        let (world_age, is_night, time_of_day) = {
+    async fn tick_environment(self: &Arc<Self>) {
+        let (world_age, is_night, time_of_day, advance_weather) = {
             let mut level_time = self.level_time.lock().await;
             let (advance_time, advance_weather) = {
                 let lock = self.level_info.load();
@@ -1148,11 +1162,30 @@ impl World {
                 level_time.world_age,
                 level_time.is_night(),
                 level_time.time_of_day,
+                advance_weather,
             )
         };
 
-        let mut weather = self.weather.lock().await;
-        weather.tick_weather(self);
+        let weather_transition = {
+            let mut weather = self.weather.lock().await;
+            weather.weather_cycle_enabled = advance_weather;
+            weather
+                .advance_weather_cycle()
+                .map(|(raining, thundering)| {
+                    (
+                        weather.clear_weather_time,
+                        weather.rain_time,
+                        weather.thunder_time,
+                        raining,
+                        thundering,
+                    )
+                })
+        };
+        if let Some((clear_time, rain_time, thunder_time, raining, thundering)) = weather_transition
+        {
+            self.set_weather_parameters(clear_time, rain_time, thunder_time, raining, thundering)
+                .await;
+        }
 
         if self.should_skip_night() && is_night {
             let mut level_time = self.level_time.lock().await;
@@ -1165,13 +1198,19 @@ impl World {
                 player.wake_up().await;
             }
 
-            if weather.weather_cycle_enabled && (weather.raining || weather.thundering) {
-                weather.reset_weather_cycle(self);
+            let should_clear_weather = {
+                let weather = self.weather.lock().await;
+                weather.weather_cycle_enabled && (weather.raining || weather.thundering)
+            };
+            if should_clear_weather {
+                self.set_weather_parameters(0, 0, 0, false, false).await;
             }
         } else if world_age % 20 == 0 {
             let level_time = self.level_time.lock().await;
             level_time.send_time(self).await;
         }
+
+        self.weather.lock().await.tick_weather_levels(self);
     }
 
     #[expect(clippy::too_many_lines)]
@@ -1706,24 +1745,135 @@ impl World {
         self.weather.lock().await.raining
     }
 
-    pub async fn set_raining(&self, raining: bool) {
-        let mut weather = self.weather.lock().await;
-        if weather.raining != raining {
-            let thunder = weather.thundering;
-            weather.set_weather_parameters(self, 0, 0, raining, thunder);
-        }
+    pub async fn set_raining(self: &Arc<Self>, raining: bool) {
+        let (clear_time, rain_time, thunder_time, thundering) = {
+            let weather = self.weather.lock().await;
+            (
+                weather.clear_weather_time,
+                weather.rain_time,
+                weather.thunder_time,
+                weather.thundering,
+            )
+        };
+        self.set_weather_parameters(clear_time, rain_time, thunder_time, raining, thundering)
+            .await;
     }
 
     pub async fn is_thundering(&self) -> bool {
         self.weather.lock().await.thundering
     }
 
-    pub async fn set_thundering(&self, thundering: bool) {
+    pub async fn set_thundering(self: &Arc<Self>, thundering: bool) {
+        let (clear_time, rain_time, thunder_time, raining) = {
+            let weather = self.weather.lock().await;
+            (
+                weather.clear_weather_time,
+                weather.rain_time,
+                weather.thunder_time,
+                weather.raining,
+            )
+        };
+        self.set_weather_parameters(clear_time, rain_time, thunder_time, raining, thundering)
+            .await;
+    }
+
+    /// Updates weather after firing cancellable native plugin events.
+    ///
+    /// If a transition is cancelled, the corresponding state and timer remain
+    /// unchanged while an independent accepted transition can still proceed.
+    pub async fn set_weather_parameters(
+        self: &Arc<Self>,
+        clear_time: i32,
+        rain_time: i32,
+        thunder_time: i32,
+        raining: bool,
+        thundering: bool,
+    ) {
+        let (was_raining, was_thundering) = {
+            let weather = self.weather.lock().await;
+            (weather.raining, weather.thundering)
+        };
+
+        let rain_cancelled = if was_raining == raining {
+            false
+        } else if let Some(server) = self.server.upgrade() {
+            server
+                .plugin_manager
+                .fire(WeatherChangeEvent::new(self.clone(), raining))
+                .await
+                .cancelled
+        } else {
+            false
+        };
+
+        let thunder_cancelled = if was_thundering == thundering {
+            false
+        } else if let Some(server) = self.server.upgrade() {
+            server
+                .plugin_manager
+                .fire(ThunderChangeEvent::new(self.clone(), thundering))
+                .await
+                .cancelled
+        } else {
+            false
+        };
+
         let mut weather = self.weather.lock().await;
-        if weather.thundering != thundering {
-            let raining = weather.raining;
-            weather.set_weather_parameters(self, 0, 0, raining, thundering);
-        }
+        let applied_raining = if rain_cancelled {
+            weather.raining
+        } else {
+            raining
+        };
+        let applied_thundering = if thunder_cancelled {
+            weather.thundering
+        } else {
+            thundering
+        };
+        let applied_clear_time = if rain_cancelled {
+            weather.clear_weather_time
+        } else {
+            clear_time
+        };
+        let applied_rain_time = if rain_cancelled {
+            weather.rain_time
+        } else {
+            rain_time
+        };
+        let applied_thunder_time = if thunder_cancelled {
+            weather.thunder_time
+        } else {
+            thunder_time
+        };
+        weather.apply_weather_parameters(
+            self,
+            applied_clear_time,
+            applied_rain_time,
+            applied_thunder_time,
+            applied_raining,
+            applied_thundering,
+        );
+    }
+
+    /// Applies a weather update whose frontend has already fired its API events.
+    ///
+    /// Java compatibility bridges use this method after dispatching Bukkit
+    /// weather events to avoid recursively sending the same event back to Java.
+    pub async fn set_weather_parameters_after_event(
+        self: &Arc<Self>,
+        clear_time: i32,
+        rain_time: i32,
+        thunder_time: i32,
+        raining: bool,
+        thundering: bool,
+    ) {
+        self.weather.lock().await.apply_weather_parameters(
+            self,
+            clear_time,
+            rain_time,
+            thunder_time,
+            raining,
+            thundering,
+        );
     }
 
     /// Gets the y position of the first non air block from the top down
@@ -2644,7 +2794,9 @@ impl World {
         let velocity = player.living_entity.entity.velocity.load();
 
         debug!("Sending player teleport to {}", player.gameprofile.name);
-        player.request_teleport(position, yaw, pitch).await;
+        player
+            .apply_teleport_position_without_event(position, yaw, pitch)
+            .await;
 
         let gameprofile = &player.gameprofile;
         let bedrock_player_list = CPlayerList {
@@ -3267,6 +3419,46 @@ impl World {
         }
     }
 
+    /// Moves a respawning player between the server's world membership lists.
+    ///
+    /// Respawn has two possible redirect points: the pre-transfer
+    /// `PlayerChangeWorldEvent` and the post-resolution `PlayerRespawnEvent`.
+    /// Keeping the membership update here ensures both paths update watched
+    /// chunks, the chunk manager, and the entity's world in the same order.
+    async fn transfer_respawning_player(
+        self: &Arc<Self>,
+        player: &Arc<Player>,
+        destination: &Arc<Self>,
+    ) -> bool {
+        if self.uuid == destination.uuid {
+            return true;
+        }
+
+        let Some(player) = self.remove_player(player, false).await else {
+            warn!(
+                "Could not detach player {} from world {} during respawn",
+                player.gameprofile.name,
+                self.get_world_name()
+            );
+            return false;
+        };
+
+        player.unload_watched_chunks(self).await;
+        player
+            .chunk_manager
+            .lock()
+            .await
+            .change_world(&self.level, destination.clone());
+        player.living_entity.entity.set_world(destination.clone());
+        destination.players.rcu(|current_list| {
+            let mut new_list = (**current_list).clone();
+            new_list.push(player.clone());
+            new_list
+        });
+
+        true
+    }
+
     #[allow(clippy::too_many_lines)]
     pub async fn respawn_player(self: &Arc<Self>, player: &Arc<Player>, alive: bool) {
         let last_pos = player.get_entity().last_pos.load();
@@ -3371,7 +3563,7 @@ impl World {
                     let pitch = event.pitch;
 
                     // Skip the transfer if redirected back to the current world.
-                    if destination.uuid != self.uuid {
+                    let transferred = if destination.uuid != self.uuid {
                         debug!(
                             "Cross-dimension respawn: {} -> {}",
                             self.dimension.minecraft_name, destination.dimension.minecraft_name
@@ -3379,22 +3571,16 @@ impl World {
 
                         // Detach from the old world before publishing into the new one, so no
                         // observer sees the player in a world whose chunk manager doesn't match.
-                        self.remove_player(player, false).await;
-                        player.unload_watched_chunks(self).await;
-                        player
-                            .chunk_manager
-                            .lock()
-                            .await
-                            .change_world(&self.level, destination.clone());
-                        player.living_entity.entity.set_world(destination.clone());
-                        destination.players.rcu(|current_list| {
-                            let mut new_list = (**current_list).clone();
-                            new_list.push(player.clone());
-                            new_list
-                        });
-                    }
+                        self.transfer_respawning_player(player, &destination).await
+                    } else {
+                        true
+                    };
 
-                    (Some(destination), position, yaw, pitch)
+                    if transferred {
+                        (Some(destination), position, yaw, pitch)
+                    } else {
+                        (None, position, yaw, pitch)
+                    }
                 }
             } else {
                 warn!("Server dropped during cross-dimension respawn");
@@ -3430,9 +3616,11 @@ impl World {
             (self.clone(), position, yaw, pitch)
         };
 
-        // Notify plugins that the player has respawned (non-cancellable).
-        if let Some(server) = self.server.upgrade() {
-            let _ = server
+        // Notify plugins that the player has respawned (non-cancellable). Plugins may
+        // redirect the final world, position, or rotation; Bukkit's
+        // PlayerRespawnEvent.setRespawnLocation relies on these edits taking effect.
+        let (target_world, position, yaw, pitch) = if let Some(server) = self.server.upgrade() {
+            let event = server
                 .plugin_manager
                 .fire(PlayerRespawnEvent::new(
                     player.clone(),
@@ -3443,6 +3631,47 @@ impl World {
                     pitch,
                     alive,
                 ))
+                .await;
+
+            if event.respawned_world.uuid == target_world.uuid {
+                (
+                    event.respawned_world,
+                    event.position,
+                    event.yaw,
+                    event.pitch,
+                )
+            } else if target_world
+                .transfer_respawning_player(player, &event.respawned_world)
+                .await
+            {
+                debug!(
+                    "PlayerRespawnEvent redirected respawn: {} -> {}",
+                    target_world.dimension.minecraft_name,
+                    event.respawned_world.dimension.minecraft_name
+                );
+                (
+                    event.respawned_world,
+                    event.position,
+                    event.yaw,
+                    event.pitch,
+                )
+            } else {
+                warn!(
+                    "Ignoring PlayerRespawnEvent redirect for {} because the world transfer failed",
+                    player.gameprofile.name
+                );
+                (target_world, position, yaw, pitch)
+            }
+        } else {
+            (target_world, position, yaw, pitch)
+        };
+
+        if target_world.uuid != self.uuid
+            && let Some(server) = target_world.server.upgrade()
+        {
+            let _ = server
+                .plugin_manager
+                .fire(PlayerChangedWorldEvent::new(player.clone(), self.clone()))
                 .await;
         }
 
@@ -3535,7 +3764,9 @@ impl World {
         }
 
         // Send teleport packet after at least the center chunk was delivered
-        player.request_teleport(position, yaw, pitch).await;
+        player
+            .apply_teleport_position_without_event(position, yaw, pitch)
+            .await;
     }
 
     /// Returns true if enough players are sleeping and we should skip the night.

@@ -5,6 +5,7 @@ use core::f32;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use std::f64::consts::TAU;
 use std::mem;
+use std::net::SocketAddr;
 use std::num::NonZeroU8;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, AtomicI8, AtomicI32, AtomicU8, AtomicU32, Ordering};
@@ -101,9 +102,10 @@ use crate::net::{DisconnectReason, PlayerConfig};
 use crate::plugin::player::exp_change::PlayerExpChangeEvent;
 use crate::plugin::player::inventory_interact::InventoryClickEvent;
 use crate::plugin::player::player_change_world::PlayerChangeWorldEvent;
+use crate::plugin::player::player_changed_world::PlayerChangedWorldEvent;
 use crate::plugin::player::player_gamemode_change::PlayerGamemodeChangeEvent;
 use crate::plugin::player::player_permission_check::PlayerPermissionCheckEvent;
-use crate::plugin::player::player_teleport::PlayerTeleportEvent;
+use crate::plugin::player::player_teleport::{PlayerTeleportEvent, TeleportCause};
 use crate::plugin::server::packet::PacketSentEvent;
 use crate::server::Server;
 use crate::world::World;
@@ -412,6 +414,15 @@ pub struct Player {
     pub gameprofile: GameProfile,
     /// The client connection associated with the player.
     pub client: Arc<ClientPlatform>,
+    /// The hostname supplied in the client's initial handshake.
+    pub login_hostname: String,
+    /// The effective client address after proxy forwarding has been applied.
+    pub login_address: SocketAddr,
+    /// The transport address exposed to compatibility adapters.
+    ///
+    /// Pumpkin currently retains only the effective forwarded address, so this
+    /// matches [`Self::login_address`] until both values are retained.
+    pub login_real_address: SocketAddr,
     /// The player's inventory.
     pub inventory: Arc<PlayerInventory>,
     /// The player's `EnderChest` inventory.
@@ -581,6 +592,8 @@ impl Player {
 
         impl ScreenHandlerListener for ScreenListener {}
 
+        let (login_hostname, login_address) = client.login_connection_info().await;
+
         let server = world.server.upgrade().unwrap();
 
         let player_uuid = gameprofile.id;
@@ -636,6 +649,9 @@ impl Player {
             )),
             gameprofile,
             client,
+            login_hostname,
+            login_address,
+            login_real_address: login_address,
             awaiting_teleport: Mutex::new(None),
             breath_manager: BreathManager::default(),
             // TODO: Load this from previous instance
@@ -856,6 +872,110 @@ impl Player {
 
     pub const fn ender_chest_inventory(&self) -> &Arc<EnderChestInventory> {
         &self.ender_chest_inventory
+    }
+
+    /// Returns a snapshot of a native player-inventory slot.
+    ///
+    /// Slots 0-35 are storage/hotbar, 36-39 are armor, and 40 is off-hand.
+    pub async fn inventory_stack(&self, slot: usize) -> Option<ItemStack> {
+        if slot >= PlayerInventory::MAIN_SIZE && !self.inventory.equipment_slots.contains_key(&slot)
+        {
+            return None;
+        }
+
+        let stack = self.inventory.get_stack(slot).await;
+        Some(stack.lock().await.clone())
+    }
+
+    /// Replaces a native player-inventory slot and synchronizes both the owning
+    /// client and any visible equipment state.
+    pub async fn replace_inventory_stack(&self, slot: usize, stack: ItemStack) -> bool {
+        if slot >= PlayerInventory::MAIN_SIZE && !self.inventory.equipment_slots.contains_key(&slot)
+        {
+            return false;
+        }
+
+        self.inventory.set_stack(slot, stack.clone()).await;
+        self.enqueue_slot_set_packet(&CSetPlayerInventory::new(
+            (slot as i32).into(),
+            &ItemStackSerializer::from(stack.clone()),
+        ))
+        .await;
+
+        let equipment_slot = match slot {
+            slot if slot == self.inventory.get_selected_slot() as usize => {
+                Some(EquipmentSlot::MAIN_HAND)
+            }
+            36 => Some(EquipmentSlot::FEET),
+            37 => Some(EquipmentSlot::LEGS),
+            38 => Some(EquipmentSlot::CHEST),
+            39 => Some(EquipmentSlot::HEAD),
+            PlayerInventory::OFF_HAND_SLOT => Some(EquipmentSlot::OFF_HAND),
+            _ => None,
+        };
+
+        if let Some(equipment_slot) = equipment_slot {
+            self.living_entity
+                .send_equipment_changes(&[(equipment_slot, stack)]);
+        }
+
+        true
+    }
+
+    /// Changes the selected hotbar slot and synchronizes the held item.
+    pub async fn replace_selected_inventory_slot(&self, slot: u8) -> bool {
+        if !PlayerInventory::is_valid_hotbar_index(slot as usize) {
+            return false;
+        }
+
+        self.inventory.set_selected_slot(slot);
+        self.enqueue_set_held_item_packet(&CSetSelectedSlot::new(slot as i8))
+            .await;
+
+        let stack = self.inventory.get_stack(slot as usize).await;
+        let stack = stack.lock().await.clone();
+        self.living_entity
+            .send_equipment_changes(&[(EquipmentSlot::MAIN_HAND, stack)]);
+        true
+    }
+
+    /// Returns the item currently carried by the player's inventory cursor.
+    pub async fn cursor_stack(&self) -> Option<ItemStack> {
+        self.carried_item.lock().await.clone()
+    }
+
+    /// Replaces the cursor item and synchronizes the owning client.
+    pub async fn replace_cursor_stack(&self, stack: Option<ItemStack>) {
+        let stack = stack.filter(|stack| !stack.is_empty());
+        *self.carried_item.lock().await = stack.clone();
+
+        let stack = stack.unwrap_or_else(|| ItemStack::EMPTY.clone());
+        let serialized = ItemStackSerializer::from(stack);
+        self.enqueue_cursor_packet(&CSetCursorItem::new(&serialized))
+            .await;
+    }
+
+    /// Returns a snapshot of an ender-chest slot.
+    pub async fn ender_chest_stack(&self, slot: usize) -> Option<ItemStack> {
+        if slot >= EnderChestInventory::INVENTORY_SIZE {
+            return None;
+        }
+
+        let stack = self.ender_chest_inventory.get_stack(slot).await;
+        Some(stack.lock().await.clone())
+    }
+
+    /// Replaces an ender-chest slot and refreshes the current screen handler.
+    /// If no ender chest is open, the next view reads the updated contents.
+    pub async fn replace_ender_chest_stack(&self, slot: usize, stack: ItemStack) -> bool {
+        if slot >= EnderChestInventory::INVENTORY_SIZE {
+            return false;
+        }
+
+        self.ender_chest_inventory.set_stack(slot, stack).await;
+        let screen_handler = self.current_screen_handler.lock().await.clone();
+        screen_handler.lock().await.send_content_updates().await;
+        true
     }
 
     /// Removes the [`Player`] out of the current [`World`].
@@ -2484,6 +2604,18 @@ impl Player {
         yaw: Option<f32>,
         pitch: Option<f32>,
     ) {
+        self.teleport_world_with_notification(new_world, position, yaw, pitch, true)
+            .await;
+    }
+
+    async fn teleport_world_with_notification(
+        self: &Arc<Self>,
+        new_world: Arc<World>,
+        position: Vector3<f64>,
+        yaw: Option<f32>,
+        pitch: Option<f32>,
+        notify_changed_world: bool,
+    ) {
         let current_world = self.living_entity.entity.world.load_full();
         let yaw = yaw.unwrap_or(new_world.level_info.load().spawn_yaw);
         let pitch = pitch.unwrap_or(new_world.level_info.load().spawn_pitch);
@@ -2520,6 +2652,15 @@ impl Player {
 
                 self.chunk_manager.lock().await.change_world(&current_world.level, new_world.clone());
                 self.living_entity.entity.set_world(new_world.clone());
+                if notify_changed_world {
+                    let _ = server
+                        .plugin_manager
+                        .fire(PlayerChangedWorldEvent::new(
+                            self.clone(),
+                            current_world.clone(),
+                        ))
+                        .await;
+                }
 
                 if new_world.dimension == pumpkin_data::dimension::Dimension::THE_NETHER {
                     self.trigger_advancement(crate::entity::player::advancement::trigger::AdvancementTrigger::EnterDimension {
@@ -2577,7 +2718,9 @@ impl Player {
 
                 self.send_permission_lvl_update();
 
-                player.clone().request_teleport(position, yaw, pitch).await;
+                player
+                    .apply_teleport_position_without_event(position, yaw, pitch)
+                    .await;
                 player.get_entity().last_pos.store(position);
 
                 self.send_abilities_update().await;
@@ -2595,43 +2738,140 @@ impl Player {
         }}
     }
 
+    /// Applies a Bukkit-originated teleport after the compatibility layer has
+    /// already fired and resolved its cancellable `PlayerTeleportEvent`.
+    ///
+    /// Same-world teleports intentionally bypass Pumpkin's native
+    /// `PlayerTeleportEvent` to avoid recursively re-entering the single JVM
+    /// worker that is waiting for this operation to complete. Cross-world
+    /// teleports retain Pumpkin's cancellable world-change and chunk
+    /// synchronization path, but defer the post-change Bukkit notification to
+    /// the calling JVM after this callback returns.
+    pub async fn apply_teleport_after_external_event(
+        self: &Arc<Self>,
+        position: Vector3<f64>,
+        yaw: f32,
+        pitch: f32,
+        world: Arc<World>,
+    ) -> bool {
+        if Arc::ptr_eq(&world, &self.world()) {
+            self.apply_teleport_position_without_event(position, yaw, pitch)
+                .await;
+
+            let entity = self.get_entity();
+            let chunk_pos = entity.chunk_pos.load();
+            entity.world.load().broadcast_to_chunk_except(
+                chunk_pos,
+                &[entity.entity_uuid],
+                &CEntityPositionSync::new(
+                    entity.entity_id.into(),
+                    position,
+                    Vector3::new(0.0, 0.0, 0.0),
+                    yaw,
+                    pitch,
+                    entity.on_ground.load(Ordering::SeqCst),
+                ),
+            );
+
+            true
+        } else {
+            self.teleport_world_with_notification(
+                world.clone(),
+                position,
+                Some(yaw),
+                Some(pitch),
+                false,
+            )
+            .await;
+            Arc::ptr_eq(&world, &self.world())
+        }
+    }
+
+    /// Applies the resolved position and orientation without firing a
+    /// [`PlayerTeleportEvent`].
+    ///
+    /// Callers must either have already resolved the appropriate source API
+    /// event or be performing a lifecycle synchronization (such as initial
+    /// spawn, respawn, or the post-world-change client handshake) that is not
+    /// itself a player teleport.
+    pub(crate) async fn apply_teleport_position_without_event(
+        self: &Arc<Self>,
+        position: Vector3<f64>,
+        yaw: f32,
+        pitch: f32,
+    ) {
+        let i = self.teleport_id_count.fetch_add(1, Ordering::Relaxed);
+        let teleport_id = i + 1;
+        self.living_entity.entity.set_pos(position);
+        let entity = &self.living_entity.entity;
+        entity.set_rotation(yaw, pitch);
+        *self.awaiting_teleport.lock().await = Some((teleport_id.into(), position));
+        self.client
+            .send_packet_now(&CPlayerPosition::new(
+                teleport_id.into(),
+                position,
+                Vector3::new(0.0, 0.0, 0.0),
+                yaw,
+                pitch,
+                // TODO
+                Vec::new(),
+            ))
+            .await;
+    }
+
     /// `yaw` and `pitch` are in degrees.
     /// Rarly used, for example when waking up the player from a bed or their first time spawn. Otherwise, the `teleport` method should be used.
     /// The player should respond with the `SConfirmTeleport` packet.
-    pub async fn request_teleport(self: &Arc<Self>, position: Vector3<f64>, yaw: f32, pitch: f32) {
-        // This is the ultra special magic code used to create the teleport id
-        // This returns the old value
-        // This operation wraps around on overflow.
+    pub async fn request_teleport(
+        self: &Arc<Self>,
+        position: Vector3<f64>,
+        yaw: f32,
+        pitch: f32,
+    ) -> Option<Vector3<f64>> {
+        self.request_teleport_with_cause(position, yaw, pitch, TeleportCause::Unknown)
+            .await
+    }
+
+    /// Requests one cancellable native teleport and returns the final
+    /// listener-resolved position when it succeeds.
+    pub async fn request_teleport_with_cause(
+        self: &Arc<Self>,
+        position: Vector3<f64>,
+        yaw: f32,
+        pitch: f32,
+        cause: TeleportCause,
+    ) -> Option<Vector3<f64>> {
         let server = self.world().server.upgrade().unwrap();
+        let entity = &self.living_entity.entity;
+        let from_yaw = entity.yaw.load();
+        let from_pitch = entity.pitch.load();
         send_cancellable! {{
             server;
-            PlayerTeleportEvent {
-                player: self.clone(),
-                from: self.living_entity.entity.pos.load(),
-                to: position,
-                cancelled: false,
-            };
+            PlayerTeleportEvent::new(
+                self.clone(),
+                entity.pos.load(),
+                position,
+                Some(from_yaw),
+                Some(from_pitch),
+                Some(yaw),
+                Some(pitch),
+                cause,
+            );
 
             'after: {
                 let position = event.to;
-                let i = self
-                    .teleport_id_count
-                    .fetch_add(1, Ordering::Relaxed);
-                let teleport_id = i + 1;
-                self.living_entity.entity.set_pos(position);
-                let entity = &self.living_entity.entity;
-                entity.set_rotation(yaw, pitch);
-                *self.awaiting_teleport.lock().await = Some((teleport_id.into(), position));
-                self.client
-                    .send_packet_now(&CPlayerPosition::new(
-                        teleport_id.into(),
-                        position,
-                        Vector3::new(0.0, 0.0, 0.0),
-                        yaw,
-                        pitch,
-                        // TODO
-                        Vec::new(),
-                    )).await;
+                let resolved_yaw = event.to_yaw.unwrap_or(yaw);
+                let resolved_pitch = event.to_pitch.unwrap_or(pitch);
+                self.apply_teleport_position_without_event(
+                    position,
+                    resolved_yaw,
+                    resolved_pitch,
+                ).await;
+                Some(position)
+            }
+
+            'cancelled: {
+                None
             }
         }}
     }
@@ -2907,66 +3147,7 @@ impl Player {
             };
 
             'after: {
-                let gamemode = event.new_gamemode;
-                self.gamemode.store(gamemode);
-                // TODO: Fix this when mojang fixes it
-                // This is intentional to keep the pure vanilla mojang experience
-                // self.previous_gamemode.store(self.previous_gamemode.load());
-                {
-                    // Use another scope so that we instantly unlock `abilities`.
-                    let mut abilities = self.abilities.lock().await;
-                    abilities.set_for_gamemode(gamemode);
-                };
-                self.send_abilities_update().await;
-
-                if gamemode == GameMode::Creative {
-                    self.get_entity().extinguish();
-                    self.get_entity().set_on_fire(false).await;
-                }
-
-                // Stop elytra flight and reset sneaking when switching to spectator mode
-                if gamemode == GameMode::Spectator {
-                    let entity = self.get_entity();
-                    if entity.is_fall_flying() {
-                        entity.set_fall_flying(false).await;
-                    }
-                    if entity.is_sneaking() {
-                        entity.set_sneaking(false).await;
-                    }
-                }
-
-                if gamemode != GameMode::Spectator && self.camera_target_id.load().is_some() {
-                    self.camera_target_id.store(None);
-                    self.client.send_packet_now(&CSetCamera::new(
-                        self.entity_id().into()
-                    )).await;
-                }
-
-                self.living_entity.entity.invulnerable.store(
-                    matches!(gamemode, GameMode::Creative | GameMode::Spectator),
-                    Ordering::Relaxed,
-                );
-                self.living_entity
-                    .entity
-                    .world
-                    .load()
-                    .broadcast_packet_all(&CPlayerInfoUpdate::new(
-                        PlayerInfoFlags::UPDATE_GAME_MODE.bits(),
-                        &[pumpkin_protocol::java::client::play::Player {
-                            uuid: self.gameprofile.id,
-                            actions: &[PlayerAction::UpdateGameMode((gamemode as i32).into())],
-                        }],
-                    ));
-
-                self.client
-                    .enqueue_packet_editioned(
-                        &CGameEvent::new(GameEvent::ChangeGameMode, gamemode as i32 as f32),
-                        &pumpkin_protocol::bedrock::client::set_player_gamemode::CSetPlayerGamemode {
-                            gamemode,
-                        },
-                    )
-                    .await;
-
+                self.apply_gamemode_after_external_event(event.new_gamemode).await;
                 true
             }
 
@@ -2974,6 +3155,78 @@ impl Player {
                 false
             }
         }}
+    }
+
+    /// Applies a game-mode change after another compatibility layer has already
+    /// fired and resolved its own cancellable game-mode event.
+    ///
+    /// Normal Pumpkin callers must use [`Self::set_gamemode`] so the native
+    /// [`PlayerGamemodeChangeEvent`] is fired. JVM compatibility adapters use
+    /// this method only after synchronously dispatching the equivalent Bukkit
+    /// event; this avoids recursively re-entering the single JVM worker while
+    /// keeping all state, ability, camera, and client-packet updates shared.
+    pub async fn apply_gamemode_after_external_event(self: &Arc<Self>, gamemode: GameMode) {
+        let previous_gamemode = self.gamemode.load();
+        if previous_gamemode == gamemode {
+            return;
+        }
+
+        self.previous_gamemode.store(Some(previous_gamemode));
+        self.gamemode.store(gamemode);
+        {
+            // Use another scope so that we instantly unlock `abilities`.
+            let mut abilities = self.abilities.lock().await;
+            abilities.set_for_gamemode(gamemode);
+        }
+        self.send_abilities_update().await;
+
+        if gamemode == GameMode::Creative {
+            self.get_entity().extinguish();
+            self.get_entity().set_on_fire(false).await;
+        }
+
+        // Stop elytra flight and reset sneaking when switching to spectator mode
+        if gamemode == GameMode::Spectator {
+            let entity = self.get_entity();
+            if entity.is_fall_flying() {
+                entity.set_fall_flying(false).await;
+            }
+            if entity.is_sneaking() {
+                entity.set_sneaking(false).await;
+            }
+        }
+
+        if gamemode != GameMode::Spectator && self.camera_target_id.load().is_some() {
+            self.camera_target_id.store(None);
+            self.client
+                .send_packet_now(&CSetCamera::new(self.entity_id().into()))
+                .await;
+        }
+
+        self.living_entity.entity.invulnerable.store(
+            matches!(gamemode, GameMode::Creative | GameMode::Spectator),
+            Ordering::Relaxed,
+        );
+        self.living_entity
+            .entity
+            .world
+            .load()
+            .broadcast_packet_all(&CPlayerInfoUpdate::new(
+                PlayerInfoFlags::UPDATE_GAME_MODE.bits(),
+                &[pumpkin_protocol::java::client::play::Player {
+                    uuid: self.gameprofile.id,
+                    actions: &[PlayerAction::UpdateGameMode((gamemode as i32).into())],
+                }],
+            ));
+
+        self.client
+            .enqueue_packet_editioned(
+                &CGameEvent::new(GameEvent::ChangeGameMode, gamemode as i32 as f32),
+                &pumpkin_protocol::bedrock::client::set_player_gamemode::CSetPlayerGamemode {
+                    gamemode,
+                },
+            )
+            .await;
     }
 
     /// Send the player's skin layers and used hand to all players.
@@ -4544,38 +4797,22 @@ impl EntityBase for Player {
                 // Same world
                 let yaw = yaw.unwrap_or(self.living_entity.entity.yaw.load());
                 let pitch = pitch.unwrap_or(self.living_entity.entity.pitch.load());
-                let server = self.world().server.upgrade().unwrap();
-                send_cancellable! {{
-                    server;
-                    PlayerTeleportEvent {
-                        player: self.clone(),
-                        from: self.living_entity.entity.pos.load(),
-                        to: position,
-                        cancelled: false,
-                    };
-                    'after: {
-                        let position = event.to;
-                        let entity = self.get_entity();
-                        self.request_teleport(position, yaw, pitch).await;
-                        let chunk_pos = entity.chunk_pos.load();
-                        entity
-                            .world
-                            .load()
-                            .broadcast_to_chunk_except(
-                                chunk_pos,
-                                &[self.living_entity.entity.entity_uuid],
-                                &CEntityPositionSync::new(
-                                    self.living_entity.entity.entity_id.into(),
-                                    position,
-                                    Vector3::new(0.0, 0.0, 0.0),
-                                    yaw,
-                                    pitch,
-                                    entity.on_ground.load(Ordering::SeqCst),
-                                )
-                            )
-                            ;
-                    }
-                }}
+                if let Some(position) = self.request_teleport(position, yaw, pitch).await {
+                    let entity = self.get_entity();
+                    let chunk_pos = entity.chunk_pos.load();
+                    entity.world.load().broadcast_to_chunk_except(
+                        chunk_pos,
+                        &[self.living_entity.entity.entity_uuid],
+                        &CEntityPositionSync::new(
+                            self.living_entity.entity.entity_id.into(),
+                            position,
+                            Vector3::new(0.0, 0.0, 0.0),
+                            entity.yaw.load(),
+                            entity.pitch.load(),
+                            entity.on_ground.load(Ordering::SeqCst),
+                        ),
+                    );
+                }
             } else {
                 self.teleport_world(world, position, yaw, pitch).await;
             }

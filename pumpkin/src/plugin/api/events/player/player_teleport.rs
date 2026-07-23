@@ -6,6 +6,24 @@ use crate::entity::player::Player;
 
 use super::PlayerEvent;
 
+/// Describes the native reason for a player teleport.
+///
+/// Pumpkin callers should use the narrowest cause they know. Compatibility
+/// layers can preserve richer source-API causes when they dispatch their own
+/// event before calling Pumpkin's post-event teleport path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TeleportCause {
+    ChorusFruit,
+    Command,
+    EndGateway,
+    EndPortal,
+    EntityPortal,
+    NetherPortal,
+    Plugin,
+    Spectate,
+    Unknown,
+}
+
 /// An event that occurs when a player teleports.
 ///
 /// If the event is cancelled, the teleportation will not happen.
@@ -22,6 +40,23 @@ pub struct PlayerTeleportEvent {
 
     /// The position to which the player teleported.
     pub to: Vector3<f64>,
+
+    /// The player's orientation before teleporting, when supplied by the
+    /// native caller. Legacy plugin adapters may leave this unset.
+    pub from_yaw: Option<f32>,
+
+    /// The player's pitch before teleporting, when supplied by the caller.
+    pub from_pitch: Option<f32>,
+
+    /// The requested orientation after teleporting. Listeners may update
+    /// these values together with [`Self::to`].
+    pub to_yaw: Option<f32>,
+
+    /// The requested pitch after teleporting.
+    pub to_pitch: Option<f32>,
+
+    /// The native cause of the teleport.
+    pub cause: TeleportCause,
 }
 
 impl PlayerTeleportEvent {
@@ -34,11 +69,25 @@ impl PlayerTeleportEvent {
     ///
     /// # Returns
     /// A new instance of `PlayerTeleportEvent`.
-    pub const fn new(player: Arc<Player>, from: Vector3<f64>, to: Vector3<f64>) -> Self {
+    pub const fn new(
+        player: Arc<Player>,
+        from: Vector3<f64>,
+        to: Vector3<f64>,
+        from_yaw: Option<f32>,
+        from_pitch: Option<f32>,
+        to_yaw: Option<f32>,
+        to_pitch: Option<f32>,
+        cause: TeleportCause,
+    ) -> Self {
         Self {
             player,
             from,
             to,
+            from_yaw,
+            from_pitch,
+            to_yaw,
+            to_pitch,
+            cause,
             cancelled: false,
         }
     }

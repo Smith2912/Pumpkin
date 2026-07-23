@@ -97,9 +97,22 @@ impl DataComponentImpl for CanBreakImpl {
     default_impl!(CanBreak);
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct RepairCostImpl;
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Default)]
+pub struct RepairCostImpl {
+    pub cost: i32,
+}
+impl RepairCostImpl {
+    pub fn read_data(data: &NbtTag) -> Option<Self> {
+        data.extract_int().map(|cost| Self { cost })
+    }
+}
 impl DataComponentImpl for RepairCostImpl {
+    fn write_data(&self) -> NbtTag {
+        NbtTag::Int(self.cost)
+    }
+    fn get_hash(&self) -> i32 {
+        get_i32_hash(self.cost) as i32
+    }
     default_impl!(RepairCost);
 }
 

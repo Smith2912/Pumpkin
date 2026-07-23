@@ -52,11 +52,12 @@ impl Weather {
         }
     }
 
-    pub fn set_weather_parameters(
+    pub(super) fn apply_weather_parameters(
         &mut self,
         world: &World,
         clear_time: i32,
         rain_time: i32,
+        thunder_time: i32,
         raining: bool,
         thundering: bool,
     ) {
@@ -64,7 +65,7 @@ impl Weather {
 
         self.clear_weather_time = clear_time;
         self.rain_time = rain_time;
-        self.thunder_time = rain_time;
+        self.thunder_time = thunder_time;
         self.raining = raining;
         self.thundering = thundering;
 
@@ -77,11 +78,7 @@ impl Weather {
         }
     }
 
-    pub fn tick_weather(&mut self, world: &World) {
-        if !self.weather_cycle_enabled {
-            self.advance_weather_cycle();
-        }
-
+    pub(super) fn tick_weather_levels(&mut self, world: &World) {
         // Update visual transitions
         self.old_rain_level = self.rain_level;
         self.old_thunder_level = self.thunder_level;
@@ -114,20 +111,31 @@ impl Weather {
         }
     }
 
-    fn advance_weather_cycle(&mut self) {
+    /// Advances weather timers and returns a requested state transition.
+    ///
+    /// State changes are returned instead of applied directly so the world can
+    /// fire cancellable plugin events before committing them.
+    pub(super) fn advance_weather_cycle(&mut self) -> Option<(bool, bool)> {
+        if !self.weather_cycle_enabled {
+            return None;
+        }
+
+        let mut raining = self.raining;
+        let mut thundering = self.thundering;
+
         // Removed async since there are no await calls
         if self.clear_weather_time > 0 {
             self.clear_weather_time -= 1;
             self.thunder_time = i32::from(!self.thundering);
             self.rain_time = i32::from(!self.raining);
-            self.thundering = false;
-            self.raining = false;
+            thundering = false;
+            raining = false;
         } else {
             // Handle thunder timing
             if self.thunder_time > 0 {
                 self.thunder_time -= 1;
                 if self.thunder_time == 0 {
-                    self.thundering = !self.thundering;
+                    thundering = !self.thundering;
                 }
             } else if self.thundering {
                 self.thunder_time =
@@ -140,7 +148,7 @@ impl Weather {
             if self.rain_time > 0 {
                 self.rain_time -= 1;
                 if self.rain_time == 0 {
-                    self.raining = !self.raining;
+                    raining = !self.raining;
                 }
             } else if self.raining {
                 self.rain_time = rand::rng().random_range(RAIN_DURATION_MIN..=RAIN_DURATION_MAX);
@@ -148,10 +156,8 @@ impl Weather {
                 self.rain_time = rand::rng().random_range(RAIN_DELAY_MIN..=RAIN_DELAY_MAX);
             }
         }
-    }
 
-    pub fn reset_weather_cycle(&mut self, world: &World) {
-        self.set_weather_parameters(world, 0, 0, false, false);
+        ((raining, thundering) != (self.raining, self.thundering)).then_some((raining, thundering))
     }
 }
 
@@ -169,5 +175,31 @@ impl Clone for Weather {
             old_thunder_level: self.old_thunder_level,
             weather_cycle_enabled: self.weather_cycle_enabled,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Weather;
+
+    #[test]
+    fn disabled_weather_cycle_does_not_advance_or_request_transition() {
+        let mut weather = Weather::new();
+        weather.weather_cycle_enabled = false;
+        weather.rain_time = 1;
+
+        assert_eq!(weather.advance_weather_cycle(), None);
+        assert_eq!(weather.rain_time, 1);
+        assert!(!weather.raining);
+    }
+
+    #[test]
+    fn weather_cycle_requests_transition_before_mutating_state() {
+        let mut weather = Weather::new();
+        weather.rain_time = 1;
+
+        assert_eq!(weather.advance_weather_cycle(), Some((true, false)));
+        assert_eq!(weather.rain_time, 0);
+        assert!(!weather.raining);
     }
 }

@@ -146,9 +146,35 @@ impl DataComponentImpl for ItemModelImpl {
     default_impl!(ItemModel);
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct LoreImpl;
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Default)]
+pub struct LoreImpl {
+    pub lines: Vec<String>,
+}
+impl LoreImpl {
+    pub fn read_data(data: &NbtTag) -> Option<Self> {
+        let lines = data
+            .extract_list()?
+            .iter()
+            .map(|line| line.extract_string().map(ToOwned::to_owned))
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self { lines })
+    }
+}
 impl DataComponentImpl for LoreImpl {
+    fn write_data(&self) -> NbtTag {
+        NbtTag::List(
+            self.lines
+                .iter()
+                .map(|line| NbtTag::String(line.clone().into()))
+                .collect(),
+        )
+    }
+    fn get_hash(&self) -> i32 {
+        self.lines.iter().fold(1_i32, |hash, line| {
+            hash.wrapping_mul(31)
+                .wrapping_add(get_str_hash(line) as i32)
+        })
+    }
     default_impl!(Lore);
 }
 

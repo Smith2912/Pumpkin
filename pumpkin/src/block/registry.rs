@@ -564,7 +564,7 @@ impl BlockRegistry {
                 }
             };
 
-        if !self.can_place_at(
+        let buildable = self.can_place_at(
             Some(server),
             Some(&*world),
             &*world,
@@ -574,7 +574,20 @@ impl BlockRegistry {
             &final_block_pos,
             Some(final_face),
             Some(use_item_on),
-        ) {
+        );
+        let can_build_event = crate::plugin::block::block_can_build::BlockCanBuildEvent::new(
+            world.clone(),
+            final_block_pos,
+            placed_block,
+            buildable,
+            player.clone(),
+            clicked_block,
+        );
+        let can_build_event = server
+            .plugin_manager
+            .fire::<crate::plugin::block::block_can_build::BlockCanBuildEvent>(can_build_event)
+            .await;
+        if can_build_event.cancelled || !can_build_event.buildable {
             return Ok(None);
         }
 
@@ -613,7 +626,7 @@ impl BlockRegistry {
             .plugin_manager
             .fire::<crate::plugin::block::block_place::BlockPlaceEvent>(event)
             .await;
-        if event.cancelled {
+        if event.cancelled || !event.can_build {
             return Ok(None);
         }
 

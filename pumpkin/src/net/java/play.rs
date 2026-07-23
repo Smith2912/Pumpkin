@@ -21,6 +21,7 @@ use crate::error::PumpkinError;
 use crate::log_at_level;
 use crate::net::PlayerConfig;
 use crate::net::java::JavaClient;
+use crate::plugin::player::async_tab_complete::AsyncTabCompleteEvent;
 use crate::plugin::player::changed_main_hand::PlayerChangedMainHandEvent;
 use crate::plugin::player::fish::{PlayerFishEvent, PlayerFishState};
 use crate::plugin::player::item_held::PlayerItemHeldEvent;
@@ -30,6 +31,7 @@ use crate::plugin::player::player_interact_entity_event::PlayerInteractEntityEve
 use crate::plugin::player::player_interact_event::{InteractAction, PlayerInteractEvent};
 use crate::plugin::player::player_interact_unknown_entity_event::PlayerInteractUnknownEntityEvent;
 use crate::plugin::player::player_move::PlayerMoveEvent;
+use crate::plugin::player::player_teleport::TeleportCause;
 use crate::plugin::player::player_toggle_flight_event::PlayerToggleFlightEvent;
 use crate::plugin::player::player_toggle_sneak_event::PlayerToggleSneakEvent;
 
@@ -58,8 +60,8 @@ use pumpkin_protocol::codec::var_ulong::VarULong;
 use pumpkin_protocol::java::client::play::{
     CBlockUpdate, CCommandSuggestions, CEntityPositionSync, CHeadRot, COpenSignEditor,
     CPingResponse, CPlayerInfoUpdate, CPlayerPosition, CSetCamera, CSetSelectedSlot,
-    CSystemChatMessage, CUpdateEntityPos, CUpdateEntityPosRot, CUpdateEntityRot, InitChat,
-    PlayerAction,
+    CSystemChatMessage, CUpdateEntityPos, CUpdateEntityPosRot, CUpdateEntityRot, CommandSuggestion,
+    InitChat, PlayerAction,
 };
 use pumpkin_protocol::java::server::play::{
     Action, ActionType, CommandBlockMode, FLAG_ON_GROUND, SAttack, SBundleItemSelected,
@@ -1409,7 +1411,11 @@ impl JavaClient {
 
         send_cancellable! {{
             server;
-            PlayerChatEvent::new(player.clone(), chat_message.message.to_string(), vec![]);
+            PlayerChatEvent::new(
+                player.clone(),
+                chat_message.message.to_string(),
+                server.get_all_players(),
+            );
 
             'after: {
                 info!("<chat> {}: {}", gameprofile.name, event.message);
@@ -1430,7 +1436,14 @@ impl JavaClient {
                 let entity = &player.get_entity();
                 let world = entity.world.load_full();
                 if server.basic_config.allow_chat_reports {
-                    world.broadcast_secure_player_chat(player, &chat_message, &decorated_message).await;
+                    world
+                        .send_secure_player_chat(
+                            &event.recipients,
+                            player,
+                            &chat_message,
+                            &decorated_message,
+                        )
+                        .await;
                 } else {
                     let je_packet = CSystemChatMessage::new(
                         &decorated_message,
@@ -1440,7 +1453,12 @@ impl JavaClient {
                         message, player.gameprofile.name.clone()
                     );
 
-                    world.broadcast_editioned(&je_packet, &be_packet).await;
+                    for recipient in &event.recipients {
+                        recipient
+                            .client
+                            .enqueue_packet_editioned(&je_packet, &be_packet)
+                            .await;
+                    }
                 }
             }
         }}
@@ -2738,26 +2756,47 @@ impl JavaClient {
         packet: SCommandSuggestion,
         server: &Arc<Server>,
     ) {
-        let Some(cmd) = &packet.command.get(1..) else {
+        let Some(cmd) = packet.command.strip_prefix('/') else {
             return;
         };
 
-        let Some((last_word_start, _)) = cmd.char_indices().rfind(|(_, c)| c.is_whitespace())
-        else {
-            return;
-        };
-
-        let suggestions = server
-            .command_dispatcher
-            .read()
-            .await
-            .suggest(cmd, &player.get_command_source(server).await)
+        let event = server
+            .plugin_manager
+            .fire(AsyncTabCompleteEvent::new(
+                player.clone(),
+                packet.command.clone(),
+            ))
             .await;
+
+        let suggestions = if event.cancelled {
+            Vec::new()
+        } else if event.handled {
+            event
+                .completions
+                .into_iter()
+                .map(|completion| CommandSuggestion::new(completion, None))
+                .collect()
+        } else {
+            server
+                .command_dispatcher
+                .read()
+                .await
+                .suggest(cmd, &player.get_command_source(server).await)
+                .await
+        };
+
+        let completion_start = packet
+            .command
+            .char_indices()
+            .rfind(|(_, c)| c.is_whitespace())
+            .map_or(1, |(index, character)| index + character.len_utf8());
 
         let response = CCommandSuggestions::new(
             packet.id,
-            (last_word_start + 2).try_into().unwrap(),
-            (cmd.len() - last_word_start - 1).try_into().unwrap(),
+            completion_start.try_into().unwrap(),
+            (packet.command.len() - completion_start)
+                .try_into()
+                .unwrap(),
             suggestions.into(),
         );
 
@@ -2882,15 +2921,22 @@ impl JavaClient {
             let target_pitch = target_player.living_entity.entity.pitch.load();
 
             let target_id = target_player.living_entity.entity.entity_id;
-            player.camera_target_id.store(Some(target_id));
-            player
-                .client
-                .send_packet_now(&CSetCamera::new(target_id.into()))
-                .await;
-
-            player
-                .request_teleport(target_pos, target_yaw, target_pitch)
-                .await;
+            if player
+                .request_teleport_with_cause(
+                    target_pos,
+                    target_yaw,
+                    target_pitch,
+                    TeleportCause::Spectate,
+                )
+                .await
+                .is_some()
+            {
+                player.camera_target_id.store(Some(target_id));
+                player
+                    .client
+                    .send_packet_now(&CSetCamera::new(target_id.into()))
+                    .await;
+            }
         }
     }
 
