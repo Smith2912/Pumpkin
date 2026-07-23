@@ -1,3 +1,100 @@
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
+index d225037..ed66655 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
+@@ -10,0 +11,11 @@ public final class PatchBukkitTestPlugin extends JavaPlugin {
++    private boolean loadPhaseCompleted;
++
++    @Override
++    public void onLoad() {
++        loadPhaseCompleted = true;
++    }
++
++    public boolean wasLoadPhaseCompleted() {
++        return loadPhaseCompleted;
++    }
++
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
+index 032bce0..2a239e4 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
+@@ -58,0 +59,8 @@ public final class PluginManagerTests {
++    @ConformanceTest(name = "Plugin onLoad() runs before onEnable()", category = TestCategory.PLUGIN_MANAGER)
++    public void testLoadPhaseCompleted() {
++        assertTrue(
++            ((org.patchbukkit.testplugin.PatchBukkitTestPlugin) plugin).wasLoadPhaseCompleted(),
++            "onLoad() should run before the plugin is enabled"
++        );
++    }
++
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
+index d90de1b..fff84ba 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
+@@ -159 +159,4 @@ public class PatchBukkitPluginManager implements PluginManager {
+-                server.getLogger().severe("Error enabling " + plugin.getName() + ": " + ex.getMessage());
++                throw new IllegalStateException(
++                    "Error enabling " + plugin.getName(),
++                    ex
++                );
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
+@@ -14 +14 @@ public final class UnsafeValuesTests {
+-    @ConformanceTest(name = "UnsafeValues.getDataVersion() returns positive int", category = TestCategory.UNSAFE_VALUES)
++    @ConformanceTest(name = "UnsafeValues.getDataVersion() matches Minecraft 26.2", category = TestCategory.UNSAFE_VALUES)
+@@ -18 +18 @@ public final class UnsafeValuesTests {
+-        assertTrue(version > 0, "getDataVersion() should be > 0, got " + version);
++        assertTrue(version == 4903, "getDataVersion() should be 4903, got " + version);
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
+@@ -15,0 +16,2 @@ import java.io.File;
++import java.io.PrintWriter;
++import java.io.StringWriter;
+@@ -99,0 +102 @@ import patchbukkit.bridge.NativeBridgeFfi;
++import patchbukkit.common.EmptyRequest;
+@@ -144,0 +147,6 @@ public class PatchBukkitServer implements Server {
++                String message = record.getMessage();
++                if (record.getThrown() != null) {
++                    StringWriter stackTrace = new StringWriter();
++                    record.getThrown().printStackTrace(new PrintWriter(stackTrace));
++                    message += System.lineSeparator() + stackTrace;
++                }
+@@ -148 +156 @@ public class PatchBukkitServer implements Server {
+-                                .setMessage(record.getMessage())
++                                .setMessage(message)
+@@ -870,4 +879,3 @@ public class PatchBukkitServer implements Server {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getOnlineMode'"
+-        );
++        return NativeBridgeFfi
++            .getPatchBukkitConfig(EmptyRequest.newBuilder().setPresent(true).build())
++            .getOnlineMode();
+@@ -1287,4 +1295 @@ public class PatchBukkitServer implements Server {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getWarningState'"
+-        );
++        return WarningState.DEFAULT;
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
+@@ -56,0 +57,4 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
++    // Minecraft Java Edition 26.2 world data version, from the official
++    // Mojang server version.json. Keep this aligned with Pumpkin's protocol.
++    private static final int DATA_VERSION = 4903;
++
+@@ -63 +67,3 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+-        var minimumApi = NativeBridgeFfi.getPatchBukkitConfig(EmptyRequest.newBuilder().build()).getMinimumSupportedPluginApi();
++        var minimumApi = NativeBridgeFfi
++            .getPatchBukkitConfig(EmptyRequest.newBuilder().setPresent(true).build())
++            .getMinimumSupportedPluginApi();
+@@ -157,2 +162 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+-		// TODO Auto-generated method stub
+-		throw new UnsupportedOperationException("Unimplemented method 'getDataVersion'");
++		return DATA_VERSION;
 diff --git a/rust/src/commands/mod.rs b/rust/src/commands/mod.rs
 index 484dc62..22d354c 100644
 --- a/rust/src/commands/mod.rs
@@ -5,3 +102,540 @@ index 484dc62..22d354c 100644
 @@ -37 +37 @@ impl GetClientSideArgParser for AnyCommandNode {
 -    fn get_client_side_parser(&self) -> ArgumentType<'_> {
 +    fn get_client_side_parser(&self) -> ArgumentType {
+diff --git a/rust/src/java/plugin/manager.rs b/rust/src/java/plugin/manager.rs
+index 8754934..4c5a0da 100644
+--- a/rust/src/java/plugin/manager.rs
++++ b/rust/src/java/plugin/manager.rs
+@@ -409,0 +410,12 @@ impl PluginManager {
++            // Bukkit's lifecycle calls onLoad after the plugin has been constructed and
++            // initialized, but before any plugin is enabled. Some plugins (including
++            // LuckPerms) load their runtime dependencies and configuration in this phase.
++            if let Err(error) = jvm.invoke(&plugin_instance, "onLoad", InvocationArg::empty()) {
++                plugin.state = PluginState::Errored;
++                tracing::error!(
++                    "Failed to load PatchBukkit plugin {}: {error:?}",
++                    plugin.name
++                );
++                continue;
++            }
++
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
+@@ -77,0 +78,5 @@ public final class ServerTests {
++    @ConformanceTest(name = "Server.getOnlineMode() is implemented", category = TestCategory.SERVER)
++    public void testGetOnlineMode() {
++        Bukkit.getServer().getOnlineMode();
++    }
++
++    @ConformanceTest(name = "Server.getWarningState() is implemented", category = TestCategory.SERVER)
++    public void testGetWarningState() {
++        assertNotNull(Bukkit.getServer().getWarningState(), "Server.getWarningState()");
++    }
++
+diff --git a/proto/patchbukkit/config.proto b/proto/patchbukkit/config.proto
+--- a/proto/patchbukkit/config.proto
++++ b/proto/patchbukkit/config.proto
+@@ -11,0 +12 @@ message GetPatchBukkitConfigResponse {
++  bool online_mode = 2;
+diff --git a/proto/patchbukkit/common/types.proto b/proto/patchbukkit/common/types.proto
+--- a/proto/patchbukkit/common/types.proto
++++ b/proto/patchbukkit/common/types.proto
+@@ -29 +29,4 @@ message Location {
+-message EmptyRequest {}
++message EmptyRequest {
++  // Ensures the request serializes to at least one byte for the FFI transport.
++  bool present = 1;
++}
+diff --git a/rust/src/java/native_callbacks/config.rs b/rust/src/java/native_callbacks/config.rs
+--- a/rust/src/java/native_callbacks/config.rs
++++ b/rust/src/java/native_callbacks/config.rs
+@@ -17,0 +18,7 @@ pub fn ffi_native_bridge_get_patch_bukkit_config_impl(
++            online_mode: context
++                .plugin_context
++                .server
++                .advanced_config
++                .networking
++                .java
++                .online_mode,
+diff --git a/rust/src/java/jar.rs b/rust/src/java/jar.rs
+--- a/rust/src/java/jar.rs
++++ b/rust/src/java/jar.rs
+@@ -2 +2 @@ use std::{
+-    fs::File,
++    fs::{self, File},
+@@ -8 +7,0 @@ use anyhow::Result;
+-use glob::glob;
+@@ -14,12 +13,26 @@ pub fn discover_jar_files(plugin_folder: &Path) -> impl Iterator<Item = PathBuf>
+-    let pattern = format!("{}/**/*.jar", plugin_folder.display());
+-
+-    glob(&pattern)
+-        .expect("Invalid glob pattern")
+-        .filter_map(|entry| {
+-            entry
+-                .map_err(|e| tracing::error!("Glob error: {e:?}"))
+-                .ok()?
+-                .canonicalize()
+-                .map_err(|e| tracing::error!("Canonicalize error: {e:?}"))
+-                .ok()
+-        })
++    let jars = match fs::read_dir(plugin_folder) {
++        Ok(entries) => entries
++            .filter_map(|entry| {
++                let path = entry
++                    .map_err(|error| tracing::error!("Read directory error: {error:?}"))
++                    .ok()?
++                    .path();
++                if !path.is_file()
++                    || !path
++                        .extension()
++                        .is_some_and(|extension| extension.eq_ignore_ascii_case("jar"))
++                {
++                    return None;
++                }
++                path.canonicalize()
++                    .map_err(|error| tracing::error!("Canonicalize error: {error:?}"))
++                    .ok()
++            })
++            .collect(),
++        Err(error) => {
++            tracing::error!("Failed to read plugin directory: {error:?}");
++            Vec::new()
++        }
++    };
++
++    jars.into_iter()
+@@ -53,0 +67,27 @@ pub fn read_configs_from_jar<P: AsRef<Path>>(
++
++#[cfg(test)]
++mod tests {
++    use super::discover_jar_files;
++    use std::fs;
++
++    #[test]
++    fn discovery_ignores_nested_dependency_jars() {
++        let root = std::env::temp_dir().join(format!(
++            "patchbukkit-jar-discovery-{}",
++            uuid::Uuid::new_v4()
++        ));
++        let nested = root.join("PluginData").join("libs");
++        fs::create_dir_all(&nested).expect("create test directories");
++        fs::write(root.join("plugin.jar"), []).expect("create plugin jar");
++        fs::write(nested.join("dependency.jar"), []).expect("create dependency jar");
++
++        let jars: Vec<_> = discover_jar_files(&root).collect();
++
++        assert_eq!(jars.len(), 1);
++        assert_eq!(
++            jars[0].file_name().and_then(|name| name.to_str()),
++            Some("plugin.jar")
++        );
++        fs::remove_dir_all(root).expect("remove test directories");
++    }
++}
+diff --git a/java/patchbukkit/src/main/java/org/bukkit/plugin/SimplePluginManager.java b/java/patchbukkit/src/main/java/org/bukkit/plugin/SimplePluginManager.java
+new file mode 100644
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/bukkit/plugin/SimplePluginManager.java
+@@ -0,0 +1,214 @@
++package org.bukkit.plugin;
++
++import io.papermc.paper.plugin.PermissionManager;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.LinkedHashMap;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Locale;
++import java.util.Map;
++import java.util.Set;
++import java.util.WeakHashMap;
++import org.bukkit.Server;
++import org.bukkit.command.SimpleCommandMap;
++import org.bukkit.permissions.Permissible;
++import org.bukkit.permissions.Permission;
++import org.bukkit.permissions.PermissionDefault;
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.annotations.Nullable;
++
++/**
++ * PatchBukkit-compatible implementation base for Bukkit's standard plugin manager.
++ *
++ * <p>The Paper API ships this class as part of the API jar, but compatibility
++ * plugins such as LuckPerms require the runtime plugin manager to be an instance
++ * of it and replace its public permission maps. PatchBukkit supplies this
++ * source-level implementation so its bridge manager can extend the expected
++ * Bukkit type while retaining its native event integration.</p>
++ */
++@SuppressWarnings("removal")
++public abstract class SimplePluginManager implements PluginManager {
++    protected final Server server;
++    protected final SimpleCommandMap commandMap;
++
++    public Map<String, Permission> permissions = new HashMap<>();
++    public Map<Boolean, Set<Permission>> defaultPerms = new LinkedHashMap<>();
++    public Map<String, Map<Permissible, Boolean>> permSubs = new HashMap<>();
++    public Map<Boolean, Map<Permissible, Boolean>> defSubs = new HashMap<>();
++
++    private boolean useTimings;
++
++    protected SimplePluginManager(Server server, SimpleCommandMap commandMap) {
++        this.server = server;
++        this.commandMap = commandMap;
++        this.defaultPerms.put(true, new LinkedHashSet<>());
++        this.defaultPerms.put(false, new LinkedHashSet<>());
++    }
++
++    @Override
++    public @Nullable Permission getPermission(@NotNull String name) {
++        return this.permissions.get(name.toLowerCase(Locale.ENGLISH));
++    }
++
++    @Override
++    public void addPermission(@NotNull Permission permission) {
++        addPermission(permission, true);
++    }
++
++    @Override
++    public void addPermissions(@NotNull List<Permission> permissions) {
++        for (Permission permission : permissions) {
++            addPermission(permission, false);
++        }
++        dirtyPermissibles();
++    }
++
++    public void addPermission(@NotNull Permission permission, boolean dirty) {
++        String name = permission.getName().toLowerCase(Locale.ENGLISH);
++        if (this.permissions.containsKey(name)) {
++            throw new IllegalArgumentException("The permission " + name + " is already defined!");
++        }
++
++        this.permissions.put(name, permission);
++        calculatePermissionDefault(permission, dirty);
++    }
++
++    @Override
++    public void removePermission(@NotNull Permission permission) {
++        removePermission(permission.getName());
++    }
++
++    @Override
++    public void removePermission(@NotNull String name) {
++        this.permissions.remove(name.toLowerCase(Locale.ENGLISH));
++    }
++
++    @Override
++    public @NotNull Set<Permission> getDefaultPermissions(boolean op) {
++        return Set.copyOf(this.defaultPerms.computeIfAbsent(op, ignored -> new LinkedHashSet<>()));
++    }
++
++    @Override
++    public void recalculatePermissionDefaults(@NotNull Permission permission) {
++        String name = permission.getName().toLowerCase(Locale.ENGLISH);
++        if (!this.permissions.containsKey(name)) {
++            return;
++        }
++
++        this.defaultPerms.computeIfAbsent(true, ignored -> new LinkedHashSet<>()).remove(permission);
++        this.defaultPerms.computeIfAbsent(false, ignored -> new LinkedHashSet<>()).remove(permission);
++        calculatePermissionDefault(permission, true);
++    }
++
++    private void calculatePermissionDefault(@NotNull Permission permission, boolean dirty) {
++        PermissionDefault value = permission.getDefault();
++        if (value == PermissionDefault.OP || value == PermissionDefault.TRUE) {
++            this.defaultPerms.computeIfAbsent(true, ignored -> new LinkedHashSet<>()).add(permission);
++            if (dirty) {
++                dirtyPermissibles(true);
++            }
++        }
++        if (value == PermissionDefault.NOT_OP || value == PermissionDefault.TRUE) {
++            this.defaultPerms.computeIfAbsent(false, ignored -> new LinkedHashSet<>()).add(permission);
++            if (dirty) {
++                dirtyPermissibles(false);
++            }
++        }
++    }
++
++    @Override
++    public void subscribeToPermission(@NotNull String permission, @NotNull Permissible permissible) {
++        String name = permission.toLowerCase(Locale.ENGLISH);
++        this.permSubs.computeIfAbsent(name, ignored -> new WeakHashMap<>()).put(permissible, true);
++    }
++
++    @Override
++    public void unsubscribeFromPermission(@NotNull String permission, @NotNull Permissible permissible) {
++        String name = permission.toLowerCase(Locale.ENGLISH);
++        Map<Permissible, Boolean> subscribers = this.permSubs.get(name);
++        if (subscribers == null) {
++            return;
++        }
++
++        subscribers.remove(permissible);
++        if (subscribers.isEmpty()) {
++            this.permSubs.remove(name);
++        }
++    }
++
++    @Override
++    public @NotNull Set<Permissible> getPermissionSubscriptions(@NotNull String permission) {
++        Map<Permissible, Boolean> subscribers =
++            this.permSubs.get(permission.toLowerCase(Locale.ENGLISH));
++        return subscribers == null ? Set.of() : Set.copyOf(subscribers.keySet());
++    }
++
++    @Override
++    public void subscribeToDefaultPerms(boolean op, @NotNull Permissible permissible) {
++        this.defSubs.computeIfAbsent(op, ignored -> new WeakHashMap<>()).put(permissible, true);
++    }
++
++    @Override
++    public void unsubscribeFromDefaultPerms(boolean op, @NotNull Permissible permissible) {
++        Map<Permissible, Boolean> subscribers = this.defSubs.get(op);
++        if (subscribers == null) {
++            return;
++        }
++
++        subscribers.remove(permissible);
++        if (subscribers.isEmpty()) {
++            this.defSubs.remove(op);
++        }
++    }
++
++    @Override
++    public @NotNull Set<Permissible> getDefaultPermSubscriptions(boolean op) {
++        Map<Permissible, Boolean> subscribers = this.defSubs.get(op);
++        return subscribers == null ? Set.of() : Set.copyOf(subscribers.keySet());
++    }
++
++    @Override
++    public @NotNull Set<Permission> getPermissions() {
++        return new HashSet<>(this.permissions.values());
++    }
++
++    @Override
++    public void clearPermissions() {
++        this.permissions.clear();
++        this.defaultPerms.computeIfAbsent(true, ignored -> new LinkedHashSet<>()).clear();
++        this.defaultPerms.computeIfAbsent(false, ignored -> new LinkedHashSet<>()).clear();
++    }
++
++    protected void dirtyPermissibles(boolean op) {
++        for (Permissible permissible : getDefaultPermSubscriptions(op)) {
++            permissible.recalculatePermissions();
++        }
++    }
++
++    protected void dirtyPermissibles() {
++        dirtyPermissibles(true);
++        dirtyPermissibles(false);
++    }
++
++    @Override
++    public void overridePermissionManager(
++        @NotNull Plugin plugin,
++        @Nullable PermissionManager permissionManager
++    ) {
++        if (permissionManager != null && permissionManager != this) {
++            throw new UnsupportedOperationException(
++                "PatchBukkit cannot replace its compatibility permission manager"
++            );
++        }
++    }
++
++    @Override
++    public boolean useTimings() {
++        return this.useTimings;
++    }
++
++    public void useTimings(boolean useTimings) {
++        this.useTimings = useTimings;
++    }
++}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
+@@ -1,38 +1,30 @@
+ package org.patchbukkit;
+ 
+-import io.papermc.paper.plugin.PermissionManager;
+ import io.papermc.paper.plugin.configuration.PluginMeta;
+ import java.io.File;
+ import java.util.HashMap;
+-import java.util.List;
+ import java.util.Map;
+-import java.util.Set;
+ import java.util.concurrent.ConcurrentHashMap;
+ 
+ import org.bukkit.Server;
++import org.bukkit.command.SimpleCommandMap;
+ import org.bukkit.event.Event;
+ import org.bukkit.event.EventPriority;
+ import org.bukkit.event.Listener;
+-import org.bukkit.permissions.Permissible;
+-import org.bukkit.permissions.Permission;
+ import org.bukkit.plugin.*;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
+ import org.jspecify.annotations.NonNull;
+ import org.patchbukkit.events.PatchBukkitEventManager;
+-import org.patchbukkit.permissions.PatchBukkitPermissionManager;
+ 
+ @SuppressWarnings("removal")
+-public class PatchBukkitPluginManager implements PluginManager {
+-    private final Server server;
++public class PatchBukkitPluginManager extends SimplePluginManager {
+     private final PatchBukkitEventManager eventManager;
+     private final Map<String, Plugin> plugins = new ConcurrentHashMap<>();
+-    PermissionManager permissionManager;
+ 
+     public PatchBukkitPluginManager(Server server) {
+-        this.server = server;
++        super(server, new SimpleCommandMap(server, new HashMap<>()));
+         this.eventManager = new PatchBukkitEventManager(server);
+-        this.permissionManager = new PatchBukkitPermissionManager();
+     }
+ 
+     public PatchBukkitEventManager getEventManager() {
+@@ -171,93 +163,6 @@ public class PatchBukkitPluginManager implements PluginManager {
+         }
+     }
+ 
+-    @Override
+-    public @Nullable Permission getPermission(@NotNull String name) {
+-        return this.permissionManager.getPermission(name);
+-    }
+-
+-    @Override
+-    public void addPermission(@NotNull Permission perm) {
+-        this.permissionManager.addPermission(perm);
+-    }
+-
+-    @Override
+-    public void removePermission(@NotNull Permission perm) {
+-        this.permissionManager.removePermission(perm);
+-    }
+-
+-    @Override
+-    public void removePermission(@NotNull String name) {
+-        this.permissionManager.removePermission(name);
+-    }
+-
+-    @Override
+-    public @NotNull Set<Permission> getDefaultPermissions(boolean op) {
+-        return this.permissionManager.getDefaultPermissions(op);
+-    }
+-
+-    @Override
+-    public void recalculatePermissionDefaults(@NotNull Permission perm) {
+-        this.permissionManager.recalculatePermissionDefaults(perm);
+-    }
+-
+-    @Override
+-    public void subscribeToPermission(@NotNull String permission, @NotNull Permissible permissible) {
+-        this.permissionManager.subscribeToPermission(permission, permissible);
+-    }
+-
+-    @Override
+-    public void unsubscribeFromPermission(@NotNull String permission, @NotNull Permissible permissible) {
+-        this.permissionManager.unsubscribeFromPermission(permission, permissible);
+-    }
+-
+-    @Override
+-    public @NotNull Set<Permissible> getPermissionSubscriptions(@NotNull String permission) {
+-        return this.permissionManager.getPermissionSubscriptions(permission);
+-    }
+-
+-    @Override
+-    public void subscribeToDefaultPerms(boolean op, @NotNull Permissible permissible) {
+-        this.permissionManager.subscribeToDefaultPerms(op, permissible);
+-    }
+-
+-    @Override
+-    public void unsubscribeFromDefaultPerms(boolean op, @NotNull Permissible permissible) {
+-        this.permissionManager.unsubscribeFromDefaultPerms(op, permissible);
+-    }
+-
+-    @Override
+-    public @NotNull Set<Permissible> getDefaultPermSubscriptions(boolean op) {
+-        return this.permissionManager.getDefaultPermSubscriptions(op);
+-    }
+-
+-    @Override
+-    public @NotNull Set<Permission> getPermissions() {
+-        return this.permissionManager.getPermissions();
+-    }
+-
+-    @Override
+-    public void addPermissions(@NotNull List<Permission> perm) {
+-        this.permissionManager.addPermissions(perm);
+-    }
+-
+-    @Override
+-    public void clearPermissions() {
+-        this.permissionManager.clearPermissions();
+-    }
+-
+-    @Override
+-    public void overridePermissionManager(@NotNull Plugin plugin, @Nullable PermissionManager permissionManager) {
+-        this.permissionManager = permissionManager;
+-    }
+-
+-    @Override
+-    public boolean useTimings() {
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'useTimings'"
+-        );
+-    }
+-
+     @Override
+     public boolean isTransitiveDependency(
+         PluginMeta pluginMeta,
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
+@@ -3,9 +3,14 @@ package org.patchbukkit.testplugin.tests;
+ import org.bukkit.Bukkit;
+ import org.bukkit.plugin.Plugin;
+ import org.bukkit.plugin.PluginManager;
++import org.bukkit.plugin.SimplePluginManager;
+ import org.patchbukkit.testplugin.ConformanceTest;
+ import org.patchbukkit.testplugin.TestCategory;
+ import org.bukkit.plugin.java.JavaPlugin;
++import org.bukkit.permissions.Permission;
++
++import java.lang.reflect.Field;
++import java.util.Map;
+ 
+ import static org.patchbukkit.testplugin.TestAssertions.*;
+ 
+@@ -70,4 +75,29 @@ public final class PluginManagerTests {
+         assertNotNull(perms, "PluginManager.getPermissions()");
+     }
+ 
++    @ConformanceTest(name = "PluginManager exposes Bukkit permission maps", category = TestCategory.PLUGIN_MANAGER)
++    public void testSimplePluginManagerCompatibility() throws Exception {
++        PluginManager manager = Bukkit.getPluginManager();
++        assertTrue(
++            manager instanceof SimplePluginManager,
++            "PluginManager should be a SimplePluginManager for Bukkit permission providers"
++        );
++
++        Permission marker = new Permission("patchbukkit.test.permission-map");
++        manager.addPermission(marker);
++        try {
++            Field permissionsField = SimplePluginManager.class.getDeclaredField("permissions");
++            permissionsField.setAccessible(true);
++            @SuppressWarnings("unchecked")
++            Map<String, Permission> permissions =
++                (Map<String, Permission>) permissionsField.get(manager);
++            assertTrue(
++                permissions.get(marker.getName()) == marker,
++                "PluginManager methods should use the replaceable Bukkit permission map"
++            );
++        } finally {
++            manager.removePermission(marker);
++        }
++    }
++
+ }
