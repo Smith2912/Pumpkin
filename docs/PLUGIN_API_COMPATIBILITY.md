@@ -137,10 +137,41 @@ The first slice covers live block reads, `BlockBreakEvent`,
 placed position, placed material, player, cancellation, `canBuild`, and the
 live replaced block state. Pumpkin does not yet expose the placed-against
 position, face, or hand, so those fields use documented placeholders and are
-not counted as complete. Burn, ignite, flow, piston, explosion,
+not counted as complete. Flow, piston, explosion,
 entity-damage, hanging, dispense, craft, pickup, and drop events remain
 separate native contracts and are not represented as complete by listener
 registration alone.
+
+## Block protection and environment batch gate
+
+The next native block batch extends the protected-build workflow without
+claiming unrelated environmental compatibility:
+
+1. `BlockCanBuildEvent` carries the real target position, proposed material,
+   player, and initial native build decision. A Bukkit listener's updated
+   `buildable` value determines whether Pumpkin continues placement.
+2. `BlockPlaceEvent#setBuild(false)` prevents placement even when the event is
+   not separately cancelled.
+3. Natural fire destruction fires `BlockBurnEvent` with the real world,
+   burning position, igniting fire position, and both captured materials.
+   Cancelling the Bukkit event prevents the block mutation and TNT priming.
+4. Natural scheduled fire spread fires `BlockIgniteEvent` with `SPREAD`, the
+   real target position, and the source fire position. Cancellation prevents
+   Pumpkin from placing the new fire block.
+5. Pressure-plate power changes fire `BlockRedstoneEvent`; a Bukkit listener's
+   bounded `newCurrent` value is applied by Pumpkin.
+6. The conformance plugin registers all four event types, and live logs must
+   contain their native registration records without matching unsupported
+   event warnings.
+7. Human verification must show a denied placement remaining unchanged,
+   cancelled burn/ignite events preserving their target blocks, and a modified
+   pressure plate signal producing the expected visible redstone state.
+
+This batch does not yet cover player-created ignition, lava ignition, fluid
+flow, pistons, explosions, arbitrary redstone components, or fire paths other
+than the natural scheduled fire-spread path. Those remain explicit contracts
+rather than being inferred from `BlockBurnEvent` and `BlockIgniteEvent`
+support.
 
 ## Human verification runbook
 
