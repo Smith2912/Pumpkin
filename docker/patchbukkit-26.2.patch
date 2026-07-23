@@ -44,6 +44,77 @@ index d225037..96de007 100644
          TestFramework framework = new TestFramework(getLogger());
  
          framework.registerSuite(new ServerTests(this));
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EntityTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EntityTests.java
+index 0d4e5e2..c3f588c 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EntityTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EntityTests.java
+@@ -2,6 +2,7 @@ package org.patchbukkit.testplugin.tests;
+
+ import org.bukkit.Bukkit;
+ import org.bukkit.entity.Player;
++import net.kyori.adventure.text.Component;
+ import org.patchbukkit.testplugin.ConformanceTest;
+ import org.patchbukkit.testplugin.TestCategory;
+ import org.patchbukkit.testplugin.TestExpectation;
+@@ -23,6 +24,58 @@ public final class EntityTests {
+         }
+     }
+
++    @ConformanceTest(name = "Online player presentation round-trips through Pumpkin", category = TestCategory.ENTITY)
++    public void testOnlinePlayerPresentationRoundTrip() {
++        Player player = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
++        if (player == null) {
++            return;
++        }
++
++        Component originalDisplayName = player.displayName();
++        Component originalListName = player.playerListName();
++        String originalHeader = player.getPlayerListHeader();
++        String originalFooter = player.getPlayerListFooter();
++        int originalOrder = player.getPlayerListOrder();
++        int replacementOrder = originalOrder == Integer.MAX_VALUE
++            ? originalOrder - 1
++            : originalOrder + 1;
++        Component replacementDisplayName = Component.text("[PB] ").append(originalDisplayName);
++        Component replacementListName = Component.text("[PB] ").append(Component.text(player.getName()));
++
++        try {
++            player.displayName(replacementDisplayName);
++            player.playerListName(replacementListName);
++            player.setPlayerListHeaderFooter("PatchBukkit header", "PatchBukkit footer");
++            player.setPlayerListOrder(replacementOrder);
++
++            assertTrue(
++                replacementDisplayName.equals(player.displayName()),
++                "display name should round-trip"
++            );
++            assertTrue(
++                replacementListName.equals(player.playerListName()),
++                "player-list name should round-trip"
++            );
++            assertTrue(
++                "PatchBukkit header".equals(player.getPlayerListHeader()),
++                "player-list header should round-trip"
++            );
++            assertTrue(
++                "PatchBukkit footer".equals(player.getPlayerListFooter()),
++                "player-list footer should round-trip"
++            );
++            assertTrue(
++                player.getPlayerListOrder() == replacementOrder,
++                "player-list order should round-trip"
++            );
++        } finally {
++            player.displayName(originalDisplayName);
++            player.playerListName(originalListName);
++            player.setPlayerListHeaderFooter(originalHeader, originalFooter);
++            player.setPlayerListOrder(originalOrder);
++        }
++    }
++
+     @ConformanceTest(name = "Server.getEntity(UUID) stub", category = TestCategory.ENTITY,
+             expectation = TestExpectation.EXPECT_UNSUPPORTED)
+     public void testGetEntity() {
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
 index 0ddff2f..e651991 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
@@ -320,10 +391,10 @@ index 032bce0..8de40c4 100644
 +
  }
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
-index e8bd1a6..89d8a40 100644
+index e8bd1a6..6bf31b7 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
-@@ -1,11 +1,20 @@
+@@ -1,11 +1,22 @@
  package org.patchbukkit.testplugin.tests;
  
 +import java.util.List;
@@ -335,8 +406,10 @@ index e8bd1a6..89d8a40 100644
 +import org.bukkit.Tag;
 +import org.bukkit.damage.DamageType;
 +import org.bukkit.enchantments.Enchantment;
++import org.bukkit.event.inventory.InventoryType;
 +import org.bukkit.inventory.ItemStack;
 +import org.bukkit.inventory.ItemType;
++import org.bukkit.inventory.MenuType;
 +import org.bukkit.inventory.meta.Damageable;
 +import org.bukkit.inventory.meta.Repairable;
  import org.patchbukkit.testplugin.ConformanceTest;
@@ -345,7 +418,7 @@ index e8bd1a6..89d8a40 100644
  
  import static org.patchbukkit.testplugin.TestAssertions.*;
  
-@@ -33,14 +42,139 @@ public final class RegistryTests {
+@@ -33,14 +44,147 @@ public final class RegistryTests {
          assertNotNull(stream, "Registry.SOUNDS.stream()");
      }
  
@@ -453,6 +526,14 @@ index e8bd1a6..89d8a40 100644
 -        }
 +        Registry<Sound> registry = Bukkit.getServer().getRegistry(Sound.class);
 +        assertNotNull(registry, "Server.getRegistry(Sound.class)");
+     }
+
++    @ConformanceTest(name = "Paper menu registry bootstraps InventoryType", category = TestCategory.REGISTRY)
++    public void testMenuRegistryBootstrap() {
++        assertNotNull(Registry.MENU, "Registry.MENU");
++        assertNotNull(MenuType.GENERIC_9X3, "MenuType.GENERIC_9X3");
++        assertNotNull(InventoryType.PLAYER, "InventoryType.PLAYER");
++        assertNotNull(InventoryType.ENDER_CHEST, "InventoryType.ENDER_CHEST");
 +    }
 +
 +    @ConformanceTest(name = "Bukkit block tags are populated from Pumpkin", category = TestCategory.REGISTRY)
@@ -478,8 +559,8 @@ index e8bd1a6..89d8a40 100644
 +            Tag.ITEMS_DYEABLE.isTagged(Material.LEATHER_CHESTPLATE),
 +            "dyeable item tag should include leather chestplates"
 +        );
-     }
- 
++    }
++
 +    @ConformanceTest(name = "Server.getTags exposes Pumpkin tags", category = TestCategory.REGISTRY)
 +    public void testTagIteration() {
 +        boolean foundLogs = false;
@@ -2649,7 +2730,7 @@ index e48457f..417bb9d 100644
  
      @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
-index 458bbb9..9ea85be 100644
+index 458bbb9..ca58157 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
 @@ -9,6 +9,7 @@ import java.util.*;
@@ -2668,9 +2749,12 @@ index 458bbb9..9ea85be 100644
  import org.bukkit.event.player.PlayerKickEvent.Cause;
  import org.bukkit.event.player.PlayerResourcePackStatusEvent.Status;
  import org.bukkit.inventory.EquipmentSlot;
-@@ -68,11 +70,16 @@ import io.papermc.paper.entity.PlayerGiveResult;
+@@ -67,12 +69,23 @@ import io.papermc.paper.entity.LookAnchor;
+ import io.papermc.paper.entity.PlayerGiveResult;
  import io.papermc.paper.math.Position;
  import net.kyori.adventure.bossbar.BossBar;
++import net.kyori.adventure.identity.Identity;
++import net.kyori.adventure.audience.MessageType;
  import net.kyori.adventure.text.Component;
 +import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 +import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -2680,12 +2764,34 @@ index 458bbb9..9ea85be 100644
  import patchbukkit.message.SendMessageRequest;
  import patchbukkit.abilities.SetAbilitiesRequest;
 +import patchbukkit.player.KickPlayerRequest;
++import patchbukkit.player.NullableTextComponent;
 +import patchbukkit.player.PerformPlayerCommandRequest;
++import patchbukkit.player.PlayerPresentationState;
++import patchbukkit.player.SendPlayerActionBarRequest;
++import patchbukkit.player.UpdatePlayerPresentationRequest;
 +import patchbukkit.player.UpdatePlayerSessionStateRequest;
  import patchbukkit.sound.PlayerEntityPlaySoundRequest;
  import patchbukkit.sound.PlayerPlaySoundRequest;
 
-@@ -163,14 +170,12 @@ public class PatchBukkitPlayer
+@@ -126,6 +139,17 @@ public class PatchBukkitPlayer
+         }
+     }
+
++    @Override
++    public void sendMessage(@NotNull Component message) {
++        this.sendMessage(LegacyComponentSerializer.legacySection().serialize(message));
++    }
++
++    @Override
++    public void sendMessage(@NotNull Identity source, @NotNull Component message,
++            @NotNull MessageType type) {
++        this.sendMessage(message);
++    }
++
+     @Override
+     public Player.Spigot spigot() {
+         throw new UnsupportedOperationException("Unimplemented method 'spigot'");
+@@ -163,14 +187,12 @@ public class PatchBukkitPlayer
  
      @Override
      public boolean isOnline() {
@@ -2702,7 +2808,7 @@ index 458bbb9..9ea85be 100644
      }
  
      @Override
-@@ -217,8 +222,7 @@ public class PatchBukkitPlayer
+@@ -217,8 +239,7 @@ public class PatchBukkitPlayer
  
      @Override
      public @org.jspecify.annotations.Nullable Player getPlayer() {
@@ -2712,7 +2818,178 @@ index 458bbb9..9ea85be 100644
      }
  
      @Override
-@@ -554,14 +558,35 @@ public class PatchBukkitPlayer
+@@ -404,104 +425,137 @@ public class PatchBukkitPlayer
+
+     @Override
+     public Component displayName() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'displayName'");
++        PlayerPresentationState state = getPresentation();
++        return state.hasDisplayNameJson()
++            ? GsonComponentSerializer.gson().deserialize(state.getDisplayNameJson())
++            : Component.text(this.getName());
+     }
+
+     @Override
+     public void displayName(@org.jspecify.annotations.Nullable Component displayName) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'displayName'");
++        updatePresentation(
++            UpdatePlayerPresentationRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.uuid))
++                .setDisplayName(nullableComponent(displayName))
++                .build()
++        );
+     }
+
+     @Override
+     public String getDisplayName() {
+-        return this.getName();
++        return LegacyComponentSerializer.legacySection().serialize(this.displayName());
+     }
+
+     @Override
+     public void setDisplayName(@org.jspecify.annotations.Nullable String name) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setDisplayName'");
++        this.displayName(
++            name == null ? null : LegacyComponentSerializer.legacySection().deserialize(name)
++        );
+     }
+
+     @Override
+     public void playerListName(@org.jspecify.annotations.Nullable Component name) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'playerListName'");
++        updatePresentation(
++            UpdatePlayerPresentationRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.uuid))
++                .setPlayerListName(nullableComponent(name))
++                .build()
++        );
+     }
+
+     @Override
+     public Component playerListName() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'playerListName'");
++        PlayerPresentationState state = getPresentation();
++        return state.hasPlayerListNameJson()
++            ? GsonComponentSerializer.gson().deserialize(state.getPlayerListNameJson())
++            : null;
+     }
+
+     @Override
+     public @org.jspecify.annotations.Nullable Component playerListHeader() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'playerListHeader'");
++        return GsonComponentSerializer.gson().deserialize(
++            getPresentation().getPlayerListHeaderJson()
++        );
+     }
+
+     @Override
+     public @org.jspecify.annotations.Nullable Component playerListFooter() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'playerListFooter'");
++        return GsonComponentSerializer.gson().deserialize(
++            getPresentation().getPlayerListFooterJson()
++        );
+     }
+
+     @Override
+     public String getPlayerListName() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getPlayerListName'");
++        Component name = this.playerListName();
++        return name == null
++            ? this.getName()
++            : LegacyComponentSerializer.legacySection().serialize(name);
+     }
+
+     @Override
+     public void setPlayerListName(@org.jspecify.annotations.Nullable String name) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setPlayerListName'");
++        this.playerListName(
++            name == null ? null : LegacyComponentSerializer.legacySection().deserialize(name)
++        );
+     }
+
+     @Override
+     public int getPlayerListOrder() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getPlayerListOrder'");
++        return getPresentation().getPlayerListOrder();
+     }
+
+     @Override
+     public void setPlayerListOrder(int order) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setPlayerListOrder'");
++        Preconditions.checkArgument(order >= 0, "Player list order must be non-negative");
++        updatePresentation(
++            UpdatePlayerPresentationRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.uuid))
++                .setPlayerListOrder(order)
++                .build()
++        );
+     }
+
+     @Override
+     public @org.jspecify.annotations.Nullable String getPlayerListHeader() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getPlayerListHeader'");
++        return LegacyComponentSerializer.legacySection().serialize(this.playerListHeader());
+     }
+
+     @Override
+     public @org.jspecify.annotations.Nullable String getPlayerListFooter() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getPlayerListFooter'");
++        return LegacyComponentSerializer.legacySection().serialize(this.playerListFooter());
+     }
+
+     @Override
+     public void setPlayerListHeader(@org.jspecify.annotations.Nullable String header) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setPlayerListHeader'");
++        setPlayerListHeaderFooter(header, getPlayerListFooter());
+     }
+
+     @Override
+     public void setPlayerListFooter(@org.jspecify.annotations.Nullable String footer) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setPlayerListFooter'");
++        setPlayerListHeaderFooter(getPlayerListHeader(), footer);
+     }
+
+     @Override
+     public void setPlayerListHeaderFooter(@org.jspecify.annotations.Nullable String header,
+             @org.jspecify.annotations.Nullable String footer) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setPlayerListHeaderFooter'");
++        Component headerComponent = header == null
++            ? Component.empty()
++            : LegacyComponentSerializer.legacySection().deserialize(header);
++        Component footerComponent = footer == null
++            ? Component.empty()
++            : LegacyComponentSerializer.legacySection().deserialize(footer);
++        updatePresentation(
++            UpdatePlayerPresentationRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.uuid))
++                .setPlayerListHeaderJson(
++                    GsonComponentSerializer.gson().serialize(headerComponent)
++                )
++                .setPlayerListFooterJson(
++                    GsonComponentSerializer.gson().serialize(footerComponent)
++                )
++                .build()
++        );
+     }
+
+     @Override
+@@ -554,14 +608,35 @@ public class PatchBukkitPlayer
 
      @Override
      public void kickPlayer(@org.jspecify.annotations.Nullable String message) {
@@ -2752,7 +3029,7 @@ index 458bbb9..9ea85be 100644
      }
 
      @Override
-@@ -620,20 +645,58 @@ public class PatchBukkitPlayer
+@@ -620,20 +695,58 @@ public class PatchBukkitPlayer
 
      @Override
      public boolean performCommand(String command) {
@@ -2817,7 +3094,73 @@ index 458bbb9..9ea85be 100644
      }
 
      @Override
-@@ -1057,14 +1120,19 @@ public class PatchBukkitPlayer
+@@ -931,34 +1044,55 @@ public class PatchBukkitPlayer
+
+     @Override
+     public void sendActionBar(String message) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'sendActionBar'");
++        this.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(message));
+     }
+
+     @Override
+     public void sendActionBar(char alternateChar, String message) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'sendActionBar'");
++        this.sendActionBar(
++            LegacyComponentSerializer.legacy(alternateChar).deserialize(message)
++        );
+     }
+
+     @Override
+     public void sendActionBar(BaseComponent... message) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'sendActionBar'");
++        this.sendActionBar(
++            LegacyComponentSerializer.legacySection().deserialize(
++                BaseComponent.toLegacyText(message)
++            )
++        );
++    }
++
++    @Override
++    public void sendActionBar(@NotNull Component message) {
++        Preconditions.checkNotNull(message, "Action-bar message cannot be null");
++        boolean accepted = NativeBridgeFfi.sendPlayerActionBar(
++            SendPlayerActionBarRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.uuid))
++                .setMessageJson(GsonComponentSerializer.gson().serialize(message))
++                .build()
++        ).getSuccess();
++        if (!accepted) {
++            throw new IllegalStateException("Native server rejected action-bar message");
++        }
+     }
+
+     @Override
+     public void setPlayerListHeaderFooter(BaseComponent @org.jspecify.annotations.Nullable [] header,
+             BaseComponent @org.jspecify.annotations.Nullable [] footer) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setPlayerListHeaderFooter'");
++        setPlayerListHeaderFooter(
++            header == null ? null : BaseComponent.toLegacyText(header),
++            footer == null ? null : BaseComponent.toLegacyText(footer)
++        );
+     }
+
+     @Override
+     public void setPlayerListHeaderFooter(@org.jspecify.annotations.Nullable BaseComponent header,
+             @org.jspecify.annotations.Nullable BaseComponent footer) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setPlayerListHeaderFooter'");
++        setPlayerListHeaderFooter(
++            header == null ? null : BaseComponent.toLegacyText(header),
++            footer == null ? null : BaseComponent.toLegacyText(footer)
++        );
+     }
+
+     @Override
+@@ -1057,14 +1191,19 @@ public class PatchBukkitPlayer
  
      @Override
      public void updateInventory() {
@@ -2841,7 +3184,7 @@ index 458bbb9..9ea85be 100644
      }
  
      @Override
-@@ -1220,8 +1288,11 @@ public class PatchBukkitPlayer
+@@ -1220,8 +1359,11 @@ public class PatchBukkitPlayer
      public void setAllowFlight(boolean flight) {
          var abilities = NativeBridgeFfi.getAbilities(BridgeUtils.convertUuid(this.uuid)).toBuilder();
          abilities.setAllowFlying(flight);
@@ -2855,7 +3198,7 @@ index 458bbb9..9ea85be 100644
      }
  
      @Override
-@@ -1308,39 +1379,67 @@ public class PatchBukkitPlayer
+@@ -1308,39 +1450,88 @@ public class PatchBukkitPlayer
  
      @Override
      public boolean isFlying() {
@@ -2932,10 +3275,31 @@ index 458bbb9..9ea85be 100644
 +        if (!NativeBridgeFfi.setAbilities(request).getSuccess()) {
 +            throw new IllegalStateException("Native server rejected player abilities");
 +        }
++    }
++
++    private PlayerPresentationState getPresentation() {
++        return NativeBridgeFfi.getPlayerPresentation(
++            BridgeUtils.convertUuid(this.uuid)
++        );
++    }
++
++    private static NullableTextComponent nullableComponent(
++            @org.jspecify.annotations.Nullable Component component) {
++        NullableTextComponent.Builder builder = NullableTextComponent.newBuilder();
++        if (component != null) {
++            builder.setJson(GsonComponentSerializer.gson().serialize(component));
++        }
++        return builder.build();
++    }
++
++    private static void updatePresentation(UpdatePlayerPresentationRequest request) {
++        if (!NativeBridgeFfi.updatePlayerPresentation(request).getSuccess()) {
++            throw new IllegalStateException("Native server rejected player presentation");
++        }
      }
 
      @Override
-@@ -1502,20 +1601,24 @@ public class PatchBukkitPlayer
+@@ -1502,20 +1693,24 @@ public class PatchBukkitPlayer
 
      @Override
      public Locale locale() {
@@ -6526,6 +6890,202 @@ index 0000000..fda3181
 +    private record CacheKey(String registry, Class<?> type) {
 +    }
 +}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitMenuRegistry.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitMenuRegistry.java
+new file mode 100644
+index 0000000..55be062
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitMenuRegistry.java
+@@ -0,0 +1,115 @@
++package org.patchbukkit.registry;
++
++import io.papermc.paper.registry.tag.Tag;
++import io.papermc.paper.registry.tag.TagKey;
++import org.bukkit.NamespacedKey;
++import org.bukkit.Registry;
++import org.bukkit.inventory.MenuType;
++import org.jspecify.annotations.NonNull;
++import org.jspecify.annotations.Nullable;
++
++import java.util.Collection;
++import java.util.Collections;
++import java.util.Iterator;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.stream.Stream;
++
++/**
++ * Bootstrap-safe registry for Paper menu types.
++ *
++ * <p>{@link MenuType} resolves its constants from {@link Registry#MENU} while
++ * the Bukkit registry class is still initializing. This registry therefore
++ * stores keys eagerly and creates menu objects only when MenuType asks for
++ * them, avoiding a circular class-initialization failure.</p>
++ */
++public final class PatchBukkitMenuRegistry implements Registry<MenuType> {
++    private static final List<String> MENU_KEYS = List.of(
++        "generic_9x1",
++        "generic_9x2",
++        "generic_9x3",
++        "generic_9x4",
++        "generic_9x5",
++        "generic_9x6",
++        "generic_3x3",
++        "crafter_3x3",
++        "anvil",
++        "beacon",
++        "blast_furnace",
++        "brewing_stand",
++        "crafting",
++        "enchantment",
++        "furnace",
++        "grindstone",
++        "hopper",
++        "lectern",
++        "loom",
++        "merchant",
++        "shulker_box",
++        "smithing",
++        "smoker",
++        "cartography_table",
++        "stonecutter"
++    );
++
++    private final Map<NamespacedKey, MenuType> entries = new LinkedHashMap<>();
++
++    @Override
++    public synchronized @Nullable MenuType get(NamespacedKey key) {
++        if (key == null
++                || !NamespacedKey.MINECRAFT.equals(key.getNamespace())
++                || !MENU_KEYS.contains(key.getKey())) {
++            return null;
++        }
++        return this.entries.computeIfAbsent(key, PatchBukkitMenuType::new);
++    }
++
++    @Override
++    public @Nullable NamespacedKey getKey(MenuType value) {
++        return value == null ? null : value.getKey();
++    }
++
++    @Override
++    public boolean hasTag(TagKey<MenuType> key) {
++        return false;
++    }
++
++    @Override
++    public @NonNull Tag<MenuType> getTag(TagKey<MenuType> key) {
++        throw new java.util.NoSuchElementException("Menu registry has no tags: " + key);
++    }
++
++    @Override
++    public @NonNull Collection<Tag<MenuType>> getTags() {
++        return Collections.emptyList();
++    }
++
++    @Override
++    public Stream<MenuType> stream() {
++        return MENU_KEYS.stream().map(this::getMinecraft);
++    }
++
++    @Override
++    public Stream<NamespacedKey> keyStream() {
++        return MENU_KEYS.stream().map(PatchBukkitMenuRegistry::minecraftKey);
++    }
++
++    @Override
++    public int size() {
++        return MENU_KEYS.size();
++    }
++
++    @Override
++    public Iterator<MenuType> iterator() {
++        return this.stream().iterator();
++    }
++
++    private MenuType getMinecraft(String value) {
++        return this.get(minecraftKey(value));
++    }
++
++    private static NamespacedKey minecraftKey(String value) {
++        return new NamespacedKey(NamespacedKey.MINECRAFT, value);
++    }
++}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitMenuType.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitMenuType.java
+new file mode 100644
+index 0000000..7aca99b
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitMenuType.java
+@@ -0,0 +1,69 @@
++package org.patchbukkit.registry;
++
++import net.kyori.adventure.text.Component;
++import org.bukkit.NamespacedKey;
++import org.bukkit.entity.HumanEntity;
++import org.bukkit.inventory.InventoryView;
++import org.bukkit.inventory.MenuType;
++import org.bukkit.inventory.view.builder.InventoryViewBuilder;
++
++/**
++ * Identifies a Paper menu type without pretending that view construction is
++ * implemented. InventoryType only needs these keyed values during bootstrap.
++ */
++final class PatchBukkitMenuType
++    implements MenuType.Typed<InventoryView, InventoryViewBuilder<InventoryView>> {
++    private final NamespacedKey key;
++
++    PatchBukkitMenuType(NamespacedKey key) {
++        this.key = key;
++    }
++
++    @Override
++    public NamespacedKey getKey() {
++        return this.key;
++    }
++
++    @Override
++    public InventoryView create(HumanEntity player, String title) {
++        throw unsupported();
++    }
++
++    @Override
++    public InventoryView create(HumanEntity player, Component title) {
++        throw unsupported();
++    }
++
++    @Override
++    public InventoryViewBuilder<InventoryView> builder() {
++        throw unsupported();
++    }
++
++    @Override
++    public MenuType.Typed<InventoryView, InventoryViewBuilder<InventoryView>> typed() {
++        return this;
++    }
++
++    @Override
++    @SuppressWarnings("unchecked")
++    public <V extends InventoryView, B extends InventoryViewBuilder<V>>
++            MenuType.Typed<V, B> typed(Class<V> inventoryViewClass) {
++        if (inventoryViewClass != InventoryView.class) {
++            throw new IllegalArgumentException(
++                "PatchBukkit does not yet construct " + inventoryViewClass.getName()
++            );
++        }
++        return (MenuType.Typed<V, B>) (MenuType.Typed<?, ?>) this;
++    }
++
++    @Override
++    public Class<? extends InventoryView> getInventoryViewClass() {
++        return InventoryView.class;
++    }
++
++    private UnsupportedOperationException unsupported() {
++        return new UnsupportedOperationException(
++            "Menu view construction is not implemented for " + this.key
++        );
++    }
++}
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistry.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistry.java
 index ee66859..bf9a0f7 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistry.java
@@ -6645,7 +7205,7 @@ index ee66859..bf9a0f7 100644
      }
  }
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
-index 854db6f..763db1c 100644
+index 854db6f..6286ed6 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
 @@ -5,11 +5,15 @@ import io.papermc.paper.registry.RegistryKey;
@@ -6686,6 +7246,16 @@ index 854db6f..763db1c 100644
          )
      );
  
+@@ -53,6 +72,9 @@ public class PatchBukkitRegistryAccess implements RegistryAccess {
+         if (registryKey == null) return null;
+
+         return (Registry<T>) instances.computeIfAbsent(registryKey, key -> {
++            if (RegistryKey.MENU.equals(key)) {
++                return new PatchBukkitMenuRegistry();
++            }
+             RegistryFactory<?, ?> factoryEntry = FACTORIES.get(key);
+             if (factoryEntry != null) {
+                 return buildRegistry(factoryEntry);
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitBlock.java b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitBlock.java
 new file mode 100644
 index 0000000..e13d586
@@ -7147,7 +7717,7 @@ index e8c2c36..4766cfa 100644
  
      @Override
 diff --git a/proto/patchbukkit/bridge.proto b/proto/patchbukkit/bridge.proto
-index 85df0ae..c59cdcb 100644
+index 85df0ae..eb99334 100644
 --- a/proto/patchbukkit/bridge.proto
 +++ b/proto/patchbukkit/bridge.proto
 @@ -9,6 +9,8 @@ import "patchbukkit/config.proto";
@@ -7159,7 +7729,7 @@ index 85df0ae..c59cdcb 100644
  import "patchbukkit/registry.proto";
  import "patchbukkit/sound.proto";
  
-@@ -22,6 +24,23 @@ service NativeBridge {
+@@ -22,6 +24,26 @@ service NativeBridge {
    rpc SendMessage(patchbukkit.message.SendMessageRequest) returns (google.protobuf.Empty);
  
    rpc GetLocation(patchbukkit.common.UUID) returns (patchbukkit.common.Location);
@@ -7174,6 +7744,9 @@ index 85df0ae..c59cdcb 100644
 +  rpc UpdatePlayerSessionState(patchbukkit.player.UpdatePlayerSessionStateRequest) returns (patchbukkit.player.UpdatePlayerSessionStateResponse);
 +  rpc KickPlayer(patchbukkit.player.KickPlayerRequest) returns (patchbukkit.player.KickPlayerResponse);
 +  rpc PerformPlayerCommand(patchbukkit.player.PerformPlayerCommandRequest) returns (patchbukkit.player.PerformPlayerCommandResponse);
++  rpc GetPlayerPresentation(patchbukkit.common.UUID) returns (patchbukkit.player.PlayerPresentationState);
++  rpc UpdatePlayerPresentation(patchbukkit.player.UpdatePlayerPresentationRequest) returns (patchbukkit.player.UpdatePlayerPresentationResponse);
++  rpc SendPlayerActionBar(patchbukkit.player.SendPlayerActionBarRequest) returns (patchbukkit.player.SendPlayerActionBarResponse);
 +  rpc TeleportPlayer(patchbukkit.player.TeleportPlayerRequest) returns (patchbukkit.player.TeleportPlayerResponse);
 +  rpc GetInventory(patchbukkit.player.GetInventoryRequest) returns (patchbukkit.player.InventorySnapshot);
 +  rpc SetInventoryItem(patchbukkit.player.SetInventoryItemRequest) returns (patchbukkit.player.SetInventoryItemResponse);
@@ -7183,7 +7756,7 @@ index 85df0ae..c59cdcb 100644
  
    rpc GetRegistryData(patchbukkit.registry.GetRegistryDataRequest) returns (patchbukkit.registry.GetRegistryDataResponse);
  
-@@ -31,4 +50,5 @@ service NativeBridge {
+@@ -31,4 +53,5 @@ service NativeBridge {
    rpc SendLog(patchbukkit.log.SendLogRequest) returns (google.protobuf.Empty);
 
    rpc GetPatchBukkitConfig(patchbukkit.common.EmptyRequest) returns (patchbukkit.config.GetPatchBukkitConfigResponse);
@@ -7531,10 +8104,10 @@ index 75429d3..25a6639 100644
  }
 diff --git a/proto/patchbukkit/player.proto b/proto/patchbukkit/player.proto
 new file mode 100644
-index 0000000..c309611
+index 0000000..4c6f344
 --- /dev/null
 +++ b/proto/patchbukkit/player.proto
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,169 @@
 +syntax = "proto3";
 +
 +package patchbukkit.player;
@@ -7614,6 +8187,40 @@ index 0000000..c309611
 +}
 +
 +message PerformPlayerCommandResponse {
++  bool success = 1;
++}
++
++message NullableTextComponent {
++  optional string json = 1;
++}
++
++message PlayerPresentationState {
++  optional string display_name_json = 1;
++  optional string player_list_name_json = 2;
++  string player_list_header_json = 3;
++  string player_list_footer_json = 4;
++  int32 player_list_order = 5;
++}
++
++message UpdatePlayerPresentationRequest {
++  patchbukkit.common.UUID player_uuid = 1;
++  optional NullableTextComponent display_name = 2;
++  optional NullableTextComponent player_list_name = 3;
++  optional string player_list_header_json = 4;
++  optional string player_list_footer_json = 5;
++  optional int32 player_list_order = 6;
++}
++
++message UpdatePlayerPresentationResponse {
++  bool success = 1;
++}
++
++message SendPlayerActionBarRequest {
++  patchbukkit.common.UUID player_uuid = 1;
++  string message_json = 2;
++}
++
++message SendPlayerActionBarResponse {
 +  bool success = 1;
 +}
 +
@@ -11245,10 +11852,26 @@ index 09f8db3..23529db 100644
  
      let base = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 diff --git a/rust/src/commands/mod.rs b/rust/src/commands/mod.rs
-index 484dc62..22d354c 100644
+index 484dc62..3b1b661 100644
 --- a/rust/src/commands/mod.rs
 +++ b/rust/src/commands/mod.rs
-@@ -34,7 +34,7 @@ pub struct AnyCommandNode {
+@@ -4,6 +4,7 @@ use pumpkin::{
+     command::{
+         CommandExecutor, CommandSender,
+         args::{Arg, ArgumentConsumer, GetClientSideArgParser, SuggestResult},
++        dispatcher::CommandError::CommandFailed,
+         tree::{CommandTree, builder::argument},
+     },
+     entity::EntityBase,
+@@ -11,6 +12,7 @@ use pumpkin::{
+ use pumpkin_protocol::java::client::play::{
+     ArgumentType, StringProtoArgBehavior, SuggestionProviders,
+ };
++use pumpkin_util::text::TextComponent;
+ use tokio::sync::{mpsc, oneshot};
+
+ use crate::java::jvm::commands::{JvmCommand, Location, Rotation};
+@@ -34,7 +36,7 @@ pub struct AnyCommandNode {
  }
  
  impl GetClientSideArgParser for AnyCommandNode {
@@ -11257,6 +11880,51 @@ index 484dc62..22d354c 100644
          ArgumentType::String(StringProtoArgBehavior::GreedyPhrase)
      }
  
+@@ -137,16 +139,40 @@ impl CommandExecutor for JavaCommandExecutor {
+                 _ => format!("/{}", self.cmd_name),
+             };
+
+-            let (tx, _rx) = oneshot::channel();
+-            self.command_tx
++            let (tx, rx) = oneshot::channel();
++            if let Err(error) = self
++                .command_tx
+                 .send(JvmCommand::TriggerCommand {
+                     full_command,
+                     respond_to: tx,
+                     command_sender: sender.into(),
+                 })
+                 .await
+-                .unwrap();
+-            Ok(1)
++            {
++                tracing::error!("Failed to queue Bukkit command: {error}");
++                return Err(CommandFailed(TextComponent::text(
++                    "The Bukkit command bridge is unavailable.",
++                )));
++            }
++
++            match rx.await {
++                Ok(Ok(true)) => Ok(1),
++                Ok(Ok(false)) => Err(CommandFailed(TextComponent::text(
++                    "Unknown or incomplete Bukkit command.",
++                ))),
++                Ok(Err(error)) => {
++                    tracing::error!("Bukkit command execution failed: {error:?}");
++                    Err(CommandFailed(TextComponent::text(
++                        "The Bukkit command failed. Check the server log for details.",
++                    )))
++                }
++                Err(error) => {
++                    tracing::error!("Bukkit command worker stopped before replying: {error}");
++                    Err(CommandFailed(TextComponent::text(
++                        "The Bukkit command bridge stopped before the command completed.",
++                    )))
++                }
++            }
+         })
+     }
+ }
 diff --git a/rust/src/events/handler.rs b/rust/src/events/handler.rs
 index 6705e20..0d21379 100644
 --- a/rust/src/events/handler.rs
@@ -12778,6 +13446,19 @@ index f94134e..c60e6a2 100644
 +        fs::remove_dir_all(root).expect("remove test directories");
 +    }
 +}
+diff --git a/rust/src/java/jvm/commands.rs b/rust/src/java/jvm/commands.rs
+index 3fdf763..4d5ca1c 100644
+--- a/rust/src/java/jvm/commands.rs
++++ b/rust/src/java/jvm/commands.rs
+@@ -54,7 +54,7 @@ pub enum JvmCommand {
+     TriggerCommand {
+         full_command: String,
+         command_sender: SimpleCommandSender,
+-        respond_to: oneshot::Sender<Result<()>>,
++        respond_to: oneshot::Sender<Result<bool>>,
+     },
+     GetCommandTabComplete {
+         command_sender: SimpleCommandSender,
 diff --git a/rust/src/java/jvm/worker.rs b/rust/src/java/jvm/worker.rs
 index 4fe3703..85ac936 100644
 --- a/rust/src/java/jvm/worker.rs
@@ -13781,13 +14462,16 @@ index 56698aa..f8246fa 100644
  
 diff --git a/rust/src/java/native_callbacks/player.rs b/rust/src/java/native_callbacks/player.rs
 new file mode 100644
-index 0000000..3999649
+index 0000000..5c5f531
 --- /dev/null
 +++ b/rust/src/java/native_callbacks/player.rs
-@@ -0,0 +1,358 @@
+@@ -0,0 +1,482 @@
 +use std::{str::FromStr, sync::atomic::Ordering};
 +
-+use pumpkin::{entity::EntityBase, net::DisconnectReason};
++use pumpkin::{
++    entity::{EntityBase, player::TitleMode},
++    net::DisconnectReason,
++};
 +use pumpkin_util::text::TextComponent;
 +use pumpkin_util::{GameMode, math::vector3::Vector3};
 +
@@ -13798,11 +14482,12 @@ index 0000000..3999649
 +    itemstack::ItemStack as BridgeItemStack,
 +    player::{
 +        GetInventoryRequest, InventoryKind, InventorySnapshot, KickPlayerRequest,
-+        PerformPlayerCommandRequest, PlayerGameMode, PlayerSessionState, PlayerVitals,
++        NullableTextComponent, PerformPlayerCommandRequest, PlayerGameMode,
++        PlayerPresentationState, PlayerSessionState, PlayerVitals, SendPlayerActionBarRequest,
 +        SetCursorItemRequest, SetCursorItemResponse, SetHeldItemSlotRequest,
 +        SetHeldItemSlotResponse, SetInventoryItemRequest, SetInventoryItemResponse,
-+        SetPlayerGameModeRequest, TeleportPlayerRequest, UpdatePlayerSessionStateRequest,
-+        UpdatePlayerVitalsRequest,
++        SetPlayerGameModeRequest, TeleportPlayerRequest, UpdatePlayerPresentationRequest,
++        UpdatePlayerSessionStateRequest, UpdatePlayerVitalsRequest,
 +    },
 +};
 +
@@ -13997,6 +14682,126 @@ index 0000000..3999649
 +        let source = player.get_command_source(&server).await;
 +        let dispatcher = server.command_dispatcher.read().await;
 +        dispatcher.handle_command(&source, &command).await;
++    });
++
++    Some(true)
++}
++
++pub fn ffi_native_bridge_get_player_presentation_impl(
++    request: Uuid,
++) -> Option<PlayerPresentationState> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.value).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++
++    tokio::task::block_in_place(|| {
++        ctx.runtime.block_on(async {
++            Some(PlayerPresentationState {
++                display_name_json: player
++                    .display_name
++                    .lock()
++                    .await
++                    .as_ref()
++                    .map(serde_json::to_string)
++                    .transpose()
++                    .ok()?,
++                player_list_name_json: player
++                    .tab_list_name
++                    .lock()
++                    .await
++                    .as_ref()
++                    .map(serde_json::to_string)
++                    .transpose()
++                    .ok()?,
++                player_list_header_json: serde_json::to_string(
++                    &*player.tab_list_header.lock().await,
++                )
++                .ok()?,
++                player_list_footer_json: serde_json::to_string(
++                    &*player.tab_list_footer.lock().await,
++                )
++                .ok()?,
++                player_list_order: player.tab_list_order.load(Ordering::Relaxed),
++            })
++        })
++    })
++}
++
++fn deserialize_nullable_component(
++    component: NullableTextComponent,
++) -> Option<Option<TextComponent>> {
++    match component.json {
++        Some(json) => Some(Some(serde_json::from_str(&json).ok()?)),
++        None => Some(None),
++    }
++}
++
++pub fn ffi_native_bridge_update_player_presentation_impl(
++    request: UpdatePlayerPresentationRequest,
++) -> Option<bool> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++    let display_name = match request.display_name {
++        Some(component) => Some(deserialize_nullable_component(component)?),
++        None => None,
++    };
++    let player_list_name = match request.player_list_name {
++        Some(component) => Some(deserialize_nullable_component(component)?),
++        None => None,
++    };
++    let header = match request.player_list_header_json {
++        Some(json) => Some(serde_json::from_str::<TextComponent>(&json).ok()?),
++        None => None,
++    };
++    let footer = match request.player_list_footer_json {
++        Some(json) => Some(serde_json::from_str::<TextComponent>(&json).ok()?),
++        None => None,
++    };
++    if request.player_list_order.is_some_and(|order| order < 0) {
++        return Some(false);
++    }
++
++    tokio::task::block_in_place(|| {
++        ctx.runtime.block_on(async {
++            if let Some(display_name) = display_name {
++                player.set_display_name(display_name).await;
++            }
++            if let Some(player_list_name) = player_list_name {
++                player.set_tab_list_name(player_list_name).await;
++            }
++            if header.is_some() || footer.is_some() {
++                let resolved_header = match header {
++                    Some(header) => header,
++                    None => player.tab_list_header.lock().await.clone(),
++                };
++                let resolved_footer = match footer {
++                    Some(footer) => footer,
++                    None => player.tab_list_footer.lock().await.clone(),
++                };
++                player
++                    .set_tab_list_header_footer(resolved_header, resolved_footer)
++                    .await;
++            }
++            if let Some(order) = request.player_list_order {
++                player.set_tab_list_order(order);
++            }
++        })
++    });
++
++    Some(true)
++}
++
++pub fn ffi_native_bridge_send_player_action_bar_impl(
++    request: SendPlayerActionBarRequest,
++) -> Option<bool> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
++    let message = serde_json::from_str::<TextComponent>(&request.message_json).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++
++    ctx.runtime.spawn(async move {
++        player.show_title(&message, &TitleMode::ActionBar).await;
 +    });
 +
 +    Some(true)
@@ -14435,6 +15240,159 @@ index d403ca1..dad6039 100644
 +        );
 +    }
 +}
+diff --git a/rust/src/java/plugin/command_manager.rs b/rust/src/java/plugin/command_manager.rs
+index 17e5d4e..cebaa03 100644
+--- a/rust/src/java/plugin/command_manager.rs
++++ b/rust/src/java/plugin/command_manager.rs
+@@ -1,4 +1,7 @@
+-use std::sync::{Arc, Mutex};
++use std::{
++    collections::HashSet,
++    sync::{Arc, Mutex},
++};
+
+ use anyhow::Result;
+ use j4rs::{Instance, InvocationArg, Jvm};
+@@ -183,10 +186,30 @@ impl CommandManager {
+             )?;
+         }
+
++        let aliases = cmd_data
++            .aliases
++            .as_ref()
++            .map_or_else(Vec::new, config::spigot::StringOrList::to_vec);
++        let occupied_routes = {
++            let dispatcher = context.server.command_dispatcher.read().await;
++            dispatcher
++                .fallback_dispatcher
++                .commands
++                .keys()
++                .cloned()
++                .collect::<HashSet<_>>()
++        };
++        let routes = build_command_routes(&plugin.name, &cmd_name, &aliases, &occupied_routes);
++        tracing::info!(
++            "Bukkit command routes for {}: {}",
++            cmd_name,
++            routes.join(", ")
++        );
++
+         let node = init_java_command(
+             cmd_name.clone(),
+             command_tx.clone(),
+-            [&cmd_name],
++            routes,
+             cmd_data.description.clone().unwrap_or_default(),
+         );
+
+@@ -230,33 +253,25 @@ impl CommandManager {
+         jvm: &Jvm,
+         full_command: String,
+         sender: SimpleCommandSender,
+-    ) -> Result<()> {
++    ) -> Result<bool> {
+         let command_map = self.get_or_init_command_map(jvm)?;
+
+         let j_sender = Self::sender_to_jsender(jvm, sender)?;
+
+-        let dispatch_result = jvm.invoke(
++        let result = jvm.invoke(
+             command_map,
+             "dispatch",
+             &[
+                 InvocationArg::from(j_sender),
+                 InvocationArg::try_from(full_command.clone())?,
+             ],
+-        );
+-
+-        match dispatch_result {
+-            Ok(result) => {
+-                let handled: bool = jvm.to_rust(result)?;
+-                if !handled {
+-                    tracing::warn!("Command not handled by any Java plugin: {full_command}");
+-                }
+-            }
+-            Err(e) => {
+-                tracing::error!("Java exception during command dispatch '{full_command}': {e:?}");
+-            }
++        )?;
++        let handled: bool = jvm.to_rust(result)?;
++        if !handled {
++            tracing::warn!("Command not handled by any Java plugin: {full_command}");
+         }
+
+-        Ok(())
++        Ok(handled)
+     }
+
+     pub fn sender_to_jsender(jvm: &Jvm, sender: SimpleCommandSender) -> Result<Instance> {
+@@ -321,6 +336,40 @@ impl CommandManager {
+     }
+ }
+
++fn build_command_routes(
++    plugin_name: &str,
++    command_name: &str,
++    aliases: &[String],
++    occupied: &HashSet<String>,
++) -> Vec<String> {
++    let fallback_prefix = plugin_name.trim().to_ascii_lowercase();
++    let command_name = command_name.trim().to_ascii_lowercase();
++    let mut candidates = Vec::with_capacity(2 + aliases.len() * 2);
++
++    if !occupied.contains(&command_name) {
++        candidates.push(command_name.clone());
++    }
++    candidates.push(format!("{fallback_prefix}:{command_name}"));
++
++    for alias in aliases {
++        let alias = alias.trim().to_ascii_lowercase();
++        if alias.is_empty() {
++            continue;
++        }
++        if !occupied.contains(&alias) {
++            candidates.push(alias.clone());
++        }
++        candidates.push(format!("{fallback_prefix}:{alias}"));
++    }
++
++    let mut seen = HashSet::new();
++    candidates
++        .into_iter()
++        .filter(|route| !route.is_empty() && !occupied.contains(route))
++        .filter(|route| seen.insert(route.clone()))
++        .collect()
++}
++
+ fn build_permission_node(
+     cmd_name: &str,
+     cmd_data: &config::spigot::Command,
+@@ -344,7 +393,25 @@ mod tests {
+
+     use crate::config::spigot::Command;
+
++    use super::build_command_routes;
+     use super::build_permission_node;
++    use std::collections::HashSet;
++
++    #[test]
++    fn command_routes_preserve_native_commands_and_keep_plugin_fallbacks() {
++        let occupied = HashSet::from(["gamemode".to_string(), "gms".to_string()]);
++        let aliases = vec!["gms".to_string(), "egamemode".to_string()];
++
++        assert_eq!(
++            build_command_routes("Essentials", "gamemode", &aliases, &occupied),
++            vec![
++                "essentials:gamemode".to_string(),
++                "essentials:gms".to_string(),
++                "egamemode".to_string(),
++                "essentials:egamemode".to_string(),
++            ]
++        );
++    }
+
+     #[test]
+     fn permission_node_uses_explicit_plugin_permission() {
 diff --git a/rust/src/java/plugin/event_manager.rs b/rust/src/java/plugin/event_manager.rs
 index f295f98..ebc30c4 100644
 --- a/rust/src/java/plugin/event_manager.rs

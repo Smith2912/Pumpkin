@@ -306,6 +306,51 @@ explicitly unsupported until Pumpkin owns mutable runtime state for the login
 limit, status response, and world policy. `setDefaultGameMode` changes the live
 value for this process and resets from configuration after restart.
 
+## Player bootstrap and command-routing batch gate
+
+The player-bootstrap batch is complete only when one deployed commit passes
+all of these checks:
+
+1. Paper's menu registry supplies every key referenced by `MenuType` without
+   recursively initializing `MenuType` while `Registry.MENU` is being built.
+   `InventoryType.PLAYER` and `InventoryType.ENDER_CHEST` must initialize before
+   PatchBukkit constructs the first online player.
+2. A player joining the server creates and registers one
+   `PatchBukkitPlayer`; subsequent events and commands reuse that exact object.
+   Logs must not contain `Cannot create instance of
+   org.patchbukkit.entity.PatchBukkitPlayer`, `Could not initialize class
+   org.bukkit.event.inventory.InventoryType`, or `Player not found for UUID`.
+3. A Bukkit plugin command does not overwrite an already registered native
+   Pumpkin command. The native label remains authoritative, while the plugin
+   receives its lowercase `plugin:command` fallback and unclaimed aliases.
+   For Essentials this means `/gamemode survival` remains Pumpkin's command
+   and `/essentials:gamemode survival` remains explicitly available.
+4. Java command execution reports its handled/error result back to Pumpkin.
+   Missing commands and Java exceptions produce a visible player message
+   instead of being logged after the native dispatcher has already reported
+   success.
+5. Paper Adventure `Component` messages sent to a player serialize through
+   the same Pumpkin message bridge as legacy Bukkit strings. Essentials
+   success and permission messages must be visible in game.
+6. Player display name, player-list name/header/footer/order, and action-bar
+   messages round-trip through Pumpkin-owned state. The Java bridge must not
+   keep a second presentation cache.
+7. The focused menu-bootstrap probe resolves all 25 Paper menu keys,
+   `MenuType.GENERIC_9X3`, and `InventoryType.PLAYER`; the command-route test
+   proves native collision preservation and plugin fallback aliases.
+8. The pinned patch applies cleanly and the clean replay passes the Java,
+   protobuf, test-plugin, and Rust bridge builds.
+9. Human verification joins with one test player, confirms the three startup
+   exceptions above are absent, runs `/gamemode survival`, verifies the HUD and
+   movement change out of spectator mode, and runs
+   `/essentials:gamemode spectator` followed by
+   `/essentials:gamemode survival` with visible Essentials feedback.
+
+Menu identifiers are implemented in this batch so the Paper API can bootstrap
+and inventories can report their type. Paper menu-view builders remain
+explicitly unsupported until Pumpkin has a native container/view construction
+bridge; this gate does not claim them.
+
 ## Human verification runbook
 
 Every compatibility change must leave evidence a maintainer can reproduce and
