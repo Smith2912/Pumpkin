@@ -49,3 +49,27 @@ Fabric and Quilt can share a loader-adapter family. Forge and NeoForge can
 share another family. These adapters will sit beside the Bukkit/Paper adapter
 and reuse Pumpkin-facing bridge services, rather than mixing incompatible
 loader APIs into one runtime.
+
+The adapters will be split into these layers:
+
+1. A loader-neutral Pumpkin bridge for players, worlds, entities, registries,
+   commands, networking, scheduling, configuration, and lifecycle hooks.
+2. A Bukkit/Spigot/Paper front end implemented by PatchBukkit.
+3. A Fabric/Quilt front end for their loader, event, registry, networking, and
+   entrypoint APIs.
+4. A Forge/NeoForge front end for their mod bus, capabilities/attachments,
+   registries, networking, configuration, and lifecycle APIs.
+
+Each loader family has its own conformance suite and real-mod matrix. A loader
+adapter is not complete merely because a mod JAR is discovered or its
+entrypoint runs; observable game state and network behavior must match the
+source API's contract.
+
+Public loader APIs can be bridged systematically. Mods that inject Mixins,
+access widened Minecraft internals, depend on mappings-specific classes, or
+patch JVM bytecode require targeted internal shims, source ports, or a
+dedicated JVM compatibility runtime. They are tracked separately and are not
+counted as public API compatibility.
+
+Work begins on these loader families after the Bukkit/Spigot/Paper release
+gates pass, so all adapters can reuse a tested bridge kernel.
