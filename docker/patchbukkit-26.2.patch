@@ -9968,21 +9968,6 @@ index 31e483e54425fd69f75511d17ab443ae2b055091..2edc9690fcc4edfe615c05250edf234b
   "bzip2",
   "constant_time_eq",
   "crc32fast",
-diff --git a/rust/Cargo.toml b/rust/Cargo.toml
-index 77047822139f4717591b3f6d86a144aecac9bdbf..3d0529def72c89cfde0b5ac56986e11bb0a02205 100644
---- a/rust/Cargo.toml
-+++ b/rust/Cargo.toml
-@@ -59,3 +59,10 @@ all = { level = "deny", priority = -1 }
- multiple_crate_versions = "allow"
- unnecessary_fallible_conversions = "allow"
- not_unsafe_ptr_arg_deref = "allow" # Not sure about this one
-+
-+[patch."https://github.com/Pumpkin-MC/Pumpkin.git"]
-+pumpkin = { path = "C:/Users/theso/Documents/🔧 Programming/Pumpkin/pumpkin" }
-+pumpkin-api-macros = { path = "C:/Users/theso/Documents/🔧 Programming/Pumpkin/pumpkin-api-macros" }
-+pumpkin-data = { path = "C:/Users/theso/Documents/🔧 Programming/Pumpkin/pumpkin-data" }
-+pumpkin-protocol = { path = "C:/Users/theso/Documents/🔧 Programming/Pumpkin/pumpkin-protocol" }
-+pumpkin-util = { path = "C:/Users/theso/Documents/🔧 Programming/Pumpkin/pumpkin-util" }
 diff --git a/rust/build/main.rs b/rust/build/main.rs
 index 09f8db3a5662a9acc5f6a0897ce93f054e634447..23529db9496b7a48cf6718664a7b2d7557470798 100644
 --- a/rust/build/main.rs
