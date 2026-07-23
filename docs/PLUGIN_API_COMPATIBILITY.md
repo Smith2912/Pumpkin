@@ -407,6 +407,10 @@ original bug over broad synthetic coverage with no human-observable meaning.
 
 ## Future loader adapters
 
+The detailed architecture, family boundaries, versioning rules, and
+human-verification gates are recorded in
+[`LOADER_COMPATIBILITY_ADAPTERS.md`](LOADER_COMPATIBILITY_ADAPTERS.md).
+
 Fabric and Quilt can share a loader-adapter family. Forge and NeoForge can
 share another family. These adapters will sit beside the Bukkit/Paper adapter
 and reuse Pumpkin-facing bridge services, rather than mixing incompatible
