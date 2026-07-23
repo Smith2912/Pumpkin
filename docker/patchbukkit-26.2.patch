@@ -45,10 +45,10 @@ index d225037..96de007 100644
  
          framework.registerSuite(new ServerTests(this));
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
-index 0ddff2f..68f29a5 100644
+index 0ddff2f..d364216 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
-@@ -3,13 +3,22 @@ package org.patchbukkit.testplugin.tests;
+@@ -3,13 +3,23 @@ package org.patchbukkit.testplugin.tests;
  import org.bukkit.Bukkit;
  import org.bukkit.event.EventHandler;
  import org.bukkit.event.EventPriority;
@@ -59,6 +59,7 @@ index 0ddff2f..68f29a5 100644
 +import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 +import org.bukkit.event.player.PlayerGameModeChangeEvent;
 +import org.bukkit.event.player.PlayerQuitEvent;
++import org.bukkit.event.player.PlayerRespawnEvent;
  import org.bukkit.event.server.PluginEnableEvent;
 +import org.bukkit.event.server.ServerCommandEvent;
  import org.bukkit.plugin.EventExecutor;
@@ -71,7 +72,7 @@ index 0ddff2f..68f29a5 100644
  import static org.patchbukkit.testplugin.TestAssertions.*;
  
  public final class EventSystemTests {
-@@ -31,6 +40,48 @@ public final class EventSystemTests {
+@@ -31,6 +41,52 @@ public final class EventSystemTests {
          Bukkit.getPluginManager().registerEvents(listener, plugin);
      }
  
@@ -92,6 +93,10 @@ index 0ddff2f..68f29a5 100644
 +
 +            @EventHandler
 +            public void onAsyncPlayerChat(AsyncPlayerChatEvent event) {
++            }
++
++            @EventHandler
++            public void onPlayerRespawn(PlayerRespawnEvent event) {
 +            }
 +
 +            @EventHandler
@@ -120,7 +125,7 @@ index 0ddff2f..68f29a5 100644
      @ConformanceTest(name = "registerEvent() with explicit priority", category = TestCategory.EVENT_SYSTEM)
      public void testRegisterEventWithPriority() {
          EventExecutor executor = (listener, event) -> {
-@@ -59,4 +110,17 @@ public final class EventSystemTests {
+@@ -59,4 +115,17 @@ public final class EventSystemTests {
                  true
          );
      }
@@ -1590,10 +1595,10 @@ index 0000000..ed415a4
 +    }
 +}
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
-index 14c24f1..1a9d911 100644
+index 14c24f1..e742661 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
-@@ -5,14 +5,22 @@ import net.kyori.adventure.text.Component;
+@@ -5,14 +5,23 @@ import net.kyori.adventure.text.Component;
  import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
  import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
  import org.bukkit.Bukkit;
@@ -1609,6 +1614,7 @@ index 14c24f1..1a9d911 100644
 +import patchbukkit.events.PlayerGameModeChangeEvent;
  import patchbukkit.events.PlayerJoinEvent;
 +import patchbukkit.events.PlayerQuitEvent;
++import patchbukkit.events.PlayerRespawnEvent;
 +import patchbukkit.events.ServerCommandEvent;
  
 +import java.util.LinkedHashSet;
@@ -1616,7 +1622,7 @@ index 14c24f1..1a9d911 100644
  import java.util.logging.Logger;
  
  public class PatchBukkitEventFactory {
-@@ -42,6 +50,59 @@ public class PatchBukkitEventFactory {
+@@ -42,6 +51,95 @@ public class PatchBukkitEventFactory {
                  Component joinMessage = GsonComponentSerializer.gson().deserialize(joinEvent.getJoinMessage());
                  yield new org.bukkit.event.player.PlayerJoinEvent(player, joinMessage);
              }
@@ -1673,10 +1679,46 @@ index 14c24f1..1a9d911 100644
 +                    recipients
 +                );
 +            }
++            case PLAYER_RESPAWN -> {
++                PlayerRespawnEvent respawnEvent = event.getPlayerRespawn();
++                Player player = getPlayer(respawnEvent.getPlayerUuid().getValue());
++                if (player == null) yield null;
++
++                patchbukkit.common.Location location = respawnEvent.getRespawnLocation();
++                org.bukkit.World world = Bukkit.getWorld(
++                    java.util.UUID.fromString(location.getWorld().getUuid().getValue())
++                );
++                if (world == null) {
++                    LOGGER.warning("EventFactory: Respawn world not found for UUID "
++                        + location.getWorld().getUuid().getValue());
++                    yield null;
++                }
++
++                org.bukkit.Location bukkitLocation = new org.bukkit.Location(
++                    world,
++                    location.getPosition().getX(),
++                    location.getPosition().getY(),
++                    location.getPosition().getZ(),
++                    location.getYaw(),
++                    location.getPitch()
++                );
++                org.bukkit.event.player.PlayerRespawnEvent.RespawnReason reason =
++                    respawnEvent.getAlive()
++                        ? org.bukkit.event.player.PlayerRespawnEvent.RespawnReason.END_PORTAL
++                        : org.bukkit.event.player.PlayerRespawnEvent.RespawnReason.DEATH;
++                yield new org.bukkit.event.player.PlayerRespawnEvent(
++                    player,
++                    bukkitLocation,
++                    false,
++                    false,
++                    false,
++                    reason
++                );
++            }
              case DATA_NOT_SET -> {
                  LOGGER.warning("EventFactory: Received Event with no data");
                  yield null;
-@@ -69,6 +130,62 @@ public class PatchBukkitEventFactory {
+@@ -69,6 +167,100 @@ public class PatchBukkitEventFactory {
                      .setJoinMessage(joinMessage)
                      .build()
              );
@@ -1736,6 +1778,44 @@ index 14c24f1..1a9d911 100644
 +            }
 +
 +            eventBuilder.setPlayerChat(chatBuilder.build());
++        } else if (event instanceof org.bukkit.event.player.PlayerRespawnEvent respawnEvent) {
++            org.bukkit.Location location = respawnEvent.getRespawnLocation();
++            org.bukkit.World world = java.util.Objects.requireNonNull(
++                location.getWorld(),
++                "PlayerRespawnEvent respawn location must include a world"
++            );
++
++            eventBuilder.setPlayerRespawn(
++                PlayerRespawnEvent.newBuilder()
++                    .setPlayerUuid(UUID.newBuilder()
++                        .setValue(respawnEvent.getPlayer().getUniqueId().toString())
++                        .build())
++                    .setRespawnLocation(
++                        patchbukkit.common.Location.newBuilder()
++                            .setWorld(
++                                patchbukkit.common.World.newBuilder()
++                                    .setUuid(UUID.newBuilder()
++                                        .setValue(world.getUID().toString())
++                                        .build())
++                                    .build()
++                            )
++                            .setPosition(
++                                patchbukkit.common.Vec3.newBuilder()
++                                    .setX(location.getX())
++                                    .setY(location.getY())
++                                    .setZ(location.getZ())
++                                    .build()
++                            )
++                            .setYaw(location.getYaw())
++                            .setPitch(location.getPitch())
++                            .build()
++                    )
++                    .setAlive(
++                        respawnEvent.getRespawnReason()
++                            == org.bukkit.event.player.PlayerRespawnEvent.RespawnReason.END_PORTAL
++                    )
++                    .build()
++            );
          }
  
          builder.setData(eventBuilder.build());
@@ -2340,10 +2420,10 @@ index 12c48c0..d3addd5 100644
 +  bool online_mode = 2;
  }
 diff --git a/proto/patchbukkit/events/event.proto b/proto/patchbukkit/events/event.proto
-index f678892..f95041e 100644
+index f678892..f18614d 100644
 --- a/proto/patchbukkit/events/event.proto
 +++ b/proto/patchbukkit/events/event.proto
-@@ -11,9 +11,18 @@ option java_package = "patchbukkit.events";
+@@ -11,9 +11,19 @@ option java_package = "patchbukkit.events";
  message Event {
    oneof data {
      PlayerJoinEvent player_join = 1;
@@ -2352,6 +2432,7 @@ index f678892..f95041e 100644
 +    ServerCommandEvent server_command = 4;
 +    PlayerCommandPreprocessEvent player_command_preprocess = 5;
 +    PlayerChatEvent player_chat = 6;
++    PlayerRespawnEvent player_respawn = 7;
    }
  }
  
@@ -2363,10 +2444,10 @@ index f678892..f95041e 100644
    string event_type = 1;
    string plugin_name = 2;
 diff --git a/proto/patchbukkit/events/player_events.proto b/proto/patchbukkit/events/player_events.proto
-index cd92e96..d8c2b01 100644
+index cd92e96..c74ae7e 100644
 --- a/proto/patchbukkit/events/player_events.proto
 +++ b/proto/patchbukkit/events/player_events.proto
-@@ -10,3 +10,24 @@ message PlayerJoinEvent {
+@@ -10,3 +10,30 @@ message PlayerJoinEvent {
    patchbukkit.common.UUID player_uuid = 1;
    string join_message = 2;
  }
@@ -2390,6 +2471,12 @@ index cd92e96..d8c2b01 100644
 +  patchbukkit.common.UUID player_uuid = 1;
 +  string message = 2;
 +  repeated patchbukkit.common.UUID recipients = 3;
++}
++
++message PlayerRespawnEvent {
++  patchbukkit.common.UUID player_uuid = 1;
++  patchbukkit.common.Location respawn_location = 2;
++  bool alive = 3;
 +}
 diff --git a/proto/patchbukkit/registry.proto b/proto/patchbukkit/registry.proto
 index a7dac34..4961ec9 100644
@@ -2481,22 +2568,27 @@ index 484dc62..22d354c 100644
      }
  
 diff --git a/rust/src/events/handler.rs b/rust/src/events/handler.rs
-index 6705e20..1ca6b48 100644
+index 6705e20..2c197f4 100644
 --- a/rust/src/events/handler.rs
 +++ b/rust/src/events/handler.rs
-@@ -11,7 +11,10 @@ use tokio::sync::{mpsc, oneshot};
+@@ -9,9 +9,14 @@ use pumpkin_api_macros::with_runtime;
+ use tokio::sync::{mpsc, oneshot};
+ 
  use crate::java::jvm::commands::JvmCommand;
- use crate::proto::patchbukkit::common::Uuid;
+-use crate::proto::patchbukkit::common::Uuid;
++use crate::proto::patchbukkit::common::{
++    Location as ProtoLocation, Uuid, Vec3, World as ProtoWorld,
++};
  use crate::proto::patchbukkit::events::event::Data;
 -use crate::proto::patchbukkit::events::{Event, PlayerJoinEvent};
 +use crate::proto::patchbukkit::events::{
 +    Event, PlayerChatEvent, PlayerCommandPreprocessEvent, PlayerGameModeChangeEvent,
-+    PlayerJoinEvent, PlayerQuitEvent, ServerCommandEvent,
++    PlayerJoinEvent, PlayerQuitEvent, PlayerRespawnEvent, ServerCommandEvent,
 +};
  
  pub struct EventContext {
      pub server: Arc<Server>,
-@@ -26,6 +29,10 @@ pub struct JvmEventPayload {
+@@ -26,6 +31,10 @@ pub struct JvmEventPayload {
  pub trait PatchBukkitEvent {
      fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload;
      fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()>;
@@ -2507,7 +2599,7 @@ index 6705e20..1ca6b48 100644
  }
  
  impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent {
-@@ -52,6 +59,178 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent
+@@ -52,6 +61,239 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent
                  self.join_message = serde_json::from_str(&event.join_message).ok()?;
                  server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
              }
@@ -2662,6 +2754,67 @@ index 6705e20..1ca6b48 100644
 +    }
 +}
 +
++impl PatchBukkitEvent for pumpkin::plugin::player::player_respawn::PlayerRespawnEvent {
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::PlayerRespawn(PlayerRespawnEvent {
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
++                    respawn_location: Some(ProtoLocation {
++                        world: Some(ProtoWorld {
++                            uuid: Some(Uuid {
++                                value: self.respawned_world.uuid.to_string(),
++                            }),
++                            ..Default::default()
++                        }),
++                        position: Some(Vec3 {
++                            x: self.position.x,
++                            y: self.position.y,
++                            z: self.position.z,
++                        }),
++                        yaw: self.yaw,
++                        pitch: self.pitch,
++                    }),
++                    alive: self.alive,
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        match data {
++            Data::PlayerRespawn(event) => {
++                let location = event.respawn_location?;
++                let world_uuid = uuid::Uuid::from_str(&location.world?.uuid?.value).ok()?;
++                let position = location.position?;
++                let worlds = server.worlds.load();
++                self.respawned_world = worlds
++                    .iter()
++                    .find(|world| world.uuid == world_uuid)
++                    .cloned()?;
++                self.position =
++                    pumpkin_util::math::vector3::Vector3::new(position.x, position.y, position.z);
++                self.yaw = location.yaw;
++                self.pitch = location.pitch;
++                server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
++            }
++            _ => return None,
++        }
++
++        Some(())
++    }
++
++    fn carries_bukkit_cancellation(&self) -> bool {
++        false
++    }
++}
++
 +impl PatchBukkitEvent for pumpkin::plugin::server::server_command::ServerCommandEvent {
 +    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
 +        JvmEventPayload {
@@ -2686,17 +2839,112 @@ index 6705e20..1ca6b48 100644
          }
  
          Some(())
-@@ -103,7 +282,9 @@ where
+@@ -75,6 +317,55 @@ impl<E: PatchBukkitEvent> PatchBukkitEventHandler<E> {
+     }
+ }
  
-             match rx.await {
-                 Ok(response) => {
++pub struct PatchBukkitNotificationHandler<E: PatchBukkitEvent> {
++    plugin_name: String,
++    command_tx: mpsc::Sender<JvmCommand>,
++    _phantom: PhantomData<E>,
++}
++
++impl<E: PatchBukkitEvent> PatchBukkitNotificationHandler<E> {
++    #[must_use]
++    pub const fn new(plugin_name: String, command_tx: mpsc::Sender<JvmCommand>) -> Self {
++        Self {
++            plugin_name,
++            command_tx,
++            _phantom: PhantomData,
++        }
++    }
++}
++
++async fn forward_event_to_jvm<E: PatchBukkitEvent>(
++    plugin_name: &str,
++    command_tx: &mpsc::Sender<JvmCommand>,
++    server: &Arc<Server>,
++    event: &mut E,
++) -> Option<bool> {
++    let (tx, rx) = oneshot::channel();
++    if let Err(e) = command_tx
++        .send(JvmCommand::FireEvent {
++            payload: event.to_payload(server.clone()),
++            respond_to: tx,
++            plugin: plugin_name.to_owned(),
++        })
++        .await
++    {
++        tracing::error!("Failed to send event to JVM worker: {e}");
++        return None;
++    }
++
++    match rx.await {
++        Ok(response) => {
++            let cancelled = response.cancelled;
++            event.apply_modifications(server, response.data?.data?);
++            Some(cancelled)
++        }
++        Err(_) => {
++            tracing::warn!("JVM worker dropped response channel for event");
++            None
++        }
++    }
++}
++
+ #[with_runtime(global)]
+ impl<E> EventHandler<E> for PatchBukkitEventHandler<E>
+ where
+@@ -88,28 +379,30 @@ where
+         let command_tx = self.command_tx.clone();
+ 
+         Box::pin(async move {
+-            let (tx, rx) = oneshot::channel();
+-            if let Err(e) = command_tx
+-                .send(JvmCommand::FireEvent {
+-                    payload: event.to_payload(server.clone()),
+-                    respond_to: tx,
+-                    plugin: self.plugin_name.clone(),
+-                })
+-                .await
++            if let Some(cancelled) =
++                forward_event_to_jvm(&self.plugin_name, &command_tx, server, event).await
++                && event.carries_bukkit_cancellation()
+             {
+-                tracing::error!("Failed to send event to JVM worker: {e}");
+-                return;
++                event.set_cancelled(cancelled);
+             }
++        })
++    }
++}
+ 
+-            match rx.await {
+-                Ok(response) => {
 -                    event.set_cancelled(response.cancelled);
-+                    if event.carries_bukkit_cancellation() {
-+                        event.set_cancelled(response.cancelled);
-+                    }
-                     event.apply_modifications(server, response.data.unwrap().data.unwrap());
-                 }
-                 Err(_) => {
+-                    event.apply_modifications(server, response.data.unwrap().data.unwrap());
+-                }
+-                Err(_) => {
+-                    tracing::warn!("JVM worker dropped response channel for event");
+-                }
+-            }
++#[with_runtime(global)]
++impl<E> EventHandler<E> for PatchBukkitNotificationHandler<E>
++where
++    E: PatchBukkitEvent + Payload + 'static,
++{
++    fn handle_blocking<'a>(
++        &'a self,
++        server: &'a Arc<Server>,
++        event: &'a mut E,
++    ) -> BoxFuture<'a, ()> {
++        let command_tx = self.command_tx.clone();
++
++        Box::pin(async move {
++            forward_event_to_jvm(&self.plugin_name, &command_tx, server, event).await;
+         })
+     }
+ }
 diff --git a/rust/src/java/jar.rs b/rust/src/java/jar.rs
 index f94134e..c60e6a2 100644
 --- a/rust/src/java/jar.rs
@@ -2819,10 +3067,19 @@ index eed3dec..b0d700d 100644
          })
  }
 diff --git a/rust/src/java/native_callbacks/events.rs b/rust/src/java/native_callbacks/events.rs
-index d71e36d..4e9d6be 100644
+index d71e36d..9c4fcea 100644
 --- a/rust/src/java/native_callbacks/events.rs
 +++ b/rust/src/java/native_callbacks/events.rs
-@@ -50,6 +50,81 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
+@@ -4,7 +4,7 @@ use pumpkin::plugin::EventPriority;
+ use pumpkin::plugin::player::player_join::PlayerJoinEvent;
+ use pumpkin_util::text::TextComponent;
+ 
+-use crate::events::handler::PatchBukkitEventHandler;
++use crate::events::handler::{PatchBukkitEventHandler, PatchBukkitNotificationHandler};
+ use crate::java::native_callbacks::CALLBACK_CONTEXT;
+ use crate::proto::patchbukkit::events::event::Data;
+ use crate::proto::patchbukkit::events::{
+@@ -50,6 +50,98 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
                          )
                          .await;
                  }
@@ -2886,6 +3143,23 @@ index d71e36d..4e9d6be 100644
 +                        )
 +                        .await;
 +                }
++                "org.bukkit.event.player.PlayerRespawnEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::player_respawn::PlayerRespawnEvent,
++                            PatchBukkitNotificationHandler<
++                                pumpkin::plugin::player::player_respawn::PlayerRespawnEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitNotificationHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
 +                "org.bukkit.event.server.ServerCommandEvent" => {
 +                    context
 +                        .register_event::<
@@ -2904,7 +3178,7 @@ index d71e36d..4e9d6be 100644
                  _ => {
                      tracing::warn!(
                          "Unsupported Bukkit event type '{}' from plugin '{}'",
-@@ -84,6 +159,7 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
+@@ -84,6 +176,7 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
                      context.server.plugin_manager.fire(pumpkin_event).await;
                      Some(true)
                  }

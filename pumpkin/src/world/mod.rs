@@ -3279,6 +3279,46 @@ impl World {
         }
     }
 
+    /// Moves a respawning player between the server's world membership lists.
+    ///
+    /// Respawn has two possible redirect points: the pre-transfer
+    /// `PlayerChangeWorldEvent` and the post-resolution `PlayerRespawnEvent`.
+    /// Keeping the membership update here ensures both paths update watched
+    /// chunks, the chunk manager, and the entity's world in the same order.
+    async fn transfer_respawning_player(
+        self: &Arc<Self>,
+        player: &Arc<Player>,
+        destination: &Arc<Self>,
+    ) -> bool {
+        if self.uuid == destination.uuid {
+            return true;
+        }
+
+        let Some(player) = self.remove_player(player, false).await else {
+            warn!(
+                "Could not detach player {} from world {} during respawn",
+                player.gameprofile.name,
+                self.get_world_name()
+            );
+            return false;
+        };
+
+        player.unload_watched_chunks(self).await;
+        player
+            .chunk_manager
+            .lock()
+            .await
+            .change_world(&self.level, destination.clone());
+        player.living_entity.entity.set_world(destination.clone());
+        destination.players.rcu(|current_list| {
+            let mut new_list = (**current_list).clone();
+            new_list.push(player.clone());
+            new_list
+        });
+
+        true
+    }
+
     #[allow(clippy::too_many_lines)]
     pub async fn respawn_player(self: &Arc<Self>, player: &Arc<Player>, alive: bool) {
         let last_pos = player.get_entity().last_pos.load();
@@ -3383,7 +3423,7 @@ impl World {
                     let pitch = event.pitch;
 
                     // Skip the transfer if redirected back to the current world.
-                    if destination.uuid != self.uuid {
+                    let transferred = if destination.uuid != self.uuid {
                         debug!(
                             "Cross-dimension respawn: {} -> {}",
                             self.dimension.minecraft_name, destination.dimension.minecraft_name
@@ -3391,22 +3431,16 @@ impl World {
 
                         // Detach from the old world before publishing into the new one, so no
                         // observer sees the player in a world whose chunk manager doesn't match.
-                        self.remove_player(player, false).await;
-                        player.unload_watched_chunks(self).await;
-                        player
-                            .chunk_manager
-                            .lock()
-                            .await
-                            .change_world(&self.level, destination.clone());
-                        player.living_entity.entity.set_world(destination.clone());
-                        destination.players.rcu(|current_list| {
-                            let mut new_list = (**current_list).clone();
-                            new_list.push(player.clone());
-                            new_list
-                        });
-                    }
+                        self.transfer_respawning_player(player, &destination).await
+                    } else {
+                        true
+                    };
 
-                    (Some(destination), position, yaw, pitch)
+                    if transferred {
+                        (Some(destination), position, yaw, pitch)
+                    } else {
+                        (None, position, yaw, pitch)
+                    }
                 }
             } else {
                 warn!("Server dropped during cross-dimension respawn");
@@ -3442,9 +3476,11 @@ impl World {
             (self.clone(), position, yaw, pitch)
         };
 
-        // Notify plugins that the player has respawned (non-cancellable).
-        if let Some(server) = self.server.upgrade() {
-            let _ = server
+        // Notify plugins that the player has respawned (non-cancellable). Plugins may
+        // redirect the final world, position, or rotation; Bukkit's
+        // PlayerRespawnEvent.setRespawnLocation relies on these edits taking effect.
+        let (target_world, position, yaw, pitch) = if let Some(server) = self.server.upgrade() {
+            let event = server
                 .plugin_manager
                 .fire(PlayerRespawnEvent::new(
                     player.clone(),
@@ -3456,7 +3492,39 @@ impl World {
                     alive,
                 ))
                 .await;
-        }
+
+            if event.respawned_world.uuid == target_world.uuid {
+                (
+                    event.respawned_world,
+                    event.position,
+                    event.yaw,
+                    event.pitch,
+                )
+            } else if target_world
+                .transfer_respawning_player(player, &event.respawned_world)
+                .await
+            {
+                debug!(
+                    "PlayerRespawnEvent redirected respawn: {} -> {}",
+                    target_world.dimension.minecraft_name,
+                    event.respawned_world.dimension.minecraft_name
+                );
+                (
+                    event.respawned_world,
+                    event.position,
+                    event.yaw,
+                    event.pitch,
+                )
+            } else {
+                warn!(
+                    "Ignoring PlayerRespawnEvent redirect for {} because the world transfer failed",
+                    player.gameprofile.name
+                );
+                (target_world, position, yaw, pitch)
+            }
+        } else {
+            (target_world, position, yaw, pitch)
+        };
 
         // Send respawn packet with target dimension (using send_packet_now to ensure proper order)
         player
