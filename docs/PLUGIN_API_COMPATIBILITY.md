@@ -112,6 +112,32 @@ data-component mutation. Item persistent-data writes and rich text formatting
 also remain explicit follow-up contracts until they have native storage,
 round-trip tests, and live plugin evidence.
 
+## Block and interaction event milestone gate
+
+The EssentialsAntiBuild/EssentialsProtect block-event milestone is complete
+only when one deployed commit passes all of these checks:
+
+1. `World.getBlockAt()` exposes the live Pumpkin world, coordinates, material,
+   and basic block predicates without creating a second world model.
+2. Native block and interaction events carry the real world UUID, block
+   position, material, player, and action into Bukkit.
+3. Bukkit cancellation prevents the corresponding Pumpkin action, and
+   mutable values such as block-break experience and item drops propagate
+   back to Pumpkin.
+4. Non-player world changes are not misreported as player block-break events.
+5. Unsupported block writes and unbridged event fields fail explicitly or
+   remain documented; they must not appear to work while discarding changes.
+6. The clean Java/protobuf and Rust builds, clean pinned-patch application,
+   conformance block-read check, and live protected build/break/interact
+   workflow all pass.
+
+The first slice covers live block reads, `BlockBreakEvent`, and
+`PlayerInteractEvent`. Block placement still needs Pumpkin to expose the
+clicked-block position, face, hand, and replaced state. Burn, ignite, flow,
+piston, explosion, entity-damage, hanging, dispense, craft, pickup, and drop
+events remain separate native contracts and are not represented as complete
+by listener registration alone.
+
 ## Human verification runbook
 
 Every compatibility change must leave evidence a maintainer can reproduce and
