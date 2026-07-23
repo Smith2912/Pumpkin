@@ -1,8 +1,11 @@
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
-index d225037..ed66655 100644
+index d2250375c315de9f9dbab10a165c9125ce1cf4d7..ed666556085ceec4251a9112891b13a8e0484ece 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
-@@ -10,0 +11,11 @@ public final class PatchBukkitTestPlugin extends JavaPlugin {
+@@ -8,6 +8,17 @@ import org.patchbukkit.testplugin.tests.*;
+ 
+ public final class PatchBukkitTestPlugin extends JavaPlugin {
+ 
 +    private boolean loadPhaseCompleted;
 +
 +    @Override
@@ -14,11 +17,32 @@ index d225037..ed66655 100644
 +        return loadPhaseCompleted;
 +    }
 +
+     @Override
+     public void onEnable() {
+         TestFramework framework = new TestFramework(getLogger());
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
-index 032bce0..2a239e4 100644
+index 032bce02481cc9c7f0c95ca50d6df1fb974fe0a1..2b72119d0483478d125aab471f90f89691d4b072 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
-@@ -58,0 +59,8 @@ public final class PluginManagerTests {
+@@ -3,9 +3,14 @@ package org.patchbukkit.testplugin.tests;
+ import org.bukkit.Bukkit;
+ import org.bukkit.plugin.Plugin;
+ import org.bukkit.plugin.PluginManager;
++import org.bukkit.plugin.SimplePluginManager;
+ import org.patchbukkit.testplugin.ConformanceTest;
+ import org.patchbukkit.testplugin.TestCategory;
+ import org.bukkit.plugin.java.JavaPlugin;
++import org.bukkit.permissions.Permission;
++
++import java.lang.reflect.Field;
++import java.util.Map;
+ 
+ import static org.patchbukkit.testplugin.TestAssertions.*;
+ 
+@@ -56,10 +61,43 @@ public final class PluginManagerTests {
+         assertTrue(enabled, "isPluginEnabled(plugin) should be true");
+     }
+ 
 +    @ConformanceTest(name = "Plugin onLoad() runs before onEnable()", category = TestCategory.PLUGIN_MANAGER)
 +    public void testLoadPhaseCompleted() {
 +        assertTrue(
@@ -27,214 +51,138 @@ index 032bce0..2a239e4 100644
 +        );
 +    }
 +
-diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
-index d90de1b..fff84ba 100644
---- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
-+++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
-@@ -159 +159,4 @@ public class PatchBukkitPluginManager implements PluginManager {
--                server.getLogger().severe("Error enabling " + plugin.getName() + ": " + ex.getMessage());
-+                throw new IllegalStateException(
-+                    "Error enabling " + plugin.getName(),
-+                    ex
-+                );
-diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
---- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
-+++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
-@@ -14 +14 @@ public final class UnsafeValuesTests {
--    @ConformanceTest(name = "UnsafeValues.getDataVersion() returns positive int", category = TestCategory.UNSAFE_VALUES)
-+    @ConformanceTest(name = "UnsafeValues.getDataVersion() matches Minecraft 26.2", category = TestCategory.UNSAFE_VALUES)
-@@ -18 +18 @@ public final class UnsafeValuesTests {
--        assertTrue(version > 0, "getDataVersion() should be > 0, got " + version);
-+        assertTrue(version == 4903, "getDataVersion() should be 4903, got " + version);
-diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
---- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
-+++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
-@@ -15,0 +16,2 @@ import java.io.File;
-+import java.io.PrintWriter;
-+import java.io.StringWriter;
-@@ -99,0 +102 @@ import patchbukkit.bridge.NativeBridgeFfi;
-+import patchbukkit.common.EmptyRequest;
-@@ -144,0 +147,6 @@ public class PatchBukkitServer implements Server {
-+                String message = record.getMessage();
-+                if (record.getThrown() != null) {
-+                    StringWriter stackTrace = new StringWriter();
-+                    record.getThrown().printStackTrace(new PrintWriter(stackTrace));
-+                    message += System.lineSeparator() + stackTrace;
-+                }
-@@ -148 +156 @@ public class PatchBukkitServer implements Server {
--                                .setMessage(record.getMessage())
-+                                .setMessage(message)
-@@ -870,4 +879,3 @@ public class PatchBukkitServer implements Server {
--        // TODO Auto-generated method stub
--        throw new UnsupportedOperationException(
--            "Unimplemented method 'getOnlineMode'"
--        );
-+        return NativeBridgeFfi
-+            .getPatchBukkitConfig(EmptyRequest.newBuilder().setPresent(true).build())
-+            .getOnlineMode();
-@@ -1287,4 +1295 @@ public class PatchBukkitServer implements Server {
--        // TODO Auto-generated method stub
--        throw new UnsupportedOperationException(
--            "Unimplemented method 'getWarningState'"
--        );
-+        return WarningState.DEFAULT;
-diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
---- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
-+++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
-@@ -56,0 +57,4 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
-+    // Minecraft Java Edition 26.2 world data version, from the official
-+    // Mojang server version.json. Keep this aligned with Pumpkin's protocol.
-+    private static final int DATA_VERSION = 4903;
+     @ConformanceTest(name = "PluginManager.getPermissions() returns set", category = TestCategory.PLUGIN_MANAGER)
+     public void testGetPermissions() {
+         var perms = Bukkit.getPluginManager().getPermissions();
+         assertNotNull(perms, "PluginManager.getPermissions()");
+     }
+ 
++    @ConformanceTest(name = "PluginManager exposes Bukkit permission maps", category = TestCategory.PLUGIN_MANAGER)
++    public void testSimplePluginManagerCompatibility() throws Exception {
++        PluginManager manager = Bukkit.getPluginManager();
++        assertTrue(
++            manager instanceof SimplePluginManager,
++            "PluginManager should be a SimplePluginManager for Bukkit permission providers"
++        );
 +
-@@ -63 +67,3 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
--        var minimumApi = NativeBridgeFfi.getPatchBukkitConfig(EmptyRequest.newBuilder().build()).getMinimumSupportedPluginApi();
-+        var minimumApi = NativeBridgeFfi
-+            .getPatchBukkitConfig(EmptyRequest.newBuilder().setPresent(true).build())
-+            .getMinimumSupportedPluginApi();
-@@ -157,2 +162 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
--		// TODO Auto-generated method stub
--		throw new UnsupportedOperationException("Unimplemented method 'getDataVersion'");
-+		return DATA_VERSION;
-diff --git a/rust/src/commands/mod.rs b/rust/src/commands/mod.rs
-index 484dc62..22d354c 100644
---- a/rust/src/commands/mod.rs
-+++ b/rust/src/commands/mod.rs
-@@ -37 +37 @@ impl GetClientSideArgParser for AnyCommandNode {
--    fn get_client_side_parser(&self) -> ArgumentType<'_> {
-+    fn get_client_side_parser(&self) -> ArgumentType {
-diff --git a/rust/src/java/plugin/manager.rs b/rust/src/java/plugin/manager.rs
-index 8754934..4c5a0da 100644
---- a/rust/src/java/plugin/manager.rs
-+++ b/rust/src/java/plugin/manager.rs
-@@ -409,0 +410,12 @@ impl PluginManager {
-+            // Bukkit's lifecycle calls onLoad after the plugin has been constructed and
-+            // initialized, but before any plugin is enabled. Some plugins (including
-+            // LuckPerms) load their runtime dependencies and configuration in this phase.
-+            if let Err(error) = jvm.invoke(&plugin_instance, "onLoad", InvocationArg::empty()) {
-+                plugin.state = PluginState::Errored;
-+                tracing::error!(
-+                    "Failed to load PatchBukkit plugin {}: {error:?}",
-+                    plugin.name
-+                );
-+                continue;
-+            }
++        Permission marker = new Permission("patchbukkit.test.permission-map");
++        manager.addPermission(marker);
++        try {
++            Field permissionsField = SimplePluginManager.class.getDeclaredField("permissions");
++            permissionsField.setAccessible(true);
++            @SuppressWarnings("unchecked")
++            Map<String, Permission> permissions =
++                (Map<String, Permission>) permissionsField.get(manager);
++            assertTrue(
++                permissions.get(marker.getName()) == marker,
++                "PluginManager methods should use the replaceable Bukkit permission map"
++            );
++        } finally {
++            manager.removePermission(marker);
++        }
++    }
 +
+ }
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
+index 1940bf54213f88a47dbb0a48afbe8b519c55432d..553a40d85d2645bb17eb077a4c8f66523bf0917e 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
-@@ -77,0 +78,5 @@ public final class ServerTests {
+@@ -1,5 +1,6 @@
+ package org.patchbukkit.testplugin.tests;
+ 
++import java.io.File;
+ import org.bukkit.Bukkit;
+ import org.bukkit.Server;
+ import org.bukkit.command.CommandMap;
+@@ -39,6 +40,33 @@ public final class ServerTests {
+         assertNotNull(version, "Server.getBukkitVersion()");
+     }
+ 
++    @ConformanceTest(name = "Server has modern CraftBukkit identity", category = TestCategory.SERVER)
++    public void testCraftBukkitIdentity() {
++        assertTrue(
++            Bukkit.getServer().getClass().getName().equals(
++                "org.bukkit.craftbukkit.CraftServer"
++            ),
++            "Server class should expose the modern CraftBukkit package"
++        );
++    }
++
++    @ConformanceTest(name = "Server.getMinecraftVersion() is implemented", category = TestCategory.SERVER)
++    public void testGetMinecraftVersion() {
++        String version = Bukkit.getServer().getMinecraftVersion();
++        assertNotNull(version, "Server.getMinecraftVersion()");
++    }
++
++    @ConformanceTest(name = "Server.getPluginsFolder() is implemented", category = TestCategory.SERVER)
++    public void testGetPluginsFolder() {
++        File pluginsFolder = Bukkit.getServer().getPluginsFolder();
++        assertNotNull(pluginsFolder, "Server.getPluginsFolder()");
++    }
++
++    @ConformanceTest(name = "Server.isStopping() is implemented", category = TestCategory.SERVER)
++    public void testIsStopping() {
++        assertTrue(!Bukkit.getServer().isStopping(), "Server should not be stopping during conformance tests");
++    }
++
+     @ConformanceTest(name = "Server.getPluginManager() returns non-null", category = TestCategory.SERVER)
+     public void testGetPluginManager() {
+         PluginManager pm = Bukkit.getServer().getPluginManager();
+@@ -75,6 +103,11 @@ public final class ServerTests {
+         assertNotNull(unsafe, "Server.getUnsafe()");
+     }
+ 
 +    @ConformanceTest(name = "Server.getOnlineMode() is implemented", category = TestCategory.SERVER)
 +    public void testGetOnlineMode() {
 +        Bukkit.getServer().getOnlineMode();
 +    }
 +
-+    @ConformanceTest(name = "Server.getWarningState() is implemented", category = TestCategory.SERVER)
-+    public void testGetWarningState() {
-+        assertNotNull(Bukkit.getServer().getWarningState(), "Server.getWarningState()");
-+    }
+     @ConformanceTest(name = "Server.suggestPlayerNamesWhenNullTabCompletions() returns boolean", category = TestCategory.SERVER)
+     public void testSuggestPlayerNames() {
+         boolean result = Bukkit.getServer().suggestPlayerNamesWhenNullTabCompletions();
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
+index 3a6b9c4fc24bc61ace3e61a8e6858549f9124d11..fcd1ec17fdd988a7fab67cf9dde16208e65a9baf 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
+@@ -11,11 +11,11 @@ import static org.patchbukkit.testplugin.TestAssertions.*;
+ @SuppressWarnings("deprecation")
+ public final class UnsafeValuesTests {
+ 
+-    @ConformanceTest(name = "UnsafeValues.getDataVersion() returns positive int", category = TestCategory.UNSAFE_VALUES)
++    @ConformanceTest(name = "UnsafeValues.getDataVersion() matches Minecraft 26.2", category = TestCategory.UNSAFE_VALUES)
+     public void testGetDataVersion() {
+         UnsafeValues unsafe = Bukkit.getUnsafe();
+         int version = unsafe.getDataVersion();
+-        assertTrue(version > 0, "getDataVersion() should be > 0, got " + version);
++        assertTrue(version == 4903, "getDataVersion() should be 4903, got " + version);
+     }
+ 
+     @ConformanceTest(name = "UnsafeValues.isSupportedApiVersion(\"1.21\") returns true", category = TestCategory.UNSAFE_VALUES)
+diff --git a/java/patchbukkit/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/java/patchbukkit/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..9f759b8a172601bab826853686b5e0a7ba71f5a7
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -0,0 +1,16 @@
++package org.bukkit.craftbukkit;
 +
-diff --git a/proto/patchbukkit/config.proto b/proto/patchbukkit/config.proto
---- a/proto/patchbukkit/config.proto
-+++ b/proto/patchbukkit/config.proto
-@@ -11,0 +12 @@ message GetPatchBukkitConfigResponse {
-+  bool online_mode = 2;
-diff --git a/proto/patchbukkit/common/types.proto b/proto/patchbukkit/common/types.proto
---- a/proto/patchbukkit/common/types.proto
-+++ b/proto/patchbukkit/common/types.proto
-@@ -29 +29,4 @@ message Location {
--message EmptyRequest {}
-+message EmptyRequest {
-+  // Ensures the request serializes to at least one byte for the FFI transport.
-+  bool present = 1;
-+}
-diff --git a/rust/src/java/native_callbacks/config.rs b/rust/src/java/native_callbacks/config.rs
---- a/rust/src/java/native_callbacks/config.rs
-+++ b/rust/src/java/native_callbacks/config.rs
-@@ -17,0 +18,7 @@ pub fn ffi_native_bridge_get_patch_bukkit_config_impl(
-+            online_mode: context
-+                .plugin_context
-+                .server
-+                .advanced_config
-+                .networking
-+                .java
-+                .online_mode,
-diff --git a/rust/src/java/jar.rs b/rust/src/java/jar.rs
---- a/rust/src/java/jar.rs
-+++ b/rust/src/java/jar.rs
-@@ -2 +2 @@ use std::{
--    fs::File,
-+    fs::{self, File},
-@@ -8 +7,0 @@ use anyhow::Result;
--use glob::glob;
-@@ -14,12 +13,26 @@ pub fn discover_jar_files(plugin_folder: &Path) -> impl Iterator<Item = PathBuf>
--    let pattern = format!("{}/**/*.jar", plugin_folder.display());
--
--    glob(&pattern)
--        .expect("Invalid glob pattern")
--        .filter_map(|entry| {
--            entry
--                .map_err(|e| tracing::error!("Glob error: {e:?}"))
--                .ok()?
--                .canonicalize()
--                .map_err(|e| tracing::error!("Canonicalize error: {e:?}"))
--                .ok()
--        })
-+    let jars = match fs::read_dir(plugin_folder) {
-+        Ok(entries) => entries
-+            .filter_map(|entry| {
-+                let path = entry
-+                    .map_err(|error| tracing::error!("Read directory error: {error:?}"))
-+                    .ok()?
-+                    .path();
-+                if !path.is_file()
-+                    || !path
-+                        .extension()
-+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("jar"))
-+                {
-+                    return None;
-+                }
-+                path.canonicalize()
-+                    .map_err(|error| tracing::error!("Canonicalize error: {error:?}"))
-+                    .ok()
-+            })
-+            .collect(),
-+        Err(error) => {
-+            tracing::error!("Failed to read plugin directory: {error:?}");
-+            Vec::new()
-+        }
-+    };
++/**
++ * Modern CraftBukkit-compatible server identity.
++ *
++ * Many Bukkit plugins use the runtime server class to select their provider
++ * implementation. Keeping the public server in this package lets those
++ * plugins recognize PatchBukkit as a modern, Mojang-mapped Bukkit runtime
++ * while the implementation remains in {@code org.patchbukkit}.
++ */
++public final class CraftServer extends org.patchbukkit.PatchBukkitServer {
 +
-+    jars.into_iter()
-@@ -53,0 +67,27 @@ pub fn read_configs_from_jar<P: AsRef<Path>>(
-+
-+#[cfg(test)]
-+mod tests {
-+    use super::discover_jar_files;
-+    use std::fs;
-+
-+    #[test]
-+    fn discovery_ignores_nested_dependency_jars() {
-+        let root = std::env::temp_dir().join(format!(
-+            "patchbukkit-jar-discovery-{}",
-+            uuid::Uuid::new_v4()
-+        ));
-+        let nested = root.join("PluginData").join("libs");
-+        fs::create_dir_all(&nested).expect("create test directories");
-+        fs::write(root.join("plugin.jar"), []).expect("create plugin jar");
-+        fs::write(nested.join("dependency.jar"), []).expect("create dependency jar");
-+
-+        let jars: Vec<_> = discover_jar_files(&root).collect();
-+
-+        assert_eq!(jars.len(), 1);
-+        assert_eq!(
-+            jars[0].file_name().and_then(|name| name.to_str()),
-+            Some("plugin.jar")
-+        );
-+        fs::remove_dir_all(root).expect("remove test directories");
++    public CraftServer() {
++        super();
 +    }
 +}
 diff --git a/java/patchbukkit/src/main/java/org/bukkit/plugin/SimplePluginManager.java b/java/patchbukkit/src/main/java/org/bukkit/plugin/SimplePluginManager.java
 new file mode 100644
+index 0000000000000000000000000000000000000000..735217e21407b0ef5c468dff7826d1fee28cd620
 --- /dev/null
 +++ b/java/patchbukkit/src/main/java/org/bukkit/plugin/SimplePluginManager.java
 @@ -0,0 +1,214 @@
@@ -452,7 +400,256 @@ new file mode 100644
 +        this.useTimings = useTimings;
 +    }
 +}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginClassLoader.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginClassLoader.java
+index 21009c40b856febd090c87253c3dc60ca4340feb..0fd46d7c39e0e1c93f4dffd1f06d485ee0f56c7a 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginClassLoader.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginClassLoader.java
+@@ -10,12 +10,18 @@ import java.net.MalformedURLException;
+ import java.net.URL;
+ import java.net.URLClassLoader;
+ import java.util.ArrayList;
++import java.util.Collections;
+ import java.util.List;
++import java.util.Locale;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
+ import java.util.jar.JarEntry;
+ import java.util.jar.JarFile;
++import org.bukkit.Bukkit;
+ import org.bukkit.plugin.InvalidDescriptionException;
+ import org.bukkit.plugin.PluginDescriptionFile;
+ import org.bukkit.plugin.java.JavaPlugin;
++import org.patchbukkit.PatchBukkitPluginManager;
+ import org.jetbrains.annotations.Nullable;
+ 
+ public class PatchBukkitPluginClassLoader
+@@ -26,26 +32,52 @@ public class PatchBukkitPluginClassLoader
+     private final PluginDescriptionFile description;
+     private final File dataFolder;
+     private final File file;
++    private final List<String> dependencies;
+     private JavaPlugin plugin;
+ 
++    private static final Map<String, PatchBukkitPluginClassLoader> LOADERS =
++        new ConcurrentHashMap<>();
++
+     static {
+         ClassLoader.registerAsParallelCapable();
+     }
+ 
+     public PatchBukkitPluginClassLoader(ClassLoader parent, File file)
+         throws MalformedURLException, InvalidDescriptionException {
+-        this(parent, file, new URL[0]);
++        this(parent, file, new URL[0], "");
+     }
+ 
+     public PatchBukkitPluginClassLoader(
+         ClassLoader parent,
+         File file,
+-        URL[] extraUrls
++        URL[] extraUrls,
++        String dependencyNames
+     ) throws MalformedURLException, InvalidDescriptionException {
+         super(buildUrls(file, extraUrls), parent);
+         this.file = file;
+         this.description = loadDescription(file);
+         this.dataFolder = new File(file.getParentFile(), description.getName());
++        this.dependencies = parseDependencies(dependencyNames);
++        LOADERS.put(normalizePluginName(description.getName()), this);
++    }
++
++    private static List<String> parseDependencies(String dependencyNames) {
++        if (dependencyNames == null || dependencyNames.isBlank()) {
++            return Collections.emptyList();
++        }
++
++        List<String> parsed = new ArrayList<>();
++        for (String dependency : dependencyNames.split("\\R")) {
++            String normalized = normalizePluginName(dependency);
++            if (!normalized.isEmpty() && !parsed.contains(normalized)) {
++                parsed.add(normalized);
++            }
++        }
++        return List.copyOf(parsed);
++    }
++
++    private static String normalizePluginName(String name) {
++        return name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
+     }
+ 
+     private static URL[] buildUrls(File file, URL[] extraUrls)
+@@ -82,37 +114,29 @@ public class PatchBukkitPluginClassLoader
+         }
+     }
+ 
+-    /**
+-     * Child-first class loading: try to load from plugin JAR before delegating to parent.
+-     * This is critical for plugin classes to be loaded by this classloader.
+-     */
+     @Override
+     protected Class<?> loadClass(String name, boolean resolve)
+         throws ClassNotFoundException {
+         synchronized (getClassLoadingLock(name)) {
+-            // First, check if already loaded
+             Class<?> c = findLoadedClass(name);
+ 
+             if (c == null) {
+-                // For plugin-specific classes, try to load from JAR first (child-first)
+-                // For JDK and server classes, delegate to parent
+-                if (
+-                    !name.startsWith("java.") &&
+-                    !name.startsWith("jdk.") &&
+-                    !name.startsWith("sun.") &&
+-                    !name.startsWith("javax.")
+-                ) {
++                if (isParentFirst(name)) {
+                     try {
+-                        // Try to find in plugin JAR first
++                        c = getParent().loadClass(name);
++                    } catch (ClassNotFoundException ignored) {
+                         c = findClass(name);
+-                    } catch (ClassNotFoundException e) {
+-                        // Not in JAR, delegate to parent
+                     }
+-                }
++                } else {
++                    try {
++                        c = findClass(name);
++                    } catch (ClassNotFoundException ignored) {
++                        c = loadFromDependencies(name);
++                    }
+ 
+-                // If not found in JAR (or is a system class), delegate to parent
+-                if (c == null) {
+-                    c = getParent().loadClass(name);
++                    if (c == null) {
++                        c = getParent().loadClass(name);
++                    }
+                 }
+             }
+ 
+@@ -123,6 +147,49 @@ public class PatchBukkitPluginClassLoader
+         }
+     }
+ 
++    private static boolean isParentFirst(String name) {
++        return (
++            name.startsWith("java.") ||
++            name.startsWith("jdk.") ||
++            name.startsWith("sun.") ||
++            name.startsWith("javax.") ||
++            name.startsWith("org.bukkit.") ||
++            name.startsWith("io.papermc.paper.") ||
++            name.startsWith("org.patchbukkit.")
++        );
++    }
++
++    @Nullable
++    private Class<?> loadFromDependencies(String name) {
++        for (String dependency : dependencies) {
++            PatchBukkitPluginClassLoader loader = LOADERS.get(dependency);
++            if (loader == null || loader == this) {
++                continue;
++            }
++
++            Class<?> loaded = loader.loadOwnClass(name);
++            if (loaded != null) {
++                return loaded;
++            }
++        }
++        return null;
++    }
++
++    @Nullable
++    private Class<?> loadOwnClass(String name) {
++        synchronized (getClassLoadingLock(name)) {
++            Class<?> loaded = findLoadedClass(name);
++            if (loaded != null) {
++                return loaded;
++            }
++            try {
++                return findClass(name);
++            } catch (ClassNotFoundException ignored) {
++                return null;
++            }
++        }
++    }
++
+     @Override
+     public PluginMeta getConfiguration() {
+         return description;
+@@ -145,7 +212,7 @@ public class PatchBukkitPluginClassLoader
+             dataFolder.mkdirs();
+         }
+         plugin.init(
+-            org.bukkit.Bukkit.getServer(),
++            Bukkit.getServer(),
+             description,
+             dataFolder,
+             file,
+@@ -155,6 +222,9 @@ public class PatchBukkitPluginClassLoader
+                 description
+             )
+         );
++        ((PatchBukkitPluginManager) Bukkit.getPluginManager()).registerPlugin(
++            plugin
++        );
+     }
+ 
+     @Override
+@@ -179,6 +249,7 @@ public class PatchBukkitPluginClassLoader
+ 
+     @Override
+     public void close() throws IOException {
++        LOADERS.remove(normalizePluginName(description.getName()), this);
+         super.close();
+     }
+ }
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginLoader.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginLoader.java
+index 4a32cd43f4a45767e35d18921782dde052972abc..fb6c5feb88e7024ed806ad33fe086d3892ea471b 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginLoader.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginLoader.java
+@@ -25,7 +25,7 @@ public class PatchBukkitPluginLoader implements PluginLoader {
+     public static JavaPlugin createPlugin(
+         String jarPath,
+         String mainClass,
+-        String extraClasspath,
++        String dependencyNames,
+         String libraryCoordinates
+     ) {
+         try {
+@@ -38,19 +38,6 @@ public class PatchBukkitPluginLoader implements PluginLoader {
+             }
+ 
+             LinkedHashSet<URL> extraUrls = new LinkedHashSet<>();
+-            if (extraClasspath != null && !extraClasspath.isBlank()) {
+-                String[] paths = extraClasspath.split(File.pathSeparator);
+-                for (String path : paths) {
+-                    if (path == null || path.isBlank()) {
+-                        continue;
+-                    }
+-                    File extraFile = new File(path.trim());
+-                    if (extraFile.exists()) {
+-                        extraUrls.add(extraFile.toURI().toURL());
+-                    }
+-                }
+-            }
+-
+             if (libraryCoordinates != null && !libraryCoordinates.isBlank()) {
+                 File libsDir = new File(jarFile.getParentFile(), "patchbukkit-libs");
+                 if (!libsDir.exists()) {
+@@ -71,7 +58,8 @@ public class PatchBukkitPluginLoader implements PluginLoader {
+                 new PatchBukkitPluginClassLoader(
+                     PatchBukkitPluginLoader.class.getClassLoader(),
+                     jarFile,
+-                    extraUrls.toArray(new URL[0])
++                    extraUrls.toArray(new URL[0]),
++                    dependencyNames
+                 );
+ 
+             Class<?> jarClass = Class.forName(mainClass, true, classLoader);
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
+index d90de1bc0af0e6d25e3f89b5d900fabbfb52cf1e..40e1ba2f80c5b2103fdac1ee11db54f925f492e1 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
 @@ -1,38 +1,30 @@
@@ -497,7 +694,19 @@ diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginMan
      }
  
      public PatchBukkitEventManager getEventManager() {
-@@ -171,93 +163,6 @@ public class PatchBukkitPluginManager implements PluginManager {
+@@ -156,7 +148,10 @@ public class PatchBukkitPluginManager implements PluginManager {
+             try {
+                 plugin.getPluginLoader().enablePlugin(plugin);
+             } catch (Throwable ex) {
+-                server.getLogger().severe("Error enabling " + plugin.getName() + ": " + ex.getMessage());
++                throw new IllegalStateException(
++                    "Error enabling " + plugin.getName(),
++                    ex
++                );
+             }
+         }
+     }
+@@ -168,93 +163,6 @@ public class PatchBukkitPluginManager implements PluginManager {
          }
      }
  
@@ -591,51 +800,580 @@ diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginMan
      @Override
      public boolean isTransitiveDependency(
          PluginMeta pluginMeta,
-diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
---- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
-+++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
-@@ -3,9 +3,14 @@ package org.patchbukkit.testplugin.tests;
- import org.bukkit.Bukkit;
- import org.bukkit.plugin.Plugin;
- import org.bukkit.plugin.PluginManager;
-+import org.bukkit.plugin.SimplePluginManager;
- import org.patchbukkit.testplugin.ConformanceTest;
- import org.patchbukkit.testplugin.TestCategory;
- import org.bukkit.plugin.java.JavaPlugin;
-+import org.bukkit.permissions.Permission;
-+
-+import java.lang.reflect.Field;
-+import java.util.Map;
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
+index d935769c48fad836d915921a2e9b2cddf21fa616..0ffc746cadfffac7002d2b5490ef2fe0402affe6 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
+@@ -13,6 +13,8 @@ import io.papermc.paper.threadedregions.scheduler.RegionScheduler;
  
- import static org.patchbukkit.testplugin.TestAssertions.*;
+ import java.awt.image.BufferedImage;
+ import java.io.File;
++import java.io.PrintWriter;
++import java.io.StringWriter;
+ import java.net.InetAddress;
+ import java.util.Collection;
+ import java.util.Collections;
+@@ -21,6 +23,7 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.Set;
+ import java.util.UUID;
++import java.util.concurrent.atomic.AtomicBoolean;
+ import java.util.function.Consumer;
+ import java.util.logging.Level;
+ import java.util.logging.Logger;
+@@ -97,6 +100,7 @@ import org.patchbukkit.scheduler.PatchBukkitScheduler;
+ import org.patchbukkit.versioning.Versioning;
  
-@@ -70,4 +75,29 @@ public final class PluginManagerTests {
-         assertNotNull(perms, "PluginManager.getPermissions()");
+ import patchbukkit.bridge.NativeBridgeFfi;
++import patchbukkit.common.EmptyRequest;
+ import patchbukkit.log.LogLevel;
+ import patchbukkit.log.SendLogRequest;
+ 
+@@ -110,6 +114,7 @@ public class PatchBukkitServer implements Server {
+     private final BukkitScheduler scheduler = new PatchBukkitScheduler();
+     private final PatchBukkitPluginManager pluginManager = new PatchBukkitPluginManager(this);
+     private final ServicesManager servicesManager = new PatchBukkitServicesManager();
++    private final AtomicBoolean stopping = new AtomicBoolean();
+ 
+ 
+     private final Map<UUID, Player> onlinePlayers = new java.util.concurrent.ConcurrentHashMap<>();
+@@ -141,11 +146,17 @@ public class PatchBukkitServer implements Server {
+         root.addHandler(new java.util.logging.Handler() {
+             @Override
+             public void publish(java.util.logging.LogRecord record) {
++                String message = record.getMessage();
++                if (record.getThrown() != null) {
++                    StringWriter stackTrace = new StringWriter();
++                    record.getThrown().printStackTrace(new PrintWriter(stackTrace));
++                    message += System.lineSeparator() + stackTrace;
++                }
+                 LogLevel logLevel = LEVEL_MAP.getOrDefault(record.getLevel(), LogLevel.INFO);
+                 NativeBridgeFfi.sendLog(
+                         SendLogRequest.newBuilder()
+                                 .setLevel(logLevel)
+-                                .setMessage(record.getMessage())
++                                .setMessage(message)
+                                 .setLoggerName(record.getLoggerName())
+                                 .build()
+                 );
+@@ -181,6 +192,10 @@ public class PatchBukkitServer implements Server {
+         this.pluginManager.registerPlugin(plugin);
      }
  
-+    @ConformanceTest(name = "PluginManager exposes Bukkit permission maps", category = TestCategory.PLUGIN_MANAGER)
-+    public void testSimplePluginManagerCompatibility() throws Exception {
-+        PluginManager manager = Bukkit.getPluginManager();
-+        assertTrue(
-+            manager instanceof SimplePluginManager,
-+            "PluginManager should be a SimplePluginManager for Bukkit permission providers"
-+        );
-+
-+        Permission marker = new Permission("patchbukkit.test.permission-map");
-+        manager.addPermission(marker);
-+        try {
-+            Field permissionsField = SimplePluginManager.class.getDeclaredField("permissions");
-+            permissionsField.setAccessible(true);
-+            @SuppressWarnings("unchecked")
-+            Map<String, Permission> permissions =
-+                (Map<String, Permission>) permissionsField.get(manager);
-+            assertTrue(
-+                permissions.get(marker.getName()) == marker,
-+                "PluginManager methods should use the replaceable Bukkit permission map"
-+            );
-+        } finally {
-+            manager.removePermission(marker);
-+        }
++    public void setStopping(boolean stopping) {
++        this.stopping.set(stopping);
 +    }
 +
+     @Override
+     public void sendPluginMessage(
+         @NotNull Plugin source,
+@@ -211,10 +226,9 @@ public class PatchBukkitServer implements Server {
+ 
+     @Override
+     public @NotNull File getPluginsFolder() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getPluginsFolder'"
+-        );
++        return new File(
++            "plugins/patchbukkit/patchbukkit-plugins"
++        ).getAbsoluteFile();
+     }
+ 
+     @Override
+@@ -234,10 +248,7 @@ public class PatchBukkitServer implements Server {
+ 
+     @Override
+     public @NotNull String getMinecraftVersion() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getMinecraftVersion'"
+-        );
++        return getVersion();
+     }
+ 
+     @Override
+@@ -867,10 +878,9 @@ public class PatchBukkitServer implements Server {
+ 
+     @Override
+     public boolean getOnlineMode() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getOnlineMode'"
+-        );
++        return NativeBridgeFfi
++            .getPatchBukkitConfig(EmptyRequest.newBuilder().setPresent(true).build())
++            .getOnlineMode();
+     }
+ 
+     @Override
+@@ -1284,10 +1294,7 @@ public class PatchBukkitServer implements Server {
+ 
+     @Override
+     public @NotNull WarningState getWarningState() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getWarningState'"
+-        );
++        return WarningState.DEFAULT;
+     }
+ 
+     @Override
+@@ -1705,10 +1712,7 @@ public class PatchBukkitServer implements Server {
+ 
+     @Override
+     public boolean isStopping() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'isStopping'"
+-        );
++        return stopping.get();
+     }
+ 
+     @Override
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
+index 53a254cf13a0998f2be353df309d9c3e7fd20bb7..9742416af83e7dc73cb6262a60b8fa8f5fb68b57 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
+@@ -54,6 +54,10 @@ import patchbukkit.common.EmptyRequest;
+ @SuppressWarnings("removal")
+ public class PatchBukkitUnsafeValues implements UnsafeValues {
+ 
++    // Minecraft Java Edition 26.2 world data version, from the official
++    // Mojang server version.json. Keep this aligned with Pumpkin's protocol.
++    private static final int DATA_VERSION = 4903;
++
+     public static final PatchBukkitUnsafeValues INSTANCE =
+         new PatchBukkitUnsafeValues();
+ 
+@@ -61,7 +65,9 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+     public boolean isSupportedApiVersion(String apiVersion) {
+         if (apiVersion == null) return false;
+         final ApiVersion toCheck = ApiVersion.getOrCreateVersion(apiVersion);
+-        var minimumApi = NativeBridgeFfi.getPatchBukkitConfig(EmptyRequest.newBuilder().build()).getMinimumSupportedPluginApi();
++        var minimumApi = NativeBridgeFfi
++            .getPatchBukkitConfig(EmptyRequest.newBuilder().setPresent(true).build())
++            .getMinimumSupportedPluginApi();
+         final ApiVersion minimumVersion = ApiVersion.getOrCreateVersion(minimumApi);
+ 
+         return !toCheck.isNewerThan(ApiVersion.CURRENT) && !toCheck.isOlderThan(minimumVersion);
+@@ -154,8 +160,7 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+ 
+ 	@Override
+ 	public int getDataVersion() {
+-		// TODO Auto-generated method stub
+-		throw new UnsupportedOperationException("Unimplemented method 'getDataVersion'");
++		return DATA_VERSION;
+ 	}
+ 
+ 	@Override
+diff --git a/proto/patchbukkit/common/types.proto b/proto/patchbukkit/common/types.proto
+index 52ab1365751b462cf499432cdb716f259a39ba93..024134af2a5a18c0f5f302c8cab22e56873928f5 100644
+--- a/proto/patchbukkit/common/types.proto
++++ b/proto/patchbukkit/common/types.proto
+@@ -26,4 +26,7 @@ message Location {
+   float pitch = 4;
  }
+ 
+-message EmptyRequest {}
++message EmptyRequest {
++  // Ensures the request serializes to at least one byte for the FFI transport.
++  bool present = 1;
++}
+diff --git a/proto/patchbukkit/config.proto b/proto/patchbukkit/config.proto
+index 12c48c047ff187a57c64e55758e0867f429c35f0..d3addd5d3c7127fb5c1cafb1b073e8bdb7660173 100644
+--- a/proto/patchbukkit/config.proto
++++ b/proto/patchbukkit/config.proto
+@@ -9,4 +9,5 @@ option java_package = "patchbukkit.config";
+ 
+ message GetPatchBukkitConfigResponse {
+   string minimum_supported_plugin_api = 1;
++  bool online_mode = 2;
+ }
+diff --git a/rust/src/commands/mod.rs b/rust/src/commands/mod.rs
+index 484dc62a8fcd2d766938ef048eb43b54d4f06194..22d354c332b62c7ff8aa4c4948a9d6a261866bdd 100644
+--- a/rust/src/commands/mod.rs
++++ b/rust/src/commands/mod.rs
+@@ -34,7 +34,7 @@ pub struct AnyCommandNode {
+ }
+ 
+ impl GetClientSideArgParser for AnyCommandNode {
+-    fn get_client_side_parser(&self) -> ArgumentType<'_> {
++    fn get_client_side_parser(&self) -> ArgumentType {
+         ArgumentType::String(StringProtoArgBehavior::GreedyPhrase)
+     }
+ 
+diff --git a/rust/src/java/jar.rs b/rust/src/java/jar.rs
+index f94134eea61bcec90450bb8abadf2d9fec1cad11..c60e6a23cbf53178ee5a964d4cfe8df4a9c71b45 100644
+--- a/rust/src/java/jar.rs
++++ b/rust/src/java/jar.rs
+@@ -1,28 +1,41 @@
+ use std::{
+-    fs::File,
++    fs::{self, File},
+     io::Read,
+     path::{Path, PathBuf},
+ };
+ 
+ use anyhow::Result;
+-use glob::glob;
+ use zip::ZipArchive;
+ 
+ use crate::config::{paper::PAPER_PLUGIN_CONFIG, spigot::SPIGOT_PLUGIN_CONFIG};
+ 
+ pub fn discover_jar_files(plugin_folder: &Path) -> impl Iterator<Item = PathBuf> {
+-    let pattern = format!("{}/**/*.jar", plugin_folder.display());
+-
+-    glob(&pattern)
+-        .expect("Invalid glob pattern")
+-        .filter_map(|entry| {
+-            entry
+-                .map_err(|e| tracing::error!("Glob error: {e:?}"))
+-                .ok()?
+-                .canonicalize()
+-                .map_err(|e| tracing::error!("Canonicalize error: {e:?}"))
+-                .ok()
+-        })
++    let jars = match fs::read_dir(plugin_folder) {
++        Ok(entries) => entries
++            .filter_map(|entry| {
++                let path = entry
++                    .map_err(|error| tracing::error!("Read directory error: {error:?}"))
++                    .ok()?
++                    .path();
++                if !path.is_file()
++                    || !path
++                        .extension()
++                        .is_some_and(|extension| extension.eq_ignore_ascii_case("jar"))
++                {
++                    return None;
++                }
++                path.canonicalize()
++                    .map_err(|error| tracing::error!("Canonicalize error: {error:?}"))
++                    .ok()
++            })
++            .collect(),
++        Err(error) => {
++            tracing::error!("Failed to read plugin directory: {error:?}");
++            Vec::new()
++        }
++    };
++
++    jars.into_iter()
+ }
+ 
+ pub fn read_configs_from_jar<P: AsRef<Path>>(
+@@ -51,3 +64,30 @@ pub fn read_configs_from_jar<P: AsRef<Path>>(
+ 
+     Ok((paper_plugin_yml, spigot_plugin_yml))
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::discover_jar_files;
++    use std::fs;
++
++    #[test]
++    fn discovery_ignores_nested_dependency_jars() {
++        let root = std::env::temp_dir().join(format!(
++            "patchbukkit-jar-discovery-{}",
++            uuid::Uuid::new_v4()
++        ));
++        let nested = root.join("PluginData").join("libs");
++        fs::create_dir_all(&nested).expect("create test directories");
++        fs::write(root.join("plugin.jar"), []).expect("create plugin jar");
++        fs::write(nested.join("dependency.jar"), []).expect("create dependency jar");
++
++        let jars: Vec<_> = discover_jar_files(&root).collect();
++
++        assert_eq!(jars.len(), 1);
++        assert_eq!(
++            jars[0].file_name().and_then(|name| name.to_str()),
++            Some("plugin.jar")
++        );
++        fs::remove_dir_all(root).expect("remove test directories");
++    }
++}
+diff --git a/rust/src/java/jvm/worker.rs b/rust/src/java/jvm/worker.rs
+index 4fe3703ef7ca92c266b7c376861de9d8b0e7cc3b..85ac936d762e810191bbfc8d310cec9667b94c64 100644
+--- a/rust/src/java/jvm/worker.rs
++++ b/rust/src/java/jvm/worker.rs
+@@ -224,7 +224,7 @@ impl JvmWorker {
+ 
+ pub fn setup_patchbukkit_server(jvm: &Jvm) -> anyhow::Result<()> {
+     let patchbukkit_server =
+-        jvm.create_instance("org.patchbukkit.PatchBukkitServer", InvocationArg::empty())?;
++        jvm.create_instance("org.bukkit.craftbukkit.CraftServer", InvocationArg::empty())?;
+ 
+     jvm.invoke_static(
+         "org.bukkit.Bukkit",
+diff --git a/rust/src/java/native_callbacks/config.rs b/rust/src/java/native_callbacks/config.rs
+index eed3decebb19927ebf20818c133e0c417280ffde..b0d700db907de60611f6f976138070861570a8ef 100644
+--- a/rust/src/java/native_callbacks/config.rs
++++ b/rust/src/java/native_callbacks/config.rs
+@@ -15,5 +15,12 @@ pub fn ffi_native_bridge_get_patch_bukkit_config_impl(
+                 .minimum_supported_plugin_api
+                 .clone()
+                 .unwrap_or("0.0.0".to_string()),
++            online_mode: context
++                .plugin_context
++                .server
++                .advanced_config
++                .networking
++                .java
++                .online_mode,
+         })
+ }
+diff --git a/rust/src/java/plugin/manager.rs b/rust/src/java/plugin/manager.rs
+index 875493476b22e29f7049cde10d818b06d7045241..6c02a675067dbfe46184750e706c97a37d59aa57 100644
+--- a/rust/src/java/plugin/manager.rs
++++ b/rust/src/java/plugin/manager.rs
+@@ -273,6 +273,8 @@ impl PluginManager {
+         let main_class = parsed_spigot_plugin.main.clone();
+         let spigot_config = parsed_spigot_plugin.clone();
+         let commands = parsed_spigot_plugin.commands.unwrap_or_default();
++        let classpath_deps =
++            dedupe_names(depends.iter().chain(soft_depends.iter()).cloned().collect());
+ 
+         let plugin = Plugin {
+             name,
+@@ -291,7 +293,7 @@ impl PluginManager {
+             soft_depends: dedupe_names(soft_depends),
+             load_before: dedupe_names(load_before),
+             load_after: Vec::new(),
+-            classpath_deps: Vec::new(),
++            classpath_deps,
+             libraries: dedupe_strings(libraries),
+         };
+ 
+@@ -300,16 +302,50 @@ impl PluginManager {
+     }
+ 
+     pub fn enable_all_plugins(&mut self, jvm: &Jvm) -> Result<()> {
+-        // IMPORTANT: enable trough PluginManager not manually
++        let enable_order = self.compute_load_order();
++        let provides_map = self.build_provides_map();
+         let plugin_manager = jvm.invoke_static(
+             "org.bukkit.Bukkit",
+             "getPluginManager",
+             InvocationArg::empty(),
+         )?;
+-        for plugin in self.plugins.values_mut() {
++
++        for plugin_key in enable_order {
++            let unavailable_dependencies = {
++                let Some(plugin) = self.plugins.get(&plugin_key) else {
++                    continue;
++                };
++                plugin
++                    .depends
++                    .iter()
++                    .filter_map(|dependency| {
++                        self.resolve_dependency_name(dependency, &provides_map)
++                    })
++                    .filter(|dependency| {
++                        self.plugins
++                            .get(dependency)
++                            .is_none_or(|plugin| plugin.state != PluginState::Enabled)
++                    })
++                    .collect::<Vec<_>>()
++            };
++
++            let Some(plugin) = self.plugins.get_mut(&plugin_key) else {
++                continue;
++            };
+             if plugin.instance.is_none() {
+                 continue;
+             }
++
++            if !unavailable_dependencies.is_empty() {
++                plugin.state = PluginState::Errored;
++                tracing::warn!(
++                    "Skipping plugin {} because required dependencies did not enable: {}",
++                    plugin.name,
++                    unavailable_dependencies.join(", ")
++                );
++                continue;
++            }
++
+             let plugin_instance = plugin.instance.as_ref().unwrap();
+             let plugin_instance = jvm.clone_instance(plugin_instance).unwrap();
+ 
+@@ -338,6 +374,8 @@ impl PluginManager {
+     }
+ 
+     pub fn disable_all_plugins(&mut self, jvm: &Jvm) -> Result<()> {
++        let server = jvm.invoke_static("org.bukkit.Bukkit", "getServer", InvocationArg::empty())?;
++        jvm.invoke(&server, "setStopping", &[InvocationArg::try_from(true)?])?;
+         let plugin_manager = jvm.invoke_static(
+             "org.bukkit.Bukkit",
+             "getPluginManager",
+@@ -384,9 +422,9 @@ impl PluginManager {
+         let load_order = self.compute_load_order();
+ 
+         for plugin_key in load_order {
+-            let (classpath, libraries) = match self.plugins.get(&plugin_key) {
++            let (dependencies, libraries) = match self.plugins.get(&plugin_key) {
+                 Some(plugin) => (
+-                    self.classpath_string_for(plugin),
++                    self.dependency_string_for(plugin),
+                     Self::library_string_for(plugin),
+                 ),
+                 None => continue,
+@@ -402,11 +440,23 @@ impl PluginManager {
+                 &[
+                     InvocationArg::try_from(&plugin.path.to_string_lossy().to_string())?,
+                     InvocationArg::try_from(&plugin.main_class)?,
+-                    InvocationArg::try_from(&classpath)?,
++                    InvocationArg::try_from(&dependencies)?,
+                     InvocationArg::try_from(&libraries)?,
+                 ],
+             )?;
+ 
++            // Bukkit's lifecycle calls onLoad after the plugin has been constructed and
++            // initialized, but before any plugin is enabled. Some plugins (including
++            // LuckPerms) load their runtime dependencies and configuration in this phase.
++            if let Err(error) = jvm.invoke(&plugin_instance, "onLoad", InvocationArg::empty()) {
++                plugin.state = PluginState::Errored;
++                tracing::error!(
++                    "Failed to load PatchBukkit plugin {}: {error:?}",
++                    plugin.name
++                );
++                continue;
++            }
++
+             plugin.instance = Some(plugin_instance);
+             for (cmd_name, cmd_data) in &plugin.commands {
+                 match command_manager
+@@ -456,18 +506,22 @@ impl PluginManager {
+         }
+     }
+ 
+-    fn compute_load_order(&mut self) -> Vec<String> {
+-        let mut provides_map: HashMap<String, String> = HashMap::new();
++    fn build_provides_map(&self) -> HashMap<String, String> {
++        let mut provides_map = HashMap::new();
+         for (key, plugin) in &self.plugins {
+             for provide in &plugin.provides {
+-                if provide.is_empty() {
+-                    continue;
++                if !provide.is_empty() {
++                    provides_map
++                        .entry(provide.clone())
++                        .or_insert_with(|| key.clone());
+                 }
+-                provides_map
+-                    .entry(provide.clone())
+-                    .or_insert_with(|| key.clone());
+             }
+         }
++        provides_map
++    }
++
++    fn compute_load_order(&mut self) -> Vec<String> {
++        let provides_map = self.build_provides_map();
+ 
+         let mut active: HashSet<String> = self.plugins.keys().cloned().collect();
+ 
+@@ -579,33 +633,23 @@ impl PluginManager {
+         order
+     }
+ 
+-    fn classpath_string_for(&self, plugin: &Plugin) -> String {
++    fn dependency_string_for(&self, plugin: &Plugin) -> String {
+         if plugin.classpath_deps.is_empty() {
+             return String::new();
+         }
+ 
+-        let mut provides_map: HashMap<String, String> = HashMap::new();
+-        for (key, plugin) in &self.plugins {
+-            for provide in &plugin.provides {
+-                if provide.is_empty() {
+-                    continue;
+-                }
+-                provides_map
+-                    .entry(provide.clone())
+-                    .or_insert_with(|| key.clone());
+-            }
+-        }
++        let provides_map = self.build_provides_map();
+ 
+-        let mut paths = Vec::new();
++        let mut dependencies = Vec::new();
+         for dep in &plugin.classpath_deps {
+             if let Some(resolved) = self.resolve_dependency_name(dep, &provides_map)
+                 && let Some(dep_plugin) = self.plugins.get(&resolved)
+             {
+-                paths.push(dep_plugin.path.to_string_lossy().to_string());
++                dependencies.push(dep_plugin.name.clone());
+             }
+         }
+ 
+-        paths.join(";")
++        dependencies.join("\n")
+     }
+ 
+     fn library_string_for(plugin: &Plugin) -> String {
+@@ -671,3 +715,62 @@ fn add_edge(
+         *count += 1;
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::{PluginManager, PluginState};
++    use std::path::PathBuf;
++
++    fn add_spigot_plugin(manager: &mut PluginManager, name: &str, dependencies: &[&str]) {
++        let dependency_line = if dependencies.is_empty() {
++            String::new()
++        } else {
++            format!("\ndepend: [{}]", dependencies.join(", "))
++        };
++        let config =
++            format!("name: {name}\nversion: 1.0.0\nmain: example.{name}{dependency_line}\n");
++        manager
++            .load_spigot_plugin(PathBuf::from(format!("{name}.jar")), &config)
++            .expect("load test plugin metadata");
++    }
++
++    #[test]
++    fn spigot_dependencies_control_load_order_and_class_visibility() {
++        let mut manager = PluginManager::new();
++        add_spigot_plugin(&mut manager, "CorePlugin", &[]);
++        add_spigot_plugin(&mut manager, "AddonPlugin", &["CorePlugin"]);
++
++        let order = manager.compute_load_order();
++        let core_position = order
++            .iter()
++            .position(|name| name == "coreplugin")
++            .expect("core plugin in load order");
++        let addon_position = order
++            .iter()
++            .position(|name| name == "addonplugin")
++            .expect("addon plugin in load order");
++        assert!(core_position < addon_position);
++
++        let addon = manager
++            .plugins
++            .get("addonplugin")
++            .expect("addon plugin metadata");
++        assert_eq!(manager.dependency_string_for(addon), "CorePlugin");
++    }
++
++    #[test]
++    fn missing_required_dependency_excludes_plugin() {
++        let mut manager = PluginManager::new();
++        add_spigot_plugin(&mut manager, "BrokenAddon", &["MissingCore"]);
++
++        assert!(manager.compute_load_order().is_empty());
++        assert_eq!(
++            manager
++                .plugins
++                .get("brokenaddon")
++                .expect("broken addon metadata")
++                .state,
++            PluginState::Errored
++        );
++    }
++}
