@@ -1,12 +1,21 @@
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
-index d225037..ed66655 100644
+index d225037..96de007 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
-@@ -8,6 +8,17 @@ import org.patchbukkit.testplugin.tests.*;
+@@ -3,13 +3,41 @@ package org.patchbukkit.testplugin;
+ import org.bukkit.Bukkit;
+ import org.bukkit.command.Command;
+ import org.bukkit.command.PluginCommand;
++import org.bukkit.event.EventHandler;
++import org.bukkit.event.Listener;
++import org.bukkit.event.server.PluginEnableEvent;
+ import org.bukkit.plugin.java.JavaPlugin;
+ import org.patchbukkit.testplugin.tests.*;
  
  public final class PatchBukkitTestPlugin extends JavaPlugin {
  
 +    private boolean loadPhaseCompleted;
++    private boolean enableEventObserved;
 +
 +    @Override
 +    public void onLoad() {
@@ -17,11 +26,26 @@ index d225037..ed66655 100644
 +        return loadPhaseCompleted;
 +    }
 +
++    public boolean wasEnableEventObserved() {
++        return enableEventObserved;
++    }
++
      @Override
      public void onEnable() {
++        Bukkit.getPluginManager().registerEvents(new Listener() {
++            @EventHandler
++            public void onPluginEnable(PluginEnableEvent event) {
++                if (event.getPlugin() == PatchBukkitTestPlugin.this) {
++                    enableEventObserved = true;
++                }
++            }
++        }, this);
++
          TestFramework framework = new TestFramework(getLogger());
+ 
+         framework.registerSuite(new ServerTests(this));
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
-index 032bce0..2b72119 100644
+index 032bce0..8de40c4 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
 @@ -3,9 +3,14 @@ package org.patchbukkit.testplugin.tests;
@@ -39,7 +63,7 @@ index 032bce0..2b72119 100644
  
  import static org.patchbukkit.testplugin.TestAssertions.*;
  
-@@ -56,10 +61,43 @@ public final class PluginManagerTests {
+@@ -56,10 +61,51 @@ public final class PluginManagerTests {
          assertTrue(enabled, "isPluginEnabled(plugin) should be true");
      }
  
@@ -48,6 +72,14 @@ index 032bce0..2b72119 100644
 +        assertTrue(
 +            ((org.patchbukkit.testplugin.PatchBukkitTestPlugin) plugin).wasLoadPhaseCompleted(),
 +            "onLoad() should run before the plugin is enabled"
++        );
++    }
++
++    @ConformanceTest(name = "PluginEnableEvent fires after onEnable()", category = TestCategory.PLUGIN_MANAGER)
++    public void testEnableEventObserved() {
++        assertTrue(
++            ((org.patchbukkit.testplugin.PatchBukkitTestPlugin) plugin).wasEnableEventObserved(),
++            "PluginEnableEvent should fire after onEnable() completes"
 +        );
 +    }
 +
@@ -819,10 +851,10 @@ index 4a32cd4..fb6c5fe 100644
  
              Class<?> jarClass = Class.forName(mainClass, true, classLoader);
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
-index d90de1b..40e1ba2 100644
+index d90de1b..645ffa2 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
-@@ -1,38 +1,30 @@
+@@ -1,38 +1,32 @@
  package org.patchbukkit;
  
 -import io.papermc.paper.plugin.PermissionManager;
@@ -841,6 +873,8 @@ index d90de1b..40e1ba2 100644
  import org.bukkit.event.Listener;
 -import org.bukkit.permissions.Permissible;
 -import org.bukkit.permissions.Permission;
++import org.bukkit.event.server.PluginDisableEvent;
++import org.bukkit.event.server.PluginEnableEvent;
  import org.bukkit.plugin.*;
  import org.jetbrains.annotations.NotNull;
  import org.jetbrains.annotations.Nullable;
@@ -864,9 +898,11 @@ index d90de1b..40e1ba2 100644
      }
  
      public PatchBukkitEventManager getEventManager() {
-@@ -156,7 +148,10 @@ public class PatchBukkitPluginManager implements PluginManager {
+@@ -155,8 +149,12 @@ public class PatchBukkitPluginManager implements PluginManager {
+         if (!plugin.isEnabled()) {
              try {
                  plugin.getPluginLoader().enablePlugin(plugin);
++                callEvent(new PluginEnableEvent(plugin));
              } catch (Throwable ex) {
 -                server.getLogger().severe("Error enabling " + plugin.getName() + ": " + ex.getMessage());
 +                throw new IllegalStateException(
@@ -876,7 +912,11 @@ index d90de1b..40e1ba2 100644
              }
          }
      }
-@@ -168,93 +163,6 @@ public class PatchBukkitPluginManager implements PluginManager {
+@@ -165,96 +163,10 @@ public class PatchBukkitPluginManager implements PluginManager {
+     public void disablePlugin(@NotNull Plugin plugin) {
+         if (plugin.isEnabled()) {
+             plugin.getPluginLoader().disablePlugin(plugin);
++            callEvent(new PluginDisableEvent(plugin));
          }
      }
  
@@ -1455,6 +1495,63 @@ index 0000000..ed415a4
 +        }
 +    }
 +}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
+index ba94bfa..c5b304b 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
+@@ -7,6 +7,8 @@ import org.bukkit.event.EventHandler;
+ import org.bukkit.event.EventPriority;
+ import org.bukkit.event.HandlerList;
+ import org.bukkit.event.Listener;
++import org.bukkit.event.server.PluginDisableEvent;
++import org.bukkit.event.server.PluginEnableEvent;
+ import org.bukkit.plugin.AuthorNagException;
+ import org.bukkit.plugin.EventExecutor;
+ import org.bukkit.plugin.IllegalPluginAccessException;
+@@ -47,6 +49,11 @@ public class PatchBukkitEventManager {
+             throw new IllegalStateException(event.getEventName() + " may only be triggered synchronously.");
+         }
+ 
++        if (isJavaOnlyEvent(event.getClass())) {
++            callEventJavaOnly(event);
++            return;
++        }
++
+         var request = CallEventRequest.newBuilder();
+         switch (event.getEventName()) {
+             case "org.bukkit.event.player.PlayerJoinEvent":
+@@ -148,6 +155,9 @@ public class PatchBukkitEventManager {
+             this.getEventListeners(this.getRegistrationClass(entry.getKey())).registerAll(entry.getValue());
+ 
+             for (RegisteredListener rl : entry.getValue()) {
++                if (isJavaOnlyEvent(entry.getKey())) {
++                    continue;
++                }
+                 int priorityOrdinal = Math.min(rl.getPriority().ordinal(), 4);
+                 var request = RegisterEventRequest.newBuilder().setEventType(entry.getKey().getName()).setPluginName(plugin.getName()).setPriority(priorityOrdinal).setBlocking(true).build();
+                 NativeBridgeFfi.registerEvent(request);
+@@ -167,12 +177,21 @@ public class PatchBukkitEventManager {
+         executor = new TimedEventExecutor(executor, plugin, null, event);
+         this.getEventListeners(event).register(new RegisteredListener(listener, executor, priority, plugin, ignoreCancelled));
+ 
++        if (isJavaOnlyEvent(event)) {
++            return;
++        }
++
+         int priorityOrdinal = Math.min(priority.ordinal(), 4);
+         var request = RegisterEventRequest.newBuilder().setEventType(event.getName()).setPluginName(plugin.getName()).setPriority(priorityOrdinal).setBlocking(true).build();
+         NativeBridgeFfi.registerEvent(request);
+ 
+     }
+ 
++    private static boolean isJavaOnlyEvent(Class<? extends Event> eventClass) {
++        return eventClass == PluginEnableEvent.class
++            || eventClass == PluginDisableEvent.class;
++    }
++
+     @NotNull
+     private HandlerList getEventListeners(@NotNull Class<? extends Event> type) {
+         try {
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitDamageType.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitDamageType.java
 new file mode 100644
 index 0000000..4e2745c
