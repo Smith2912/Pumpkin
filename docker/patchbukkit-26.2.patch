@@ -5628,6 +5628,124 @@ index 0000000000000000000000000000000000000000..fda3181690f770896ebd3e62b54d0ce2
 +    private record CacheKey(String registry, Class<?> type) {
 +    }
 +}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistry.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistry.java
+index ee66859ddf20a3c0930b4380ede6e8b096719957..bf9a0f7456d0802c1e606bd5f1345fc7547f65d1 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistry.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistry.java
+@@ -25,27 +25,62 @@ public class PatchBukkitRegistry<P, B extends Keyed> implements Registry<B> {
+ 
+     private final Map<NamespacedKey, B> entries = new LinkedHashMap<>();
+     private final Map<String, PatchBukkitTag<B>> tags = new LinkedHashMap<>();
++    private final RegistryType registryType;
++    private final Function<GetRegistryDataResponse, List<P>> extractor;
++    private final Function<P, B> factory;
++    private volatile boolean loaded;
+ 
+     public PatchBukkitRegistry(
+             RegistryType registryType,
+             Function<GetRegistryDataResponse, List<P>> extractor,
+             Function<P, B> factory
+     ) {
+-        if (registryType == null) return;
++        this.registryType = registryType;
++        this.extractor = Objects.requireNonNull(extractor, "extractor");
++        this.factory = Objects.requireNonNull(factory, "factory");
++    }
++
++    /**
++     * Populates this registry on first use.
++     *
++     * <p>Bukkit's {@link Registry} interface initializes all registry fields in
++     * one static bootstrap. Constructing entries eagerly from
++     * {@code RegistryAccess.getRegistry(...)} can therefore recurse into
++     * classes such as {@code Enchantment} while their own static fields are
++     * still being initialized. Publishing an empty registry wrapper first and
++     * loading its immutable native snapshot on demand avoids that cycle.</p>
++     */
++    private void ensureLoaded() {
++        if (this.loaded) return;
++
++        synchronized (this) {
++            if (this.loaded) return;
++
++            if (this.registryType == null) {
++                this.loaded = true;
++                return;
++            }
+ 
+-        GetRegistryDataRequest request = GetRegistryDataRequest.newBuilder()
+-                .setRegistry(registryType)
+-                .build();
++            GetRegistryDataRequest request = GetRegistryDataRequest.newBuilder()
++                    .setRegistry(this.registryType)
++                    .build();
+ 
+-        GetRegistryDataResponse response = NativeBridgeFfi.getRegistryData(request);
+-        if (response == null) return;
++            GetRegistryDataResponse response = NativeBridgeFfi.getRegistryData(request);
++            if (response == null) {
++                this.loaded = true;
++                return;
++            }
+ 
+-        List<P> protoEntries = extractor.apply(response);
+-        for (P protoEntry : protoEntries) {
+-            B value = factory.apply(protoEntry);
+-            if (value != null) {
+-                entries.put(value.getKey(), value);
++            Map<NamespacedKey, B> loadedEntries = new LinkedHashMap<>();
++            for (P protoEntry : this.extractor.apply(response)) {
++                B value = this.factory.apply(protoEntry);
++                if (value != null) {
++                    loadedEntries.put(value.getKey(), value);
++                }
+             }
++
++            this.entries.putAll(loadedEntries);
++            this.loaded = true;
+         }
+     }
+ 
+@@ -81,7 +116,8 @@ public class PatchBukkitRegistry<P, B extends Keyed> implements Registry<B> {
+ 
+     @Override
+     public @Nullable B get(NamespacedKey key) {
+-        return entries.get(key);
++        this.ensureLoaded();
++        return this.entries.get(key);
+     }
+ 
+     @Override
+@@ -118,21 +154,25 @@ public class PatchBukkitRegistry<P, B extends Keyed> implements Registry<B> {
+ 
+     @Override
+     public @NonNull Stream<B> stream() {
+-        return entries.values().stream();
++        this.ensureLoaded();
++        return this.entries.values().stream();
+     }
+ 
+     @Override
+     public @NonNull Stream<NamespacedKey> keyStream() {
+-        return entries.keySet().stream();
++        this.ensureLoaded();
++        return this.entries.keySet().stream();
+     }
+ 
+     @Override
+     public int size() {
+-        return entries.size();
++        this.ensureLoaded();
++        return this.entries.size();
+     }
+ 
+     @Override
+     public @NonNull Iterator<B> iterator() {
+-        return Collections.unmodifiableCollection(entries.values()).iterator();
++        this.ensureLoaded();
++        return Collections.unmodifiableCollection(this.entries.values()).iterator();
+     }
+ }
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
 index 854db6f3af11a4124b95fd457ed0abc28cd16097..763db1c8101acabce8626e726ca87804f4a6716a 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
