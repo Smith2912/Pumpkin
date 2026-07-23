@@ -1594,8 +1594,59 @@ index 0000000..ed415a4
 +        }
 +    }
 +}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
+index e48457f..870ef7c 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
+@@ -1128,14 +1128,42 @@ public class PatchBukkitHumanEntity
+ 
+     @Override
+     public GameMode getGameMode() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getGameMode'");
++        patchbukkit.player.PlayerGameMode gameMode =
++            patchbukkit.bridge.NativeBridgeFfi.getPlayerGameMode(
++                org.patchbukkit.bridge.BridgeUtils.convertUuid(this.uuid)
++            );
++        if (gameMode == null) {
++            throw new IllegalStateException("Player is no longer online: " + this.uuid);
++        }
++        return GameMode.valueOf(gameMode.getCurrent().toUpperCase(java.util.Locale.ROOT));
+     }
+ 
+     @Override
+     public void setGameMode(GameMode mode) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setGameMode'");
++        java.util.Objects.requireNonNull(mode, "mode");
++        if (this.getGameMode() == mode) {
++            return;
++        }
++
++        org.bukkit.event.player.PlayerGameModeChangeEvent event =
++            new org.bukkit.event.player.PlayerGameModeChangeEvent((Player) this, mode);
++        org.bukkit.Bukkit.getPluginManager().callEvent(event);
++        if (event.isCancelled()) {
++            return;
++        }
++
++        patchbukkit.player.SetPlayerGameModeResponse response =
++            patchbukkit.bridge.NativeBridgeFfi.setPlayerGameMode(
++                patchbukkit.player.SetPlayerGameModeRequest.newBuilder()
++                    .setPlayerUuid(org.patchbukkit.bridge.BridgeUtils.convertUuid(this.uuid))
++                    .setGameMode(mode.name())
++                    .build()
++            );
++        if (response == null || !response.getSuccess()) {
++            throw new IllegalStateException(
++                "Failed to apply game mode " + mode + " for player " + this.uuid
++            );
++        }
+     }
+ 
+     @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
-index 458bbb9..9fc1b52 100644
+index 458bbb9..ff37315 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
 @@ -163,14 +163,12 @@ public class PatchBukkitPlayer
@@ -1622,6 +1673,23 @@ index 458bbb9..9fc1b52 100644
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getPlayer'");
 +        return org.bukkit.Bukkit.getPlayer(this.uuid);
+     }
+ 
+     @Override
+@@ -1063,8 +1060,14 @@ public class PatchBukkitPlayer
+ 
+     @Override
+     public @org.jspecify.annotations.Nullable GameMode getPreviousGameMode() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getPreviousGameMode'");
++        patchbukkit.player.PlayerGameMode gameMode =
++            NativeBridgeFfi.getPlayerGameMode(BridgeUtils.convertUuid(this.uuid));
++        if (gameMode == null || !gameMode.hasPrevious()) {
++            return null;
++        }
++        return GameMode.valueOf(
++            gameMode.getPrevious().toUpperCase(java.util.Locale.ROOT)
++        );
      }
  
      @Override
@@ -2396,14 +2464,25 @@ index e8c2c36..1c566bc 100644
  
      @Override
 diff --git a/proto/patchbukkit/bridge.proto b/proto/patchbukkit/bridge.proto
-index 85df0ae..0a378f1 100644
+index 85df0ae..280df12 100644
 --- a/proto/patchbukkit/bridge.proto
 +++ b/proto/patchbukkit/bridge.proto
-@@ -22,6 +22,7 @@ service NativeBridge {
+@@ -9,6 +9,7 @@ import "patchbukkit/config.proto";
+ import "patchbukkit/events/event.proto";
+ import "patchbukkit/log.proto";
+ import "patchbukkit/message.proto";
++import "patchbukkit/player.proto";
+ import "patchbukkit/registry.proto";
+ import "patchbukkit/sound.proto";
+ 
+@@ -22,6 +23,10 @@ service NativeBridge {
    rpc SendMessage(patchbukkit.message.SendMessageRequest) returns (google.protobuf.Empty);
  
    rpc GetLocation(patchbukkit.common.UUID) returns (patchbukkit.common.Location);
 +  rpc GetWorlds(patchbukkit.common.EmptyRequest) returns (patchbukkit.common.WorldList);
++
++  rpc GetPlayerGameMode(patchbukkit.common.UUID) returns (patchbukkit.player.PlayerGameMode);
++  rpc SetPlayerGameMode(patchbukkit.player.SetPlayerGameModeRequest) returns (patchbukkit.player.SetPlayerGameModeResponse);
  
    rpc GetRegistryData(patchbukkit.registry.GetRegistryDataRequest) returns (patchbukkit.registry.GetRegistryDataResponse);
  
@@ -2508,6 +2587,34 @@ index cd92e96..c74ae7e 100644
 +  patchbukkit.common.UUID player_uuid = 1;
 +  patchbukkit.common.Location respawn_location = 2;
 +  bool alive = 3;
++}
+diff --git a/proto/patchbukkit/player.proto b/proto/patchbukkit/player.proto
+new file mode 100644
+index 0000000..b9117b3
+--- /dev/null
++++ b/proto/patchbukkit/player.proto
+@@ -0,0 +1,22 @@
++syntax = "proto3";
++
++package patchbukkit.player;
++
++import "patchbukkit/common/types.proto";
++
++option java_multiple_files = true;
++option java_package = "patchbukkit.player";
++
++message PlayerGameMode {
++  string current = 1;
++  optional string previous = 2;
++}
++
++message SetPlayerGameModeRequest {
++  patchbukkit.common.UUID player_uuid = 1;
++  string game_mode = 2;
++}
++
++message SetPlayerGameModeResponse {
++  bool success = 1;
 +}
 diff --git a/proto/patchbukkit/registry.proto b/proto/patchbukkit/registry.proto
 index a7dac34..4961ec9 100644
@@ -3262,6 +3369,65 @@ index 7582945..631aaba 100644
 +
 +    Some(crate::proto::patchbukkit::common::WorldList { worlds })
 +}
+diff --git a/rust/src/java/native_callbacks/mod.rs b/rust/src/java/native_callbacks/mod.rs
+index 56698aa..d084ca1 100644
+--- a/rust/src/java/native_callbacks/mod.rs
++++ b/rust/src/java/native_callbacks/mod.rs
+@@ -22,6 +22,9 @@ pub use location::*;
+ pub mod message;
+ pub use message::*;
+ 
++pub mod player;
++pub use player::*;
++
+ pub mod registry;
+ pub use registry::*;
+ 
+diff --git a/rust/src/java/native_callbacks/player.rs b/rust/src/java/native_callbacks/player.rs
+new file mode 100644
+index 0000000..1e0ed44
+--- /dev/null
++++ b/rust/src/java/native_callbacks/player.rs
+@@ -0,0 +1,39 @@
++use std::str::FromStr;
++
++use pumpkin_util::GameMode;
++
++use crate::java::native_callbacks::CALLBACK_CONTEXT;
++use crate::proto::patchbukkit::{
++    common::Uuid,
++    player::{PlayerGameMode, SetPlayerGameModeRequest},
++};
++
++pub fn ffi_native_bridge_get_player_game_mode_impl(request: Uuid) -> Option<PlayerGameMode> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.value).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++
++    Some(PlayerGameMode {
++        current: player.gamemode.load().name().to_owned(),
++        previous: player
++            .previous_gamemode
++            .load()
++            .map(|game_mode| game_mode.name().to_owned()),
++    })
++}
++
++pub fn ffi_native_bridge_set_player_game_mode_impl(
++    request: SetPlayerGameModeRequest,
++) -> Option<bool> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
++    let game_mode = GameMode::from_str(&request.game_mode.to_ascii_lowercase()).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++
++    tokio::task::block_in_place(|| {
++        ctx.runtime
++            .block_on(player.apply_gamemode_after_external_event(game_mode));
++    });
++
++    Some(true)
++}
 diff --git a/rust/src/java/native_callbacks/registry.rs b/rust/src/java/native_callbacks/registry.rs
 index d403ca1..f39e935 100644
 --- a/rust/src/java/native_callbacks/registry.rs
@@ -3731,3 +3897,18 @@ index 8754934..cc59d36 100644
 +        );
 +    }
 +}
+diff --git a/rust/src/proto/mod.rs b/rust/src/proto/mod.rs
+index ebf5045..edf6c8d 100644
+--- a/rust/src/proto/mod.rs
++++ b/rust/src/proto/mod.rs
+@@ -19,6 +19,10 @@ pub mod patchbukkit {
+         include!(concat!(env!("OUT_DIR"), "/patchbukkit.message.rs"));
+     }
+ 
++    pub mod player {
++        include!(concat!(env!("OUT_DIR"), "/patchbukkit.player.rs"));
++    }
++
+     pub mod registry {
+         include!(concat!(env!("OUT_DIR"), "/patchbukkit.registry.rs"));
+     }

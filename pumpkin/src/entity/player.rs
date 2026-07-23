@@ -2907,66 +2907,7 @@ impl Player {
             };
 
             'after: {
-                let gamemode = event.new_gamemode;
-                self.gamemode.store(gamemode);
-                // TODO: Fix this when mojang fixes it
-                // This is intentional to keep the pure vanilla mojang experience
-                // self.previous_gamemode.store(self.previous_gamemode.load());
-                {
-                    // Use another scope so that we instantly unlock `abilities`.
-                    let mut abilities = self.abilities.lock().await;
-                    abilities.set_for_gamemode(gamemode);
-                };
-                self.send_abilities_update().await;
-
-                if gamemode == GameMode::Creative {
-                    self.get_entity().extinguish();
-                    self.get_entity().set_on_fire(false).await;
-                }
-
-                // Stop elytra flight and reset sneaking when switching to spectator mode
-                if gamemode == GameMode::Spectator {
-                    let entity = self.get_entity();
-                    if entity.is_fall_flying() {
-                        entity.set_fall_flying(false).await;
-                    }
-                    if entity.is_sneaking() {
-                        entity.set_sneaking(false).await;
-                    }
-                }
-
-                if gamemode != GameMode::Spectator && self.camera_target_id.load().is_some() {
-                    self.camera_target_id.store(None);
-                    self.client.send_packet_now(&CSetCamera::new(
-                        self.entity_id().into()
-                    )).await;
-                }
-
-                self.living_entity.entity.invulnerable.store(
-                    matches!(gamemode, GameMode::Creative | GameMode::Spectator),
-                    Ordering::Relaxed,
-                );
-                self.living_entity
-                    .entity
-                    .world
-                    .load()
-                    .broadcast_packet_all(&CPlayerInfoUpdate::new(
-                        PlayerInfoFlags::UPDATE_GAME_MODE.bits(),
-                        &[pumpkin_protocol::java::client::play::Player {
-                            uuid: self.gameprofile.id,
-                            actions: &[PlayerAction::UpdateGameMode((gamemode as i32).into())],
-                        }],
-                    ));
-
-                self.client
-                    .enqueue_packet_editioned(
-                        &CGameEvent::new(GameEvent::ChangeGameMode, gamemode as i32 as f32),
-                        &pumpkin_protocol::bedrock::client::set_player_gamemode::CSetPlayerGamemode {
-                            gamemode,
-                        },
-                    )
-                    .await;
-
+                self.apply_gamemode_after_external_event(event.new_gamemode).await;
                 true
             }
 
@@ -2974,6 +2915,78 @@ impl Player {
                 false
             }
         }}
+    }
+
+    /// Applies a game-mode change after another compatibility layer has already
+    /// fired and resolved its own cancellable game-mode event.
+    ///
+    /// Normal Pumpkin callers must use [`Self::set_gamemode`] so the native
+    /// [`PlayerGamemodeChangeEvent`] is fired. JVM compatibility adapters use
+    /// this method only after synchronously dispatching the equivalent Bukkit
+    /// event; this avoids recursively re-entering the single JVM worker while
+    /// keeping all state, ability, camera, and client-packet updates shared.
+    pub async fn apply_gamemode_after_external_event(self: &Arc<Self>, gamemode: GameMode) {
+        let previous_gamemode = self.gamemode.load();
+        if previous_gamemode == gamemode {
+            return;
+        }
+
+        self.previous_gamemode.store(Some(previous_gamemode));
+        self.gamemode.store(gamemode);
+        {
+            // Use another scope so that we instantly unlock `abilities`.
+            let mut abilities = self.abilities.lock().await;
+            abilities.set_for_gamemode(gamemode);
+        }
+        self.send_abilities_update().await;
+
+        if gamemode == GameMode::Creative {
+            self.get_entity().extinguish();
+            self.get_entity().set_on_fire(false).await;
+        }
+
+        // Stop elytra flight and reset sneaking when switching to spectator mode
+        if gamemode == GameMode::Spectator {
+            let entity = self.get_entity();
+            if entity.is_fall_flying() {
+                entity.set_fall_flying(false).await;
+            }
+            if entity.is_sneaking() {
+                entity.set_sneaking(false).await;
+            }
+        }
+
+        if gamemode != GameMode::Spectator && self.camera_target_id.load().is_some() {
+            self.camera_target_id.store(None);
+            self.client
+                .send_packet_now(&CSetCamera::new(self.entity_id().into()))
+                .await;
+        }
+
+        self.living_entity.entity.invulnerable.store(
+            matches!(gamemode, GameMode::Creative | GameMode::Spectator),
+            Ordering::Relaxed,
+        );
+        self.living_entity
+            .entity
+            .world
+            .load()
+            .broadcast_packet_all(&CPlayerInfoUpdate::new(
+                PlayerInfoFlags::UPDATE_GAME_MODE.bits(),
+                &[pumpkin_protocol::java::client::play::Player {
+                    uuid: self.gameprofile.id,
+                    actions: &[PlayerAction::UpdateGameMode((gamemode as i32).into())],
+                }],
+            ));
+
+        self.client
+            .enqueue_packet_editioned(
+                &CGameEvent::new(GameEvent::ChangeGameMode, gamemode as i32 as f32),
+                &pumpkin_protocol::bedrock::client::set_player_gamemode::CSetPlayerGamemode {
+                    gamemode,
+                },
+            )
+            .await;
     }
 
     /// Send the player's skin layers and used hand to all players.
