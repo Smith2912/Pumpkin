@@ -2,18 +2,11 @@ diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplug
 index d225037..96de007 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
-@@ -3,13 +3,41 @@ package org.patchbukkit.testplugin;
- import org.bukkit.Bukkit;
- import org.bukkit.command.Command;
- import org.bukkit.command.PluginCommand;
+@@ -5,0 +6,3 @@ import org.bukkit.command.PluginCommand;
 +import org.bukkit.event.EventHandler;
 +import org.bukkit.event.Listener;
 +import org.bukkit.event.server.PluginEnableEvent;
- import org.bukkit.plugin.java.JavaPlugin;
- import org.patchbukkit.testplugin.tests.*;
- 
- public final class PatchBukkitTestPlugin extends JavaPlugin {
- 
+@@ -10,0 +14,16 @@ public final class PatchBukkitTestPlugin extends JavaPlugin {
 +    private boolean loadPhaseCompleted;
 +    private boolean enableEventObserved;
 +
@@ -30,8 +23,7 @@ index d225037..96de007 100644
 +        return enableEventObserved;
 +    }
 +
-     @Override
-     public void onEnable() {
+@@ -12,0 +32,9 @@ public final class PatchBukkitTestPlugin extends JavaPlugin {
 +        Bukkit.getPluginManager().registerEvents(new Listener() {
 +            @EventHandler
 +            public void onPluginEnable(PluginEnableEvent event) {
@@ -41,44 +33,43 @@ index d225037..96de007 100644
 +            }
 +        }, this);
 +
-         TestFramework framework = new TestFramework(getLogger());
- 
-         framework.registerSuite(new ServerTests(this));
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
-index 0ddff2f..d364216 100644
+index 0ddff2f..00c5775 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
-@@ -3,13 +3,23 @@ package org.patchbukkit.testplugin.tests;
- import org.bukkit.Bukkit;
- import org.bukkit.event.EventHandler;
- import org.bukkit.event.EventPriority;
+@@ -5,0 +6,2 @@ import org.bukkit.event.EventPriority;
 +import org.bukkit.event.Event;
 +import org.bukkit.event.HandlerList;
- import org.bukkit.event.Listener;
+@@ -6,0 +9,8 @@ import org.bukkit.event.Listener;
 +import org.bukkit.event.player.AsyncPlayerChatEvent;
++import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 +import org.bukkit.event.player.PlayerCommandPreprocessEvent;
++import org.bukkit.event.player.PlayerChangedWorldEvent;
 +import org.bukkit.event.player.PlayerGameModeChangeEvent;
++import org.bukkit.event.player.PlayerLoginEvent;
 +import org.bukkit.event.player.PlayerQuitEvent;
 +import org.bukkit.event.player.PlayerRespawnEvent;
- import org.bukkit.event.server.PluginEnableEvent;
+@@ -7,0 +18 @@ import org.bukkit.event.server.PluginEnableEvent;
 +import org.bukkit.event.server.ServerCommandEvent;
- import org.bukkit.plugin.EventExecutor;
- import org.patchbukkit.testplugin.ConformanceTest;
- import org.patchbukkit.testplugin.TestCategory;
- import org.bukkit.plugin.java.JavaPlugin;
- 
+@@ -12,0 +24,2 @@ import org.bukkit.plugin.java.JavaPlugin;
 +import java.util.concurrent.atomic.AtomicBoolean;
 +
- import static org.patchbukkit.testplugin.TestAssertions.*;
- 
- public final class EventSystemTests {
-@@ -31,6 +41,52 @@ public final class EventSystemTests {
-         Bukkit.getPluginManager().registerEvents(listener, plugin);
-     }
- 
+@@ -33,0 +47,58 @@ public final class EventSystemTests {
 +    @ConformanceTest(name = "registerEvents() for native player lifecycle events", category = TestCategory.EVENT_SYSTEM)
 +    public void testRegisterNativePlayerLifecycleEvents() {
 +        Listener listener = new Listener() {
++            @EventHandler
++            public void onAsyncPlayerPreLogin(AsyncPlayerPreLoginEvent event) {
++            }
++
++            @EventHandler
++            public void onPlayerLogin(PlayerLoginEvent event) {
++            }
++
++            @EventHandler
++            public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
++            }
++
 +            @EventHandler
 +            public void onPlayerQuit(PlayerQuitEvent event) {
 +            }
@@ -122,13 +113,7 @@ index 0ddff2f..d364216 100644
 +        assertTrue(called.get(), "custom plugin event listener was not called");
 +    }
 +
-     @ConformanceTest(name = "registerEvent() with explicit priority", category = TestCategory.EVENT_SYSTEM)
-     public void testRegisterEventWithPriority() {
-         EventExecutor executor = (listener, event) -> {
-@@ -59,4 +115,17 @@ public final class EventSystemTests {
-                 true
-         );
-     }
+@@ -61,0 +133,13 @@ public final class EventSystemTests {
 +
 +    private static final class CustomPluginEvent extends Event {
 +        private static final HandlerList HANDLERS = new HandlerList();
@@ -142,30 +127,18 @@ index 0ddff2f..d364216 100644
 +            return HANDLERS;
 +        }
 +    }
- }
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
 index 032bce0..8de40c4 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PluginManagerTests.java
-@@ -3,9 +3,14 @@ package org.patchbukkit.testplugin.tests;
- import org.bukkit.Bukkit;
- import org.bukkit.plugin.Plugin;
- import org.bukkit.plugin.PluginManager;
+@@ -5,0 +6 @@ import org.bukkit.plugin.PluginManager;
 +import org.bukkit.plugin.SimplePluginManager;
- import org.patchbukkit.testplugin.ConformanceTest;
- import org.patchbukkit.testplugin.TestCategory;
- import org.bukkit.plugin.java.JavaPlugin;
+@@ -8,0 +10,4 @@ import org.bukkit.plugin.java.JavaPlugin;
 +import org.bukkit.permissions.Permission;
 +
 +import java.lang.reflect.Field;
 +import java.util.Map;
- 
- import static org.patchbukkit.testplugin.TestAssertions.*;
- 
-@@ -56,10 +61,51 @@ public final class PluginManagerTests {
-         assertTrue(enabled, "isPluginEnabled(plugin) should be true");
-     }
- 
+@@ -58,0 +64,16 @@ public final class PluginManagerTests {
 +    @ConformanceTest(name = "Plugin onLoad() runs before onEnable()", category = TestCategory.PLUGIN_MANAGER)
 +    public void testLoadPhaseCompleted() {
 +        assertTrue(
@@ -182,12 +155,7 @@ index 032bce0..8de40c4 100644
 +        );
 +    }
 +
-     @ConformanceTest(name = "PluginManager.getPermissions() returns set", category = TestCategory.PLUGIN_MANAGER)
-     public void testGetPermissions() {
-         var perms = Bukkit.getPluginManager().getPermissions();
-         assertNotNull(perms, "PluginManager.getPermissions()");
-     }
- 
+@@ -64,0 +86,25 @@ public final class PluginManagerTests {
 +    @ConformanceTest(name = "PluginManager exposes Bukkit permission maps", category = TestCategory.PLUGIN_MANAGER)
 +    public void testSimplePluginManagerCompatibility() throws Exception {
 +        PluginManager manager = Bukkit.getPluginManager();
@@ -213,31 +181,19 @@ index 032bce0..8de40c4 100644
 +        }
 +    }
 +
- }
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
 index e8bd1a6..9c0ee9d 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
-@@ -1,11 +1,14 @@
- package org.patchbukkit.testplugin.tests;
- 
- import org.bukkit.Bukkit;
+@@ -3,0 +4,2 @@ import org.bukkit.Bukkit;
 +import org.bukkit.Material;
 +import org.bukkit.NamespacedKey;
- import org.bukkit.Registry;
- import org.bukkit.Sound;
+@@ -5,0 +8,2 @@ import org.bukkit.Sound;
 +import org.bukkit.Tag;
 +import org.bukkit.damage.DamageType;
- import org.patchbukkit.testplugin.ConformanceTest;
- import org.patchbukkit.testplugin.TestCategory;
+@@ -8 +11,0 @@ import org.patchbukkit.testplugin.TestCategory;
 -import org.patchbukkit.testplugin.TestExpectation;
- 
- import static org.patchbukkit.testplugin.TestAssertions.*;
- 
-@@ -33,14 +36,60 @@ public final class RegistryTests {
-         assertNotNull(stream, "Registry.SOUNDS.stream()");
-     }
- 
+@@ -36,2 +39,15 @@ public final class RegistryTests {
 -    @ConformanceTest(name = "Server.getRegistry(Sound.class) returns registry", category = TestCategory.REGISTRY,
 -            expectation = TestExpectation.EXPECT_UNSUPPORTED)
 +    @ConformanceTest(name = "Damage types are populated from Pumpkin", category = TestCategory.REGISTRY)
@@ -255,7 +211,7 @@ index e8bd1a6..9c0ee9d 100644
 +    }
 +
 +    @ConformanceTest(name = "Server.getRegistry(Sound.class) returns registry", category = TestCategory.REGISTRY)
-     public void testServerGetRegistry() {
+@@ -39,5 +55,13 @@ public final class RegistryTests {
 -        // Server.getRegistry() returns null in PatchBukkit — might throw or return null
 -        Registry<Sound> reg = Bukkit.getServer().getRegistry(Sound.class);
 -        if (reg == null) {
@@ -274,8 +230,7 @@ index e8bd1a6..9c0ee9d 100644
 +        );
 +        assertNotNull(logs, "minecraft:logs block tag");
 +        assertTrue(logs.isTagged(Material.OAK_LOG), "logs should include oak_log");
-     }
- 
+@@ -45,0 +70,25 @@ public final class RegistryTests {
 +    @ConformanceTest(name = "Bukkit built-in tags match the API data version", category = TestCategory.REGISTRY)
 +    public void testBuiltInTagVersion() {
 +        assertNotNull(Tag.CONCRETE_POWDER, "Tag.CONCRETE_POWDER");
@@ -301,24 +256,18 @@ index e8bd1a6..9c0ee9d 100644
 +        }
 +        assertTrue(foundLogs, "block tag iteration should include minecraft:logs");
 +    }
- }
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
-index 1940bf5..0c185aa 100644
+index 1940bf5..43652dc 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
-@@ -1,6 +1,8 @@
- package org.patchbukkit.testplugin.tests;
- 
+@@ -2,0 +3,2 @@ package org.patchbukkit.testplugin.tests;
 +import java.io.File;
- import org.bukkit.Bukkit;
++import java.lang.reflect.Modifier;
+@@ -3,0 +6 @@ import org.bukkit.Bukkit;
 +import org.bukkit.World;
- import org.bukkit.Server;
- import org.bukkit.command.CommandMap;
- import org.bukkit.command.ConsoleCommandSender;
-@@ -15,6 +17,16 @@ import static org.patchbukkit.testplugin.TestAssertions.*;
- 
- public final class ServerTests {
- 
+@@ -7,0 +11 @@ import org.bukkit.plugin.PluginManager;
++import org.bukkit.permissions.PermissibleBase;
+@@ -17,0 +22,10 @@ public final class ServerTests {
 +    @ConformanceTest(name = "Server worlds expose Pumpkin metadata", category = TestCategory.SERVER)
 +    public void testWorlds() {
 +        assertTrue(!Bukkit.getWorlds().isEmpty(), "at least one world should be loaded");
@@ -329,13 +278,7 @@ index 1940bf5..0c185aa 100644
 +        assertTrue(Bukkit.getWorld(world.getUID()) == world, "world lookup by UUID");
 +    }
 +
-     private final JavaPlugin plugin;
- 
-     public ServerTests(JavaPlugin plugin) {
-@@ -39,12 +51,56 @@ public final class ServerTests {
-         assertNotNull(version, "Server.getBukkitVersion()");
-     }
- 
+@@ -41,0 +56,51 @@ public final class ServerTests {
 +    @ConformanceTest(name = "Server has modern CraftBukkit identity", category = TestCategory.SERVER)
 +    public void testCraftBukkitIdentity() {
 +        assertTrue(
@@ -343,6 +286,22 @@ index 1940bf5..0c185aa 100644
 +                "org.bukkit.craftbukkit.CraftServer"
 +            ),
 +            "Server class should expose the modern CraftBukkit package"
++        );
++    }
++
++    @ConformanceTest(name = "CraftHumanEntity exposes injectable permission delegate", category = TestCategory.SERVER)
++    public void testCraftHumanEntityPermissionDelegate() throws ReflectiveOperationException {
++        Class<?> craftHumanEntity = Class.forName(
++            "org.bukkit.craftbukkit.entity.CraftHumanEntity"
++        );
++        var permissionDelegate = craftHumanEntity.getDeclaredField("perm");
++        assertTrue(
++            permissionDelegate.getType() == PermissibleBase.class,
++            "CraftHumanEntity.perm should use PermissibleBase"
++        );
++        assertTrue(
++            !Modifier.isFinal(permissionDelegate.getModifiers()),
++            "CraftHumanEntity.perm should be replaceable by permission plugins"
 +        );
 +    }
 +
@@ -371,12 +330,7 @@ index 1940bf5..0c185aa 100644
 +        );
 +    }
 +
-     @ConformanceTest(name = "Server.getPluginManager() returns non-null", category = TestCategory.SERVER)
-     public void testGetPluginManager() {
-         PluginManager pm = Bukkit.getServer().getPluginManager();
-         assertNotNull(pm, "Server.getPluginManager()");
-     }
- 
+@@ -47,0 +113,9 @@ public final class ServerTests {
 +    @ConformanceTest(name = "Server.dispatchCommand() reaches the command map", category = TestCategory.SERVER)
 +    public void testDispatchUnknownCommand() {
 +        boolean handled = Bukkit.getServer().dispatchCommand(
@@ -386,56 +340,30 @@ index 1940bf5..0c185aa 100644
 +        assertTrue(!handled, "unknown commands should return false");
 +    }
 +
-     @ConformanceTest(name = "Server.getConsoleSender() returns non-null", category = TestCategory.SERVER)
-     public void testGetConsoleSender() {
-         ConsoleCommandSender cs = Bukkit.getServer().getConsoleSender();
-@@ -75,6 +131,11 @@ public final class ServerTests {
-         assertNotNull(unsafe, "Server.getUnsafe()");
-     }
- 
+@@ -77,0 +152,5 @@ public final class ServerTests {
 +    @ConformanceTest(name = "Server.getOnlineMode() is implemented", category = TestCategory.SERVER)
 +    public void testGetOnlineMode() {
 +        Bukkit.getServer().getOnlineMode();
 +    }
 +
-     @ConformanceTest(name = "Server.suggestPlayerNamesWhenNullTabCompletions() returns boolean", category = TestCategory.SERVER)
-     public void testSuggestPlayerNames() {
-         boolean result = Bukkit.getServer().suggestPlayerNamesWhenNullTabCompletions();
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
 index 3a6b9c4..1a05e1a 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/UnsafeValuesTests.java
-@@ -1,8 +1,12 @@
- package org.patchbukkit.testplugin.tests;
- 
- import net.kyori.adventure.text.flattener.ComponentFlattener;
+@@ -3,0 +4 @@ import net.kyori.adventure.text.flattener.ComponentFlattener;
 +import io.papermc.paper.registry.RegistryKey;
- import org.bukkit.Bukkit;
+@@ -4,0 +6 @@ import org.bukkit.Bukkit;
 +import org.bukkit.NamespacedKey;
- import org.bukkit.UnsafeValues;
+@@ -5,0 +8,2 @@ import org.bukkit.UnsafeValues;
 +import org.bukkit.damage.DamageSource;
 +import org.bukkit.damage.DamageType;
- import org.patchbukkit.testplugin.ConformanceTest;
- import org.patchbukkit.testplugin.TestCategory;
- 
-@@ -11,11 +15,11 @@ import static org.patchbukkit.testplugin.TestAssertions.*;
- @SuppressWarnings("deprecation")
- public final class UnsafeValuesTests {
- 
+@@ -14 +18 @@ public final class UnsafeValuesTests {
 -    @ConformanceTest(name = "UnsafeValues.getDataVersion() returns positive int", category = TestCategory.UNSAFE_VALUES)
 +    @ConformanceTest(name = "UnsafeValues.getDataVersion() matches Minecraft 26.2", category = TestCategory.UNSAFE_VALUES)
-     public void testGetDataVersion() {
-         UnsafeValues unsafe = Bukkit.getUnsafe();
-         int version = unsafe.getDataVersion();
+@@ -18 +22 @@ public final class UnsafeValuesTests {
 -        assertTrue(version > 0, "getDataVersion() should be > 0, got " + version);
 +        assertTrue(version == 4903, "getDataVersion() should be 4903, got " + version);
-     }
- 
-     @ConformanceTest(name = "UnsafeValues.isSupportedApiVersion(\"1.21\") returns true", category = TestCategory.UNSAFE_VALUES)
-@@ -46,4 +50,26 @@ public final class UnsafeValuesTests {
-         assertNotNull(flattener, "UnsafeValues.componentFlattener()");
-     }
- 
+@@ -48,0 +53,22 @@ public final class UnsafeValuesTests {
 +    @ConformanceTest(name = "DamageSource builder is implemented", category = TestCategory.UNSAFE_VALUES)
 +    public void testDamageSourceBuilder() {
 +        DamageSource source = DamageSource.builder(DamageType.MAGIC).build();
@@ -458,7 +386,6 @@ index 3a6b9c4..1a05e1a 100644
 +        );
 +    }
 +
- }
 diff --git a/java/patchbukkit/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/java/patchbukkit/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 new file mode 100644
 index 0000000..9f759b8
@@ -479,6 +406,37 @@ index 0000000..9f759b8
 +
 +    public CraftServer() {
 +        super();
++    }
++}
+diff --git a/java/patchbukkit/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java b/java/patchbukkit/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
+new file mode 100644
+index 0000000..d2a7001
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
+@@ -0,0 +1,25 @@
++package org.bukkit.craftbukkit.entity;
++
++import java.util.UUID;
++
++import org.bukkit.entity.HumanEntity;
++import org.bukkit.permissions.PermissibleBase;
++import org.patchbukkit.entity.PatchBukkitLivingEntity;
++
++/**
++ * CraftBukkit-compatible human-entity base used by permission plugins that
++ * replace the per-player {@code perm} delegate through reflection.
++ *
++ * <p>The field name, declaring class, type, and mutability are part of the
++ * practical CraftBukkit compatibility contract used by LuckPerms. Permission
++ * checks remain implemented by {@code PatchBukkitHumanEntity}; this class owns
++ * only the injectable delegate and the expected inheritance surface.</p>
++ */
++public abstract class CraftHumanEntity extends PatchBukkitLivingEntity implements HumanEntity {
++    protected PermissibleBase perm;
++
++    protected CraftHumanEntity(UUID uuid, String name) {
++        super(uuid, name);
++        this.perm = new PermissibleBase(this);
 +    }
 +}
 diff --git a/java/patchbukkit/src/main/java/org/bukkit/plugin/SimplePluginManager.java b/java/patchbukkit/src/main/java/org/bukkit/plugin/SimplePluginManager.java
@@ -705,56 +663,30 @@ diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginCla
 index 21009c4..0fd46d7 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginClassLoader.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginClassLoader.java
-@@ -10,12 +10,18 @@ import java.net.MalformedURLException;
- import java.net.URL;
- import java.net.URLClassLoader;
- import java.util.ArrayList;
+@@ -12,0 +13 @@ import java.util.ArrayList;
 +import java.util.Collections;
- import java.util.List;
+@@ -13,0 +15,3 @@ import java.util.List;
 +import java.util.Locale;
 +import java.util.Map;
 +import java.util.concurrent.ConcurrentHashMap;
- import java.util.jar.JarEntry;
- import java.util.jar.JarFile;
+@@ -15,0 +20 @@ import java.util.jar.JarFile;
 +import org.bukkit.Bukkit;
- import org.bukkit.plugin.InvalidDescriptionException;
- import org.bukkit.plugin.PluginDescriptionFile;
- import org.bukkit.plugin.java.JavaPlugin;
+@@ -18,0 +24 @@ import org.bukkit.plugin.java.JavaPlugin;
 +import org.patchbukkit.PatchBukkitPluginManager;
- import org.jetbrains.annotations.Nullable;
- 
- public class PatchBukkitPluginClassLoader
-@@ -26,26 +32,52 @@ public class PatchBukkitPluginClassLoader
-     private final PluginDescriptionFile description;
-     private final File dataFolder;
-     private final File file;
+@@ -28,0 +35 @@ public class PatchBukkitPluginClassLoader
 +    private final List<String> dependencies;
-     private JavaPlugin plugin;
- 
+@@ -30,0 +38,3 @@ public class PatchBukkitPluginClassLoader
 +    private static final Map<String, PatchBukkitPluginClassLoader> LOADERS =
 +        new ConcurrentHashMap<>();
 +
-     static {
-         ClassLoader.registerAsParallelCapable();
-     }
- 
-     public PatchBukkitPluginClassLoader(ClassLoader parent, File file)
-         throws MalformedURLException, InvalidDescriptionException {
+@@ -37 +47 @@ public class PatchBukkitPluginClassLoader
 -        this(parent, file, new URL[0]);
 +        this(parent, file, new URL[0], "");
-     }
- 
-     public PatchBukkitPluginClassLoader(
-         ClassLoader parent,
-         File file,
+@@ -43 +53,2 @@ public class PatchBukkitPluginClassLoader
 -        URL[] extraUrls
 +        URL[] extraUrls,
 +        String dependencyNames
-     ) throws MalformedURLException, InvalidDescriptionException {
-         super(buildUrls(file, extraUrls), parent);
-         this.file = file;
-         this.description = loadDescription(file);
-         this.dataFolder = new File(file.getParentFile(), description.getName());
+@@ -48,0 +60,21 @@ public class PatchBukkitPluginClassLoader
 +        this.dependencies = parseDependencies(dependencyNames);
 +        LOADERS.put(normalizePluginName(description.getName()), this);
 +    }
@@ -776,25 +708,14 @@ index 21009c4..0fd46d7 100644
 +
 +    private static String normalizePluginName(String name) {
 +        return name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
-     }
- 
-     private static URL[] buildUrls(File file, URL[] extraUrls)
-@@ -82,37 +114,29 @@ public class PatchBukkitPluginClassLoader
-         }
-     }
- 
+@@ -85,4 +116,0 @@ public class PatchBukkitPluginClassLoader
 -    /**
 -     * Child-first class loading: try to load from plugin JAR before delegating to parent.
 -     * This is critical for plugin classes to be loaded by this classloader.
 -     */
-     @Override
-     protected Class<?> loadClass(String name, boolean resolve)
-         throws ClassNotFoundException {
-         synchronized (getClassLoadingLock(name)) {
+@@ -93 +120,0 @@ public class PatchBukkitPluginClassLoader
 -            // First, check if already loaded
-             Class<?> c = findLoadedClass(name);
- 
-             if (c == null) {
+@@ -97,8 +124 @@ public class PatchBukkitPluginClassLoader
 -                // For plugin-specific classes, try to load from JAR first (child-first)
 -                // For JDK and server classes, delegate to parent
 -                if (
@@ -804,14 +725,14 @@ index 21009c4..0fd46d7 100644
 -                    !name.startsWith("javax.")
 -                ) {
 +                if (isParentFirst(name)) {
-                     try {
+@@ -106 +126,2 @@ public class PatchBukkitPluginClassLoader
 -                        // Try to find in plugin JAR first
 +                        c = getParent().loadClass(name);
 +                    } catch (ClassNotFoundException ignored) {
-                         c = findClass(name);
+@@ -108,2 +128,0 @@ public class PatchBukkitPluginClassLoader
 -                    } catch (ClassNotFoundException e) {
 -                        // Not in JAR, delegate to parent
-                     }
+@@ -111 +130,6 @@ public class PatchBukkitPluginClassLoader
 -                }
 +                } else {
 +                    try {
@@ -819,20 +740,14 @@ index 21009c4..0fd46d7 100644
 +                    } catch (ClassNotFoundException ignored) {
 +                        c = loadFromDependencies(name);
 +                    }
- 
+@@ -113,3 +137,3 @@ public class PatchBukkitPluginClassLoader
 -                // If not found in JAR (or is a system class), delegate to parent
 -                if (c == null) {
 -                    c = getParent().loadClass(name);
 +                    if (c == null) {
 +                        c = getParent().loadClass(name);
 +                    }
-                 }
-             }
- 
-@@ -123,6 +147,49 @@ public class PatchBukkitPluginClassLoader
-         }
-     }
- 
+@@ -125,0 +150,43 @@ public class PatchBukkitPluginClassLoader
 +    private static boolean isParentFirst(String name) {
 +        return (
 +            name.startsWith("java.") ||
@@ -876,53 +791,23 @@ index 21009c4..0fd46d7 100644
 +        }
 +    }
 +
-     @Override
-     public PluginMeta getConfiguration() {
-         return description;
-@@ -145,7 +212,7 @@ public class PatchBukkitPluginClassLoader
-             dataFolder.mkdirs();
-         }
-         plugin.init(
+@@ -148 +215 @@ public class PatchBukkitPluginClassLoader
 -            org.bukkit.Bukkit.getServer(),
 +            Bukkit.getServer(),
-             description,
-             dataFolder,
-             file,
-@@ -155,6 +222,9 @@ public class PatchBukkitPluginClassLoader
-                 description
-             )
-         );
+@@ -157,0 +225,3 @@ public class PatchBukkitPluginClassLoader
 +        ((PatchBukkitPluginManager) Bukkit.getPluginManager()).registerPlugin(
 +            plugin
 +        );
-     }
- 
-     @Override
-@@ -179,6 +249,7 @@ public class PatchBukkitPluginClassLoader
- 
-     @Override
-     public void close() throws IOException {
+@@ -181,0 +252 @@ public class PatchBukkitPluginClassLoader
 +        LOADERS.remove(normalizePluginName(description.getName()), this);
-         super.close();
-     }
- }
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginLoader.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginLoader.java
 index 4a32cd4..fb6c5fe 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginLoader.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginLoader.java
-@@ -25,7 +25,7 @@ public class PatchBukkitPluginLoader implements PluginLoader {
-     public static JavaPlugin createPlugin(
-         String jarPath,
-         String mainClass,
+@@ -28 +28 @@ public class PatchBukkitPluginLoader implements PluginLoader {
 -        String extraClasspath,
 +        String dependencyNames,
-         String libraryCoordinates
-     ) {
-         try {
-@@ -38,19 +38,6 @@ public class PatchBukkitPluginLoader implements PluginLoader {
-             }
- 
-             LinkedHashSet<URL> extraUrls = new LinkedHashSet<>();
+@@ -41,13 +40,0 @@ public class PatchBukkitPluginLoader implements PluginLoader {
 -            if (extraClasspath != null && !extraClasspath.isBlank()) {
 -                String[] paths = extraClasspath.split(File.pathSeparator);
 -                for (String path : paths) {
@@ -936,89 +821,51 @@ index 4a32cd4..fb6c5fe 100644
 -                }
 -            }
 -
-             if (libraryCoordinates != null && !libraryCoordinates.isBlank()) {
-                 File libsDir = new File(jarFile.getParentFile(), "patchbukkit-libs");
-                 if (!libsDir.exists()) {
-@@ -71,7 +58,8 @@ public class PatchBukkitPluginLoader implements PluginLoader {
-                 new PatchBukkitPluginClassLoader(
-                     PatchBukkitPluginLoader.class.getClassLoader(),
-                     jarFile,
+@@ -74 +61,2 @@ public class PatchBukkitPluginLoader implements PluginLoader {
 -                    extraUrls.toArray(new URL[0])
 +                    extraUrls.toArray(new URL[0]),
 +                    dependencyNames
-                 );
- 
-             Class<?> jarClass = Class.forName(mainClass, true, classLoader);
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
 index d90de1b..645ffa2 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
-@@ -1,38 +1,32 @@
- package org.patchbukkit;
- 
+@@ -3 +2,0 @@ package org.patchbukkit;
 -import io.papermc.paper.plugin.PermissionManager;
- import io.papermc.paper.plugin.configuration.PluginMeta;
- import java.io.File;
- import java.util.HashMap;
+@@ -7 +5,0 @@ import java.util.HashMap;
 -import java.util.List;
- import java.util.Map;
+@@ -9 +6,0 @@ import java.util.Map;
 -import java.util.Set;
- import java.util.concurrent.ConcurrentHashMap;
- 
- import org.bukkit.Server;
+@@ -12,0 +10 @@ import org.bukkit.Server;
 +import org.bukkit.command.SimpleCommandMap;
- import org.bukkit.event.Event;
- import org.bukkit.event.EventPriority;
- import org.bukkit.event.Listener;
+@@ -16,2 +14,2 @@ import org.bukkit.event.Listener;
 -import org.bukkit.permissions.Permissible;
 -import org.bukkit.permissions.Permission;
 +import org.bukkit.event.server.PluginDisableEvent;
 +import org.bukkit.event.server.PluginEnableEvent;
- import org.bukkit.plugin.*;
- import org.jetbrains.annotations.NotNull;
- import org.jetbrains.annotations.Nullable;
- import org.jspecify.annotations.NonNull;
- import org.patchbukkit.events.PatchBukkitEventManager;
+@@ -23 +20,0 @@ import org.patchbukkit.events.PatchBukkitEventManager;
 -import org.patchbukkit.permissions.PatchBukkitPermissionManager;
- 
- @SuppressWarnings("removal")
+@@ -26,2 +23 @@ import org.patchbukkit.permissions.PatchBukkitPermissionManager;
 -public class PatchBukkitPluginManager implements PluginManager {
 -    private final Server server;
 +public class PatchBukkitPluginManager extends SimplePluginManager {
-     private final PatchBukkitEventManager eventManager;
-     private final Map<String, Plugin> plugins = new ConcurrentHashMap<>();
+@@ -30 +25,0 @@ public class PatchBukkitPluginManager implements PluginManager {
 -    PermissionManager permissionManager;
- 
-     public PatchBukkitPluginManager(Server server) {
+@@ -33 +28 @@ public class PatchBukkitPluginManager implements PluginManager {
 -        this.server = server;
 +        super(server, new SimpleCommandMap(server, new HashMap<>()));
-         this.eventManager = new PatchBukkitEventManager(server);
+@@ -35 +29,0 @@ public class PatchBukkitPluginManager implements PluginManager {
 -        this.permissionManager = new PatchBukkitPermissionManager();
-     }
- 
-     public PatchBukkitEventManager getEventManager() {
-@@ -155,8 +149,12 @@ public class PatchBukkitPluginManager implements PluginManager {
-         if (!plugin.isEnabled()) {
-             try {
-                 plugin.getPluginLoader().enablePlugin(plugin);
+@@ -157,0 +152 @@ public class PatchBukkitPluginManager implements PluginManager {
 +                callEvent(new PluginEnableEvent(plugin));
-             } catch (Throwable ex) {
+@@ -159 +154,4 @@ public class PatchBukkitPluginManager implements PluginManager {
 -                server.getLogger().severe("Error enabling " + plugin.getName() + ": " + ex.getMessage());
 +                throw new IllegalStateException(
 +                    "Error enabling " + plugin.getName(),
 +                    ex
 +                );
-             }
-         }
-     }
-@@ -165,96 +163,10 @@ public class PatchBukkitPluginManager implements PluginManager {
-     public void disablePlugin(@NotNull Plugin plugin) {
-         if (plugin.isEnabled()) {
-             plugin.getPluginLoader().disablePlugin(plugin);
+@@ -167,0 +166 @@ public class PatchBukkitPluginManager implements PluginManager {
 +            callEvent(new PluginDisableEvent(plugin));
-         }
-     }
- 
+@@ -171,87 +169,0 @@ public class PatchBukkitPluginManager implements PluginManager {
 -    @Override
 -    public @Nullable Permission getPermission(@NotNull String name) {
 -        return this.permissionManager.getPermission(name);
@@ -1106,94 +953,85 @@ index d90de1b..645ffa2 100644
 -        );
 -    }
 -
-     @Override
-     public boolean isTransitiveDependency(
-         PluginMeta pluginMeta,
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
-index d935769..9881ba6 100644
+index d935769..299fa66 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
-@@ -7,12 +7,15 @@ import io.papermc.paper.ban.BanListType;
- import io.papermc.paper.configuration.ServerConfiguration;
- import io.papermc.paper.datapack.DatapackManager;
- import io.papermc.paper.math.Position;
+@@ -9,0 +10 @@ import io.papermc.paper.math.Position;
 +import io.papermc.paper.registry.RegistryAccess;
- import io.papermc.paper.threadedregions.scheduler.AsyncScheduler;
- import io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler;
- import io.papermc.paper.threadedregions.scheduler.RegionScheduler;
- 
- import java.awt.image.BufferedImage;
- import java.io.File;
+@@ -15,0 +17,2 @@ import java.io.File;
 +import java.io.PrintWriter;
 +import java.io.StringWriter;
- import java.net.InetAddress;
- import java.util.Collection;
- import java.util.Collections;
-@@ -21,6 +24,7 @@ import java.util.List;
- import java.util.Map;
- import java.util.Set;
- import java.util.UUID;
+@@ -23,0 +27 @@ import java.util.UUID;
 +import java.util.concurrent.atomic.AtomicBoolean;
- import java.util.function.Consumer;
- import java.util.logging.Level;
- import java.util.logging.Logger;
-@@ -93,10 +97,13 @@ import org.jetbrains.annotations.Nullable;
- import org.patchbukkit.command.PatchBukkitCommandMap;
- import org.patchbukkit.command.PatchBukkitConsoleCommandSender;
- import org.patchbukkit.events.PatchBukkitEventManager;
+@@ -95,0 +100 @@ import org.patchbukkit.events.PatchBukkitEventManager;
 +import org.patchbukkit.registry.PatchBukkitLegacyTags;
- import org.patchbukkit.scheduler.PatchBukkitScheduler;
- import org.patchbukkit.versioning.Versioning;
+@@ -97,0 +103 @@ import org.patchbukkit.versioning.Versioning;
 +import org.patchbukkit.world.PatchBukkitWorld;
- 
- import patchbukkit.bridge.NativeBridgeFfi;
+@@ -99,0 +106 @@ import patchbukkit.bridge.NativeBridgeFfi;
 +import patchbukkit.common.EmptyRequest;
- import patchbukkit.log.LogLevel;
- import patchbukkit.log.SendLogRequest;
- 
-@@ -110,6 +117,8 @@ public class PatchBukkitServer implements Server {
-     private final BukkitScheduler scheduler = new PatchBukkitScheduler();
-     private final PatchBukkitPluginManager pluginManager = new PatchBukkitPluginManager(this);
-     private final ServicesManager servicesManager = new PatchBukkitServicesManager();
+@@ -112,0 +120,2 @@ public class PatchBukkitServer implements Server {
 +    private final AtomicBoolean stopping = new AtomicBoolean();
 +    private final Thread primaryThread = Thread.currentThread();
- 
- 
-     private final Map<UUID, Player> onlinePlayers = new java.util.concurrent.ConcurrentHashMap<>();
-@@ -141,11 +150,17 @@ public class PatchBukkitServer implements Server {
-         root.addHandler(new java.util.logging.Handler() {
-             @Override
-             public void publish(java.util.logging.LogRecord record) {
+@@ -116,0 +126 @@ public class PatchBukkitServer implements Server {
++    private final Map<UUID, Player> pendingPlayers = new java.util.concurrent.ConcurrentHashMap<>();
+@@ -143,0 +154,6 @@ public class PatchBukkitServer implements Server {
 +                String message = record.getMessage();
 +                if (record.getThrown() != null) {
 +                    StringWriter stackTrace = new StringWriter();
 +                    record.getThrown().printStackTrace(new PrintWriter(stackTrace));
 +                    message += System.lineSeparator() + stackTrace;
 +                }
-                 LogLevel logLevel = LEVEL_MAP.getOrDefault(record.getLevel(), LogLevel.INFO);
-                 NativeBridgeFfi.sendLog(
-                         SendLogRequest.newBuilder()
-                                 .setLevel(logLevel)
+@@ -148 +164 @@ public class PatchBukkitServer implements Server {
 -                                .setMessage(record.getMessage())
 +                                .setMessage(message)
-                                 .setLoggerName(record.getLoggerName())
-                                 .build()
-                 );
-@@ -181,6 +196,10 @@ public class PatchBukkitServer implements Server {
-         this.pluginManager.registerPlugin(plugin);
-     }
- 
+@@ -165,0 +182,38 @@ public class PatchBukkitServer implements Server {
++    /**
++     * Makes a login-stage player available to the event bridge without exposing
++     * it through Bukkit's online-player collection.
++     */
++    public void registerPendingPlayer(Player player) {
++        this.pendingPlayers.putIfAbsent(player.getUniqueId(), player);
++    }
++
++    /**
++     * Promotes the exact player object used by PlayerLoginEvent so permission
++     * plugins keep their injected permissible delegate after login.
++     *
++     * @return whether a pending player was found and promoted
++     */
++    public boolean promotePendingPlayer(UUID uuid) {
++        Player player = this.pendingPlayers.remove(uuid);
++        if (player == null) {
++            return false;
++        }
++        this.registerPlayer(player);
++        return true;
++    }
++
++    /**
++     * Removes login-stage state after a denied connection.
++     */
++    public void discardPendingPlayer(UUID uuid) {
++        this.pendingPlayers.remove(uuid);
++    }
++
++    /**
++     * Internal event lookup that includes a player still in the login phase.
++     */
++    public @Nullable Player getEventPlayer(UUID uuid) {
++        Player player = this.onlinePlayers.get(uuid);
++        return player != null ? player : this.pendingPlayers.get(uuid);
++    }
++
+@@ -173,0 +228 @@ public class PatchBukkitServer implements Server {
++        this.pendingPlayers.remove(uuid);
+@@ -183,0 +239,4 @@ public class PatchBukkitServer implements Server {
 +    public void setStopping(boolean stopping) {
 +        this.stopping.set(stopping);
 +    }
 +
-     @Override
-     public void sendPluginMessage(
-         @NotNull Plugin source,
-@@ -211,10 +230,9 @@ public class PatchBukkitServer implements Server {
- 
-     @Override
-     public @NotNull File getPluginsFolder() {
+@@ -214,4 +273,3 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getPluginsFolder'"
@@ -1201,31 +1039,19 @@ index d935769..9881ba6 100644
 +        return new File(
 +            "plugins/patchbukkit/patchbukkit-plugins"
 +        ).getAbsoluteFile();
-     }
- 
-     @Override
-@@ -234,10 +252,7 @@ public class PatchBukkitServer implements Server {
- 
-     @Override
-     public @NotNull String getMinecraftVersion() {
+@@ -237,4 +295 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getMinecraftVersion'"
 -        );
 +        return getVersion();
-     }
- 
-     @Override
-@@ -531,10 +546,17 @@ public class PatchBukkitServer implements Server {
- 
-     @Override
-     public @NotNull List<World> getWorlds() {
+@@ -534,3 +589,2 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getWorlds'"
 +        var response = NativeBridgeFfi.getWorlds(
 +            EmptyRequest.newBuilder().setPresent(true).build()
-         );
+@@ -537,0 +592,8 @@ public class PatchBukkitServer implements Server {
 +        if (response == null) {
 +            return Collections.emptyList();
 +        }
@@ -1234,13 +1060,7 @@ index d935769..9881ba6 100644
 +            .map(PatchBukkitWorld::getOrCreate)
 +            .map(world -> (World) world)
 +            .toList();
-     }
- 
-     @Override
-@@ -587,26 +609,31 @@ public class PatchBukkitServer implements Server {
- 
-     @Override
-     public @Nullable World getWorld(@NotNull String name) {
+@@ -590,4 +652,5 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getWorld'"
@@ -1250,10 +1070,7 @@ index d935769..9881ba6 100644
 +            .filter(world -> world.getName().equalsIgnoreCase(name))
 +            .findFirst()
 +            .orElse(null);
-     }
- 
-     @Override
-     public @Nullable World getWorld(@NotNull UUID uid) {
+@@ -598,4 +661,5 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getWorld'"
@@ -1263,10 +1080,7 @@ index d935769..9881ba6 100644
 +            .filter(world -> world.getUID().equals(uid))
 +            .findFirst()
 +            .orElse(null);
-     }
- 
-     @Override
-     public @Nullable World getWorld(@NotNull Key worldKey) {
+@@ -606,4 +670,7 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getWorld'"
@@ -1278,25 +1092,13 @@ index d935769..9881ba6 100644
 +                || NamespacedKey.minecraft(world.getName()).asString().equals(key))
 +            .findFirst()
 +            .orElse(null);
-     }
- 
-     @Override
-@@ -718,10 +745,7 @@ public class PatchBukkitServer implements Server {
-         @NotNull CommandSender sender,
-         @NotNull String commandLine
-     ) throws CommandException {
+@@ -721,4 +788 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'dispatchCommand'"
 -        );
 +        return this.commandMap.dispatch(sender, commandLine);
-     }
- 
-     @Override
-@@ -867,10 +891,9 @@ public class PatchBukkitServer implements Server {
- 
-     @Override
-     public boolean getOnlineMode() {
+@@ -870,4 +934,3 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getOnlineMode'"
@@ -1304,164 +1106,77 @@ index d935769..9881ba6 100644
 +        return NativeBridgeFfi
 +            .getPatchBukkitConfig(EmptyRequest.newBuilder().setPresent(true).build())
 +            .getOnlineMode();
-     }
- 
-     @Override
-@@ -1224,10 +1247,7 @@ public class PatchBukkitServer implements Server {
- 
-     @Override
-     public boolean isPrimaryThread() {
+@@ -1227,4 +1290 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'isPrimaryThread'"
 -        );
 +        return Thread.currentThread() == this.primaryThread;
-     }
- 
-     @Override
-@@ -1284,10 +1304,7 @@ public class PatchBukkitServer implements Server {
- 
-     @Override
-     public @NotNull WarningState getWarningState() {
+@@ -1287,4 +1347 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getWarningState'"
 -        );
 +        return WarningState.DEFAULT;
-     }
- 
-     @Override
-@@ -1541,10 +1558,7 @@ public class PatchBukkitServer implements Server {
-         @NotNull NamespacedKey tag,
-         @NotNull Class<T> clazz
-     ) {
+@@ -1544,4 +1601 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getTag'"
 -        );
 +        return PatchBukkitLegacyTags.getTag(registry, tag, clazz);
-     }
- 
-     @Override
-@@ -1552,10 +1566,7 @@ public class PatchBukkitServer implements Server {
-         @NotNull String registry,
-         @NotNull Class<T> clazz
-     ) {
+@@ -1555,4 +1609 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getTags'"
 -        );
 +        return PatchBukkitLegacyTags.getTags(registry, clazz);
-     }
- 
-     @Override
-@@ -1589,10 +1600,7 @@ public class PatchBukkitServer implements Server {
-     public <T extends Keyed> @Nullable Registry<T> getRegistry(
-         @NotNull Class<T> tClass
-     ) {
+@@ -1592,4 +1643 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getRegistry'"
 -        );
 +        return RegistryAccess.registryAccess().getRegistry(tClass);
-     }
- 
-     @Override
-@@ -1705,10 +1713,7 @@ public class PatchBukkitServer implements Server {
- 
-     @Override
-     public boolean isStopping() {
+@@ -1708,4 +1756 @@ public class PatchBukkitServer implements Server {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'isStopping'"
 -        );
 +        return stopping.get();
-     }
- 
-     @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
 index 53a254c..c6d19d6 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
-@@ -6,6 +6,7 @@ import io.papermc.paper.entity.EntitySerializationFlag;
- import io.papermc.paper.inventory.tooltip.TooltipContext;
- import io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager;
- import io.papermc.paper.registry.RegistryKey;
+@@ -8,0 +9 @@ import io.papermc.paper.registry.RegistryKey;
 +import io.papermc.paper.registry.RegistryAccess;
- import java.io.IOException;
- import java.util.List;
- import java.util.Map;
-@@ -47,6 +48,7 @@ import org.jetbrains.annotations.NotNull;
- import org.jetbrains.annotations.Nullable;
- import org.jspecify.annotations.NonNull;
- import org.patchbukkit.events.PatchBukkitLifecycleEventManager;
+@@ -49,0 +51 @@ import org.patchbukkit.events.PatchBukkitLifecycleEventManager;
 +import org.patchbukkit.damage.PatchBukkitDamageSource;
- import org.patchbukkit.versioning.ApiVersion;
- import org.patchbukkit.versioning.Versioning;
- import patchbukkit.common.EmptyRequest;
-@@ -54,6 +56,10 @@ import patchbukkit.common.EmptyRequest;
- @SuppressWarnings("removal")
- public class PatchBukkitUnsafeValues implements UnsafeValues {
- 
+@@ -56,0 +59,4 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
 +    // Minecraft Java Edition 26.2 world data version, from the official
 +    // Mojang server version.json. Keep this aligned with Pumpkin's protocol.
 +    private static final int DATA_VERSION = 4903;
 +
-     public static final PatchBukkitUnsafeValues INSTANCE =
-         new PatchBukkitUnsafeValues();
- 
-@@ -61,7 +67,9 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
-     public boolean isSupportedApiVersion(String apiVersion) {
-         if (apiVersion == null) return false;
-         final ApiVersion toCheck = ApiVersion.getOrCreateVersion(apiVersion);
+@@ -64 +70,3 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
 -        var minimumApi = NativeBridgeFfi.getPatchBukkitConfig(EmptyRequest.newBuilder().build()).getMinimumSupportedPluginApi();
 +        var minimumApi = NativeBridgeFfi
 +            .getPatchBukkitConfig(EmptyRequest.newBuilder().setPresent(true).build())
 +            .getMinimumSupportedPluginApi();
-         final ApiVersion minimumVersion = ApiVersion.getOrCreateVersion(minimumApi);
- 
-         return !toCheck.isNewerThan(ApiVersion.CURRENT) && !toCheck.isOlderThan(minimumVersion);
-@@ -78,8 +86,7 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
- 
- 	@Override
- 	public ComponentFlattener componentFlattener() {
+@@ -81,2 +89 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
 -		// TODO Auto-generated method stub
 -		throw new UnsupportedOperationException("Unimplemented method 'componentFlattener'");
 +		return ComponentFlattener.basic();
- 	}
- 
- 	@Override
-@@ -154,8 +161,7 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
- 
- 	@Override
- 	public int getDataVersion() {
+@@ -157,2 +164 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
 -		// TODO Auto-generated method stub
 -		throw new UnsupportedOperationException("Unimplemented method 'getDataVersion'");
 +		return DATA_VERSION;
- 	}
- 
- 	@Override
-@@ -232,8 +238,7 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
- 
- 	@Override
- 	public @NotNull Builder createDamageSourceBuilder(@NotNull DamageType damageType) {
+@@ -235,2 +241 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
 -		// TODO Auto-generated method stub
 -		throw new UnsupportedOperationException("Unimplemented method 'createDamageSourceBuilder'");
 +		return PatchBukkitDamageSource.builder(damageType);
- 	}
- 
- 	@Override
-@@ -244,8 +249,8 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
- 
- 	@Override
- 	public <B extends Keyed> B get(RegistryKey<B> registry, NamespacedKey key) {
+@@ -247,2 +252,2 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
 -		// TODO Auto-generated method stub
 -		throw new UnsupportedOperationException("Unimplemented method 'get'");
 +		Registry<B> values = RegistryAccess.registryAccess().getRegistry(registry);
 +		return values == null ? null : values.get(key);
- 	}
- 
- 	@Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/damage/PatchBukkitDamageSource.java b/java/patchbukkit/src/main/java/org/patchbukkit/damage/PatchBukkitDamageSource.java
 new file mode 100644
 index 0000000..ed415a4
@@ -1598,19 +1313,10 @@ diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEn
 index c950b98..9b759b8 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEntity.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEntity.java
-@@ -23,6 +23,8 @@ import org.bukkit.entity.Pose;
- import org.bukkit.entity.SpawnCategory;
- import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason;
- import org.bukkit.event.entity.EntityDamageEvent;
+@@ -25,0 +26,2 @@ import org.bukkit.event.entity.EntityDamageEvent;
 +import org.bukkit.event.player.PlayerChangedWorldEvent;
 +import org.bukkit.event.player.PlayerTeleportEvent;
- import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
- import org.bukkit.inventory.ItemStack;
- import org.bukkit.metadata.MetadataValue;
-@@ -337,8 +339,70 @@ public class PatchBukkitEntity implements Entity {
-     @Override
-     public boolean teleport(@NotNull Location location, @NotNull TeleportCause cause,
-             @NotNull TeleportFlag @NotNull... teleportFlags) {
+@@ -340,2 +342,64 @@ public class PatchBukkitEntity implements Entity {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'teleport'");
 +        java.util.Objects.requireNonNull(location, "location");
@@ -1677,75 +1383,45 @@ index c950b98..9b759b8 100644
 +            Bukkit.getPluginManager().callEvent(new PlayerChangedWorldEvent(player, previousWorld));
 +        }
 +        return success;
-     }
- 
-     @Override
-@@ -349,33 +413,29 @@ public class PatchBukkitEntity implements Entity {
- 
-     @Override
-     public boolean teleport(@NotNull Location location) {
+@@ -352,2 +416 @@ public class PatchBukkitEntity implements Entity {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'teleport'");
 +        return this.teleport(location, TeleportCause.PLUGIN);
-     }
- 
-     @Override
-     public boolean teleport(@NotNull Location location, @NotNull TeleportCause cause) {
+@@ -358,2 +421 @@ public class PatchBukkitEntity implements Entity {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'teleport'");
 +        return this.teleport(location, cause, new TeleportFlag[0]);
-     }
- 
-     @Override
-     public boolean teleport(@NotNull Entity destination) {
+@@ -364,2 +426 @@ public class PatchBukkitEntity implements Entity {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'teleport'");
 +        return this.teleport(destination, TeleportCause.PLUGIN);
-     }
- 
-     @Override
-     public boolean teleport(@NotNull Entity destination, @NotNull TeleportCause cause) {
+@@ -370,2 +431,2 @@ public class PatchBukkitEntity implements Entity {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'teleport'");
 +        java.util.Objects.requireNonNull(destination, "destination");
 +        return this.teleport(destination.getLocation(), cause);
-     }
- 
-     @Override
-     public @NotNull CompletableFuture<Boolean> teleportAsync(@NotNull Location loc, @NotNull TeleportCause cause,
-             @NotNull TeleportFlag @NotNull... teleportFlags) {
+@@ -377,2 +438 @@ public class PatchBukkitEntity implements Entity {
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'teleportAsync'");
 +        return CompletableFuture.completedFuture(this.teleport(loc, cause, teleportFlags));
-     }
- 
-     @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
-index e48457f..b1641c8 100644
+index e48457f..45bea6e 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
-@@ -50,6 +50,7 @@ import org.checkerframework.checker.index.qual.NonNegative;
- import org.jetbrains.annotations.NotNull;
- import org.jetbrains.annotations.Nullable;
- import org.jetbrains.annotations.Range;
+@@ -39 +38,0 @@ import org.bukkit.inventory.InventoryView.Property;
+-import org.bukkit.permissions.PermissibleBase;
+@@ -52,0 +52 @@ import org.jetbrains.annotations.Range;
 +import org.patchbukkit.bridge.BridgeUtils;
- 
- import com.destroystokyo.paper.block.TargetBlockInfo;
- import com.destroystokyo.paper.block.TargetBlockInfo.FluidMode;
-@@ -58,6 +59,9 @@ import com.destroystokyo.paper.entity.TargetEntityInfo;
- import io.papermc.paper.world.damagesource.CombatTracker;
- import net.kyori.adventure.key.Key;
- import net.kyori.adventure.util.TriState;
+@@ -60,0 +61,3 @@ import net.kyori.adventure.util.TriState;
 +import patchbukkit.bridge.NativeBridgeFfi;
 +import patchbukkit.player.PlayerVitals;
 +import patchbukkit.player.UpdatePlayerVitalsRequest;
- 
- @SuppressWarnings({ "deprecation", "removal" })
- public class PatchBukkitHumanEntity
-@@ -71,6 +75,23 @@ public class PatchBukkitHumanEntity
-         super(uuid, name);
-     }
- 
+@@ -64 +67 @@ public class PatchBukkitHumanEntity
+-    extends PatchBukkitLivingEntity
++    extends org.bukkit.craftbukkit.entity.CraftHumanEntity
+@@ -67 +69,0 @@ public class PatchBukkitHumanEntity
+-    protected final PermissibleBase perm = new PermissibleBase(this);
+@@ -73,0 +76,17 @@ public class PatchBukkitHumanEntity
 +    private PlayerVitals getPlayerVitals() {
 +        PlayerVitals vitals = NativeBridgeFfi.getPlayerVitals(BridgeUtils.convertUuid(this.uuid));
 +        if (vitals == null) {
@@ -1763,20 +1439,11 @@ index e48457f..b1641c8 100644
 +        }
 +    }
 +
-     @Override
-     public boolean isOp() {
-         return this.op;
-@@ -812,14 +833,17 @@ public class PatchBukkitHumanEntity
- 
-     @Override
-     public double getHealth() {
+@@ -815,2 +834 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getHealth'");
 +        return this.getPlayerVitals().getHealth();
-     }
- 
-     @Override
-     public void setHealth(double health) {
+@@ -821,2 +839,6 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setHealth'");
 +        if (!Double.isFinite(health) || health < 0.0 || health > this.getMaxHealth()) {
@@ -1785,20 +1452,11 @@ index e48457f..b1641c8 100644
 +        this.updatePlayerVitals(
 +            UpdatePlayerVitalsRequest.newBuilder().setHealth(health)
 +        );
-     }
- 
-     @Override
-@@ -830,32 +854,37 @@ public class PatchBukkitHumanEntity
- 
-     @Override
-     public double getAbsorptionAmount() {
+@@ -833,2 +855 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getAbsorptionAmount'");
 +        return this.getPlayerVitals().getAbsorption();
-     }
- 
-     @Override
-     public void setAbsorptionAmount(double amount) {
+@@ -839,2 +860,6 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setAbsorptionAmount'");
 +        if (!Double.isFinite(amount) || amount < 0.0) {
@@ -1807,17 +1465,11 @@ index e48457f..b1641c8 100644
 +        this.updatePlayerVitals(
 +            UpdatePlayerVitalsRequest.newBuilder().setAbsorption(amount)
 +        );
-     }
- 
-     @Override
-     public double getMaxHealth() {
+@@ -845,2 +870 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getMaxHealth'");
 +        return this.getPlayerVitals().getMaxHealth();
-     }
- 
-     @Override
-     public void setMaxHealth(double health) {
+@@ -851,2 +875,6 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setMaxHealth'");
 +        if (!Double.isFinite(health) || health <= 0.0) {
@@ -1826,20 +1478,11 @@ index e48457f..b1641c8 100644
 +        this.updatePlayerVitals(
 +            UpdatePlayerVitalsRequest.newBuilder().setMaxHealth(health)
 +        );
-     }
- 
-     @Override
-     public void resetMaxHealth() {
+@@ -857,2 +885 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'resetMaxHealth'");
 +        this.setMaxHealth(20.0);
-     }
- 
-     @Override
-@@ -1128,14 +1157,42 @@ public class PatchBukkitHumanEntity
- 
-     @Override
-     public GameMode getGameMode() {
+@@ -1131,2 +1158,8 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getGameMode'");
 +        patchbukkit.player.PlayerGameMode gameMode =
@@ -1850,10 +1493,7 @@ index e48457f..b1641c8 100644
 +            throw new IllegalStateException("Player is no longer online: " + this.uuid);
 +        }
 +        return GameMode.valueOf(gameMode.getCurrent().toUpperCase(java.util.Locale.ROOT));
-     }
- 
-     @Override
-     public void setGameMode(GameMode mode) {
+@@ -1137,2 +1170,24 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setGameMode'");
 +        java.util.Objects.requireNonNull(mode, "mode");
@@ -1880,20 +1520,11 @@ index e48457f..b1641c8 100644
 +                "Failed to apply game mode " + mode + " for player " + this.uuid
 +            );
 +        }
-     }
- 
-     @Override
-@@ -1257,38 +1314,47 @@ public class PatchBukkitHumanEntity
- 
-     @Override
-     public float getExhaustion() {
+@@ -1260,2 +1315 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getExhaustion'");
 +        return this.getPlayerVitals().getExhaustion();
-     }
- 
-     @Override
-     public void setExhaustion(float value) {
+@@ -1266,2 +1320,6 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setExhaustion'");
 +        if (!Float.isFinite(value) || value < 0.0f) {
@@ -1902,17 +1533,11 @@ index e48457f..b1641c8 100644
 +        this.updatePlayerVitals(
 +            UpdatePlayerVitalsRequest.newBuilder().setExhaustion(value)
 +        );
-     }
- 
-     @Override
-     public float getSaturation() {
+@@ -1272,2 +1330 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getSaturation'");
 +        return this.getPlayerVitals().getSaturation();
-     }
- 
-     @Override
-     public void setSaturation(float value) {
+@@ -1278,2 +1335,6 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setSaturation'");
 +        if (!Float.isFinite(value) || value < 0.0f) {
@@ -1921,17 +1546,11 @@ index e48457f..b1641c8 100644
 +        this.updatePlayerVitals(
 +            UpdatePlayerVitalsRequest.newBuilder().setSaturation(value)
 +        );
-     }
- 
-     @Override
-     public int getFoodLevel() {
+@@ -1284,2 +1345 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getFoodLevel'");
 +        return this.getPlayerVitals().getFoodLevel();
-     }
- 
-     @Override
-     public void setFoodLevel(int value) {
+@@ -1290,2 +1350,6 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setFoodLevel'");
 +        if (value < 0 || value > 20) {
@@ -1940,44 +1559,23 @@ index e48457f..b1641c8 100644
 +        this.updatePlayerVitals(
 +            UpdatePlayerVitalsRequest.newBuilder().setFoodLevel(value)
 +        );
-     }
- 
-     @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
 index 458bbb9..66285af 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
-@@ -163,14 +163,12 @@ public class PatchBukkitPlayer
- 
-     @Override
-     public boolean isOnline() {
+@@ -166,2 +166 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'isOnline'");
 +        return org.bukkit.Bukkit.getPlayer(this.uuid) != null;
-     }
- 
-     @Override
-     public boolean isConnected() {
+@@ -172,2 +171 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'isConnected'");
 +        return this.isOnline();
-     }
- 
-     @Override
-@@ -217,8 +215,7 @@ public class PatchBukkitPlayer
- 
-     @Override
-     public @org.jspecify.annotations.Nullable Player getPlayer() {
+@@ -220,2 +218 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getPlayer'");
 +        return org.bukkit.Bukkit.getPlayer(this.uuid);
-     }
- 
-     @Override
-@@ -1063,8 +1060,14 @@ public class PatchBukkitPlayer
- 
-     @Override
-     public @org.jspecify.annotations.Nullable GameMode getPreviousGameMode() {
+@@ -1066,2 +1063,8 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getPreviousGameMode'");
 +        patchbukkit.player.PlayerGameMode gameMode =
@@ -1988,41 +1586,21 @@ index 458bbb9..66285af 100644
 +        return GameMode.valueOf(
 +            gameMode.getPrevious().toUpperCase(java.util.Locale.ROOT)
 +        );
-     }
- 
-     @Override
-@@ -1220,7 +1223,7 @@ public class PatchBukkitPlayer
-     public void setAllowFlight(boolean flight) {
-         var abilities = NativeBridgeFfi.getAbilities(BridgeUtils.convertUuid(this.uuid)).toBuilder();
-         abilities.setAllowFlying(flight);
+@@ -1223 +1226 @@ public class PatchBukkitPlayer
 -        if (abilities.getFlying()) abilities.setFlying(false);
 +        if (!flight && abilities.getFlying()) abilities.setFlying(false);
-         NativeBridgeFfi.setAbilities(SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(BridgeUtils.convertUuid(this.uuid)).build());
-     }
- 
-@@ -1308,39 +1311,58 @@ public class PatchBukkitPlayer
- 
-     @Override
-     public boolean isFlying() {
+@@ -1311,2 +1314 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'isFlying'");
 +        return NativeBridgeFfi.getAbilities(BridgeUtils.convertUuid(this.uuid)).getFlying();
-     }
- 
-     @Override
-     public void setFlying(boolean value) {
-         var playerUuid = BridgeUtils.convertUuid(this.getUniqueId());
+@@ -1318 +1320,5 @@ public class PatchBukkitPlayer
 -        var abilities = NativeBridgeFfi.getAbilities(playerUuid).toBuilder().setFlying(value).build();
 +        var abilitiesBuilder = NativeBridgeFfi.getAbilities(playerUuid).toBuilder();
 +        if (value && !abilitiesBuilder.getAllowFlying()) {
 +            throw new IllegalArgumentException("Cannot make player fly when flight is not allowed");
 +        }
 +        var abilities = abilitiesBuilder.setFlying(value).build();
-         NativeBridgeFfi.setAbilities(SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(playerUuid).build());
-     }
- 
-     @Override
-     public void setFlySpeed(float value) throws IllegalArgumentException {
+@@ -1324,2 +1330,8 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setFlySpeed'");
 +        validateSpeed(value);
@@ -2033,10 +1611,7 @@ index 458bbb9..66285af 100644
 +        NativeBridgeFfi.setAbilities(
 +            SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(playerUuid).build()
 +        );
-     }
- 
-     @Override
-     public void setWalkSpeed(float value) throws IllegalArgumentException {
+@@ -1330,2 +1342,8 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setWalkSpeed'");
 +        validateSpeed(value);
@@ -2047,17 +1622,11 @@ index 458bbb9..66285af 100644
 +        NativeBridgeFfi.setAbilities(
 +            SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(playerUuid).build()
 +        );
-     }
- 
-     @Override
-     public float getFlySpeed() {
+@@ -1336,2 +1354 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getFlySpeed'");
 +        return NativeBridgeFfi.getAbilities(BridgeUtils.convertUuid(this.uuid)).getFlySpeed() * 2.0f;
-     }
- 
-     @Override
-     public float getWalkSpeed() {
+@@ -1342,2 +1359,7 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getWalkSpeed'");
 +        return NativeBridgeFfi.getAbilities(BridgeUtils.convertUuid(this.uuid)).getWalkSpeed() * 2.0f;
@@ -2067,41 +1636,125 @@ index 458bbb9..66285af 100644
 +        if (!Float.isFinite(value) || value < -1.0f || value > 1.0f) {
 +            throw new IllegalArgumentException("Speed must be finite and between -1 and 1");
 +        }
-     }
- 
-     @Override
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
-index 14c24f1..e742661 100644
+index 14c24f1..effa0ef 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
-@@ -5,14 +5,23 @@ import net.kyori.adventure.text.Component;
- import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
- import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
- import org.bukkit.Bukkit;
+@@ -7,0 +8 @@ import org.bukkit.Bukkit;
 +import org.bukkit.GameMode;
- import org.bukkit.entity.Player;
- import org.jetbrains.annotations.NotNull;
- import org.jetbrains.annotations.Nullable;
- import patchbukkit.common.UUID;
- import patchbukkit.events.Event;
- import patchbukkit.events.FireEventResponse;
+@@ -13,0 +15,5 @@ import patchbukkit.events.FireEventResponse;
++import patchbukkit.events.AsyncPlayerPreLoginEvent;
 +import patchbukkit.events.PlayerChatEvent;
++import patchbukkit.events.PlayerChangedWorldEvent;
 +import patchbukkit.events.PlayerCommandPreprocessEvent;
 +import patchbukkit.events.PlayerGameModeChangeEvent;
- import patchbukkit.events.PlayerJoinEvent;
+@@ -14,0 +21,4 @@ import patchbukkit.events.PlayerJoinEvent;
++import patchbukkit.events.PlayerLoginEvent;
 +import patchbukkit.events.PlayerQuitEvent;
 +import patchbukkit.events.PlayerRespawnEvent;
 +import patchbukkit.events.ServerCommandEvent;
- 
+@@ -15,0 +26,4 @@ import patchbukkit.events.PlayerJoinEvent;
++import java.net.InetAddress;
++import java.net.UnknownHostException;
 +import java.util.LinkedHashSet;
 +import java.util.Set;
- import java.util.logging.Logger;
- 
- public class PatchBukkitEventFactory {
-@@ -42,6 +51,95 @@ public class PatchBukkitEventFactory {
-                 Component joinMessage = GsonComponentSerializer.gson().deserialize(joinEvent.getJoinMessage());
-                 yield new org.bukkit.event.player.PlayerJoinEvent(player, joinMessage);
-             }
+@@ -36,0 +51,69 @@ public class PatchBukkitEventFactory {
++            case ASYNC_PLAYER_PRE_LOGIN -> {
++                AsyncPlayerPreLoginEvent preLoginEvent = event.getAsyncPlayerPreLogin();
++                InetAddress address = parseAddress(preLoginEvent.getAddress());
++                InetAddress realAddress = parseAddress(preLoginEvent.getRealAddress());
++                if (address == null || realAddress == null) yield null;
++
++                java.util.UUID uuid;
++                org.bukkit.event.player.AsyncPlayerPreLoginEvent.Result result;
++                try {
++                    uuid = java.util.UUID.fromString(
++                        preLoginEvent.getPlayerUuid().getValue()
++                    );
++                    result = org.bukkit.event.player.AsyncPlayerPreLoginEvent.Result.valueOf(
++                        preLoginEvent.getResult()
++                    );
++                } catch (IllegalArgumentException e) {
++                    LOGGER.severe("EventFactory: Invalid AsyncPlayerPreLoginEvent data: "
++                        + e.getMessage());
++                    yield null;
++                }
++
++                Component kickMessage = GsonComponentSerializer.gson()
++                    .deserialize(preLoginEvent.getKickMessage());
++                org.bukkit.event.player.AsyncPlayerPreLoginEvent bukkitEvent =
++                    new org.bukkit.event.player.AsyncPlayerPreLoginEvent(
++                        preLoginEvent.getName(),
++                        address,
++                        realAddress,
++                        uuid,
++                        false,
++                        Bukkit.createProfile(uuid, preLoginEvent.getName()),
++                        preLoginEvent.getHostname(),
++                        null
++                    );
++                bukkitEvent.setLoginResult(result);
++                bukkitEvent.kickMessage(kickMessage);
++                yield bukkitEvent;
++            }
++            case PLAYER_LOGIN -> {
++                PlayerLoginEvent loginEvent = event.getPlayerLogin();
++                Player player = getEventPlayer(loginEvent.getPlayerUuid().getValue());
++                if (player == null) yield null;
++
++                InetAddress address = parseAddress(loginEvent.getAddress());
++                InetAddress realAddress = parseAddress(loginEvent.getRealAddress());
++                if (address == null || realAddress == null) yield null;
++
++                org.bukkit.event.player.PlayerLoginEvent.Result result;
++                try {
++                    result = org.bukkit.event.player.PlayerLoginEvent.Result.valueOf(
++                        loginEvent.getResult()
++                    );
++                } catch (IllegalArgumentException e) {
++                    LOGGER.severe("EventFactory: Invalid PlayerLoginEvent result "
++                        + loginEvent.getResult());
++                    yield null;
++                }
++
++                Component kickMessage = GsonComponentSerializer.gson()
++                    .deserialize(loginEvent.getKickMessage());
++                yield new org.bukkit.event.player.PlayerLoginEvent(
++                    player,
++                    loginEvent.getHostname(),
++                    address,
++                    result,
++                    kickMessage,
++                    realAddress
++                );
++            }
+@@ -44,0 +128,115 @@ public class PatchBukkitEventFactory {
++            case PLAYER_CHANGED_WORLD -> {
++                PlayerChangedWorldEvent changedWorldEvent = event.getPlayerChangedWorld();
++                Player player = getPlayer(changedWorldEvent.getPlayerUuid().getValue());
++                if (player == null) yield null;
++
++                org.bukkit.World previousWorld;
++                try {
++                    previousWorld = Bukkit.getWorld(java.util.UUID.fromString(
++                        changedWorldEvent.getPreviousWorldUuid().getValue()
++                    ));
++                } catch (IllegalArgumentException e) {
++                    LOGGER.severe("EventFactory: Invalid previous world UUID "
++                        + changedWorldEvent.getPreviousWorldUuid().getValue());
++                    yield null;
++                }
++                if (previousWorld == null) {
++                    LOGGER.warning("EventFactory: Previous world not found for UUID "
++                        + changedWorldEvent.getPreviousWorldUuid().getValue());
++                    yield null;
++                }
++
++                yield new org.bukkit.event.player.PlayerChangedWorldEvent(
++                    player,
++                    previousWorld
++                );
++            }
 +            case PLAYER_QUIT -> {
 +                PlayerQuitEvent quitEvent = event.getPlayerQuit();
 +                Player player = getPlayer(quitEvent.getPlayerUuid().getValue());
@@ -2191,13 +1844,52 @@ index 14c24f1..e742661 100644
 +                    reason
 +                );
 +            }
-             case DATA_NOT_SET -> {
-                 LOGGER.warning("EventFactory: Received Event with no data");
-                 yield null;
-@@ -69,6 +167,100 @@ public class PatchBukkitEventFactory {
-                     .setJoinMessage(joinMessage)
-                     .build()
-             );
+@@ -61 +259,32 @@ public class PatchBukkitEventFactory {
+-        if (event instanceof org.bukkit.event.player.PlayerJoinEvent joinEvent) {
++        if (event instanceof org.bukkit.event.player.AsyncPlayerPreLoginEvent preLoginEvent) {
++            eventBuilder.setAsyncPlayerPreLogin(
++                AsyncPlayerPreLoginEvent.newBuilder()
++                    .setName(preLoginEvent.getName())
++                    .setPlayerUuid(UUID.newBuilder()
++                        .setValue(preLoginEvent.getUniqueId().toString())
++                        .build())
++                    .setHostname(preLoginEvent.getHostname())
++                    .setAddress(preLoginEvent.getAddress().getHostAddress())
++                    .setRealAddress(preLoginEvent.getRawAddress().getHostAddress())
++                    .setResult(preLoginEvent.getLoginResult().name())
++                    .setKickMessage(
++                        GsonComponentSerializer.gson().serialize(preLoginEvent.kickMessage())
++                    )
++                    .build()
++            );
++        } else if (event instanceof org.bukkit.event.player.PlayerLoginEvent loginEvent) {
++            eventBuilder.setPlayerLogin(
++                PlayerLoginEvent.newBuilder()
++                    .setPlayerUuid(UUID.newBuilder()
++                        .setValue(loginEvent.getPlayer().getUniqueId().toString())
++                        .build())
++                    .setHostname(loginEvent.getHostname())
++                    .setAddress(loginEvent.getAddress().getHostAddress())
++                    .setRealAddress(loginEvent.getRealAddress().getHostAddress())
++                    .setResult(loginEvent.getResult().name())
++                    .setKickMessage(
++                        GsonComponentSerializer.gson().serialize(loginEvent.kickMessage())
++                    )
++                    .build()
++            );
++        } else if (event instanceof org.bukkit.event.player.PlayerJoinEvent joinEvent) {
+@@ -71,0 +301,105 @@ public class PatchBukkitEventFactory {
++        } else if (event instanceof org.bukkit.event.player.PlayerChangedWorldEvent changedWorldEvent) {
++            eventBuilder.setPlayerChangedWorld(
++                PlayerChangedWorldEvent.newBuilder()
++                    .setPlayerUuid(UUID.newBuilder()
++                        .setValue(changedWorldEvent.getPlayer().getUniqueId().toString())
++                        .build())
++                    .setPreviousWorldUuid(UUID.newBuilder()
++                        .setValue(changedWorldEvent.getFrom().getUID().toString())
++                        .build())
++                    .build()
++            );
 +        } else if (event instanceof org.bukkit.event.player.PlayerQuitEvent quitEvent) {
 +            String quitMessage = GsonComponentSerializer.gson().serialize(quitEvent.quitMessage());
 +
@@ -2292,74 +1984,66 @@ index 14c24f1..e742661 100644
 +                    )
 +                    .build()
 +            );
-         }
- 
-         builder.setData(eventBuilder.build());
+@@ -82,0 +417,28 @@ public class PatchBukkitEventFactory {
++    @Nullable
++    private static Player getEventPlayer(@NotNull String uuidStr) {
++        try {
++            java.util.UUID uuid = java.util.UUID.fromString(uuidStr);
++            if (Bukkit.getServer() instanceof org.patchbukkit.PatchBukkitServer server) {
++                Player player = server.getEventPlayer(uuid);
++                if (player == null) {
++                    LOGGER.warning("EventFactory: Pending player not found for UUID " + uuidStr);
++                }
++                return player;
++            }
++            return Bukkit.getServer().getPlayer(uuid);
++        } catch (IllegalArgumentException e) {
++            LOGGER.severe("EventFactory: Invalid UUID string: " + uuidStr);
++            return null;
++        }
++    }
++
++    @Nullable
++    private static InetAddress parseAddress(@NotNull String address) {
++        try {
++            return InetAddress.getByName(address);
++        } catch (UnknownHostException e) {
++            LOGGER.severe("EventFactory: Invalid player address " + address);
++            return null;
++        }
++    }
++
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
 index ba94bfa..9420cad 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
-@@ -7,12 +7,15 @@ import org.bukkit.event.EventHandler;
- import org.bukkit.event.EventPriority;
- import org.bukkit.event.HandlerList;
- import org.bukkit.event.Listener;
+@@ -9,0 +10,2 @@ import org.bukkit.event.Listener;
 +import org.bukkit.event.server.PluginDisableEvent;
 +import org.bukkit.event.server.PluginEnableEvent;
- import org.bukkit.plugin.AuthorNagException;
- import org.bukkit.plugin.EventExecutor;
- import org.bukkit.plugin.IllegalPluginAccessException;
- import org.bukkit.plugin.Plugin;
- import org.bukkit.plugin.RegisteredListener;
- import org.patchbukkit.bridge.BridgeUtils;
+@@ -15,0 +18 @@ import org.patchbukkit.bridge.BridgeUtils;
 +import org.patchbukkit.loader.PatchBukkitPluginClassLoader;
- 
- import com.google.common.collect.Sets;
- 
-@@ -47,6 +50,11 @@ public class PatchBukkitEventManager {
-             throw new IllegalStateException(event.getEventName() + " may only be triggered synchronously.");
-         }
- 
+@@ -49,0 +53,5 @@ public class PatchBukkitEventManager {
 +        if (isJavaOnlyEvent(event.getClass())) {
 +            callEventJavaOnly(event);
 +            return;
 +        }
 +
-         var request = CallEventRequest.newBuilder();
-         switch (event.getEventName()) {
-             case "org.bukkit.event.player.PlayerJoinEvent":
-@@ -148,6 +156,9 @@ public class PatchBukkitEventManager {
-             this.getEventListeners(this.getRegistrationClass(entry.getKey())).registerAll(entry.getValue());
- 
-             for (RegisteredListener rl : entry.getValue()) {
+@@ -150,0 +159,3 @@ public class PatchBukkitEventManager {
 +                if (isJavaOnlyEvent(entry.getKey())) {
 +                    continue;
 +                }
-                 int priorityOrdinal = Math.min(rl.getPriority().ordinal(), 4);
-                 var request = RegisterEventRequest.newBuilder().setEventType(entry.getKey().getName()).setPluginName(plugin.getName()).setPriority(priorityOrdinal).setBlocking(true).build();
-                 NativeBridgeFfi.registerEvent(request);
-@@ -167,12 +178,22 @@ public class PatchBukkitEventManager {
-         executor = new TimedEventExecutor(executor, plugin, null, event);
-         this.getEventListeners(event).register(new RegisteredListener(listener, executor, priority, plugin, ignoreCancelled));
- 
+@@ -169,0 +181,4 @@ public class PatchBukkitEventManager {
 +        if (isJavaOnlyEvent(event)) {
 +            return;
 +        }
 +
-         int priorityOrdinal = Math.min(priority.ordinal(), 4);
-         var request = RegisterEventRequest.newBuilder().setEventType(event.getName()).setPluginName(plugin.getName()).setPriority(priorityOrdinal).setBlocking(true).build();
-         NativeBridgeFfi.registerEvent(request);
- 
-     }
- 
+@@ -175,0 +191,6 @@ public class PatchBukkitEventManager {
 +    private static boolean isJavaOnlyEvent(Class<? extends Event> eventClass) {
 +        return eventClass == PluginEnableEvent.class
 +            || eventClass == PluginDisableEvent.class
 +            || eventClass.getClassLoader() instanceof PatchBukkitPluginClassLoader;
 +    }
 +
-     @NotNull
-     private HandlerList getEventListeners(@NotNull Class<? extends Event> type) {
-         try {
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitDamageType.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitDamageType.java
 new file mode 100644
 index 0000000..4e2745c
@@ -2696,39 +2380,21 @@ diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkit
 index 854db6f..35f95bb 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
-@@ -5,6 +5,7 @@ import io.papermc.paper.registry.RegistryKey;
- import org.bukkit.Keyed;
- import org.bukkit.Registry;
- import org.bukkit.Sound;
+@@ -7,0 +8 @@ import org.bukkit.Sound;
 +import org.bukkit.damage.DamageType;
- import org.jspecify.annotations.Nullable;
- 
- import com.google.gson.JsonObject;
-@@ -32,6 +33,11 @@ public class PatchBukkitRegistryAccess implements RegistryAccess {
-                 data.getName(),
-                 data.getId()
-             )
+@@ -34,0 +36,5 @@ public class PatchBukkitRegistryAccess implements RegistryAccess {
 +        ),
 +        RegistryKey.DAMAGE_TYPE, new RegistryFactory<>(
 +            RegistryType.DAMAGE_TYPE,
 +            response -> response.getDamageType().getDamageTypesList(),
 +            PatchBukkitDamageType::new
-         )
-     );
- 
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
 index e8c2c36..1c566bc 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
-@@ -28,16 +28,28 @@ import org.bukkit.util.Vector;
- import org.jetbrains.annotations.NotNull;
- import org.jetbrains.annotations.Nullable;
- import org.jspecify.annotations.NonNull;
+@@ -31 +30,0 @@ import org.jspecify.annotations.NonNull;
 -
- public class PatchBukkitWorld
-     extends PatchBukkitRegionAccessor
-     implements World
- {
+@@ -36,2 +35,11 @@ public class PatchBukkitWorld
 -    private static final Map<UUID, PatchBukkitWorld> instances = new HashMap<>();
 -    private UUID uuid;
 +    private static final Map<UUID, PatchBukkitWorld> instances = new java.util.concurrent.ConcurrentHashMap<>();
@@ -2742,20 +2408,12 @@ index e8c2c36..1c566bc 100644
 +    private volatile double spawnZ;
 +    private volatile float spawnYaw;
 +    private volatile float spawnPitch;
- 
-     private PatchBukkitWorld(UUID uuid) {
-         this.uuid = uuid;
+@@ -40,0 +49,4 @@ public class PatchBukkitWorld
 +        this.name = uuid.toString();
 +        this.dimension = "minecraft:overworld";
 +        this.minHeight = -64;
 +        this.maxHeight = 320;
-     }
- 
-     public static PatchBukkitWorld getOrCreate(UUID uuid) {
-@@ -48,6 +60,20 @@ public class PatchBukkitWorld
-         return getOrCreate(UUID.fromString(uuid));
-     }
- 
+@@ -50,0 +63,14 @@ public class PatchBukkitWorld
 +    public static PatchBukkitWorld getOrCreate(patchbukkit.common.World data) {
 +        PatchBukkitWorld world = getOrCreate(data.getUuid().getValue());
 +        world.name = data.getName();
@@ -2770,13 +2428,7 @@ index e8c2c36..1c566bc 100644
 +        return world;
 +    }
 +
-     @Override
-     public boolean isVoidDamageEnabled() {
-         // TODO Auto-generated method stub
-@@ -590,9 +616,13 @@ public class PatchBukkitWorld
- 
-     @Override
-     public @NotNull Location getSpawnLocation() {
+@@ -593,3 +619,7 @@ public class PatchBukkitWorld
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getSpawnLocation'"
@@ -2787,25 +2439,13 @@ index e8c2c36..1c566bc 100644
 +            spawnZ,
 +            spawnYaw,
 +            spawnPitch
-         );
-     }
- 
-@@ -1581,10 +1611,7 @@ public class PatchBukkitWorld
- 
-     @Override
-     public @NotNull String getName() {
+@@ -1584,4 +1614 @@ public class PatchBukkitWorld
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getName'"
 -        );
 +        return name;
-     }
- 
-     @Override
-@@ -1594,10 +1621,12 @@ public class PatchBukkitWorld
- 
-     @Override
-     public @NotNull Environment getEnvironment() {
+@@ -1597,4 +1624,6 @@ public class PatchBukkitWorld
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getEnvironment'"
@@ -2816,46 +2456,25 @@ index e8c2c36..1c566bc 100644
 +            case "minecraft:the_end" -> Environment.THE_END;
 +            default -> Environment.CUSTOM;
 +        };
-     }
- 
-     @Override
-@@ -1610,18 +1639,12 @@ public class PatchBukkitWorld
- 
-     @Override
-     public int getMinHeight() {
+@@ -1613,4 +1642 @@ public class PatchBukkitWorld
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getMinHeight'"
 -        );
 +        return minHeight;
-     }
- 
-     @Override
-     public int getMaxHeight() {
+@@ -1621,4 +1647 @@ public class PatchBukkitWorld
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException(
 -            "Unimplemented method 'getMaxHeight'"
 -        );
 +        return maxHeight;
-     }
- 
-     @Override
 diff --git a/proto/patchbukkit/bridge.proto b/proto/patchbukkit/bridge.proto
 index 85df0ae..f59147d 100644
 --- a/proto/patchbukkit/bridge.proto
 +++ b/proto/patchbukkit/bridge.proto
-@@ -9,6 +9,7 @@ import "patchbukkit/config.proto";
- import "patchbukkit/events/event.proto";
- import "patchbukkit/log.proto";
- import "patchbukkit/message.proto";
+@@ -11,0 +12 @@ import "patchbukkit/message.proto";
 +import "patchbukkit/player.proto";
- import "patchbukkit/registry.proto";
- import "patchbukkit/sound.proto";
- 
-@@ -22,6 +23,13 @@ service NativeBridge {
-   rpc SendMessage(patchbukkit.message.SendMessageRequest) returns (google.protobuf.Empty);
- 
-   rpc GetLocation(patchbukkit.common.UUID) returns (patchbukkit.common.Location);
+@@ -24,0 +26,7 @@ service NativeBridge {
 +  rpc GetWorlds(patchbukkit.common.EmptyRequest) returns (patchbukkit.common.WorldList);
 +
 +  rpc GetPlayerGameMode(patchbukkit.common.UUID) returns (patchbukkit.player.PlayerGameMode);
@@ -2863,17 +2482,11 @@ index 85df0ae..f59147d 100644
 +  rpc GetPlayerVitals(patchbukkit.common.UUID) returns (patchbukkit.player.PlayerVitals);
 +  rpc UpdatePlayerVitals(patchbukkit.player.UpdatePlayerVitalsRequest) returns (patchbukkit.player.UpdatePlayerVitalsResponse);
 +  rpc TeleportPlayer(patchbukkit.player.TeleportPlayerRequest) returns (patchbukkit.player.TeleportPlayerResponse);
- 
-   rpc GetRegistryData(patchbukkit.registry.GetRegistryDataRequest) returns (patchbukkit.registry.GetRegistryDataResponse);
- 
 diff --git a/proto/patchbukkit/common/types.proto b/proto/patchbukkit/common/types.proto
 index 52ab136..d9627ce 100644
 --- a/proto/patchbukkit/common/types.proto
 +++ b/proto/patchbukkit/common/types.proto
-@@ -17,6 +17,19 @@ message Vec3 {
- 
- message World {
-   UUID uuid = 1;
+@@ -19,0 +20,13 @@ message World {
 +  string name = 2;
 +  string dimension = 3;
 +  int32 min_height = 4;
@@ -2887,13 +2500,7 @@ index 52ab136..d9627ce 100644
 +
 +message WorldList {
 +  repeated World worlds = 1;
- }
- 
- message Location {
-@@ -26,4 +39,7 @@ message Location {
-   float pitch = 4;
- }
- 
+@@ -29 +42,4 @@ message Location {
 -message EmptyRequest {}
 +message EmptyRequest {
 +  // Ensures the request serializes to at least one byte for the FFI transport.
@@ -2903,44 +2510,57 @@ diff --git a/proto/patchbukkit/config.proto b/proto/patchbukkit/config.proto
 index 12c48c0..d3addd5 100644
 --- a/proto/patchbukkit/config.proto
 +++ b/proto/patchbukkit/config.proto
-@@ -9,4 +9,5 @@ option java_package = "patchbukkit.config";
- 
- message GetPatchBukkitConfigResponse {
-   string minimum_supported_plugin_api = 1;
+@@ -11,0 +12 @@ message GetPatchBukkitConfigResponse {
 +  bool online_mode = 2;
- }
 diff --git a/proto/patchbukkit/events/event.proto b/proto/patchbukkit/events/event.proto
-index f678892..f18614d 100644
+index f678892..872b6cc 100644
 --- a/proto/patchbukkit/events/event.proto
 +++ b/proto/patchbukkit/events/event.proto
-@@ -11,9 +11,19 @@ option java_package = "patchbukkit.events";
- message Event {
-   oneof data {
-     PlayerJoinEvent player_join = 1;
+@@ -13,0 +14,9 @@ message Event {
 +    PlayerQuitEvent player_quit = 2;
 +    PlayerGameModeChangeEvent player_game_mode_change = 3;
 +    ServerCommandEvent server_command = 4;
 +    PlayerCommandPreprocessEvent player_command_preprocess = 5;
 +    PlayerChatEvent player_chat = 6;
 +    PlayerRespawnEvent player_respawn = 7;
-   }
- }
- 
++    PlayerLoginEvent player_login = 8;
++    AsyncPlayerPreLoginEvent async_player_pre_login = 9;
++    PlayerChangedWorldEvent player_changed_world = 10;
+@@ -16,0 +26,4 @@ message Event {
 +message ServerCommandEvent {
 +  string command = 1;
 +}
 +
- message RegisterEventRequest {
-   string event_type = 1;
-   string plugin_name = 2;
 diff --git a/proto/patchbukkit/events/player_events.proto b/proto/patchbukkit/events/player_events.proto
-index cd92e96..c74ae7e 100644
+index cd92e96..a298a7f 100644
 --- a/proto/patchbukkit/events/player_events.proto
 +++ b/proto/patchbukkit/events/player_events.proto
-@@ -10,3 +10,30 @@ message PlayerJoinEvent {
-   patchbukkit.common.UUID player_uuid = 1;
-   string join_message = 2;
- }
+@@ -8,0 +9,19 @@ option java_package = "patchbukkit.events";
++message PlayerLoginEvent {
++  patchbukkit.common.UUID player_uuid = 1;
++  string hostname = 2;
++  string address = 3;
++  string real_address = 4;
++  string result = 5;
++  string kick_message = 6;
++}
++
++message AsyncPlayerPreLoginEvent {
++  string name = 1;
++  patchbukkit.common.UUID player_uuid = 2;
++  string hostname = 3;
++  string address = 4;
++  string real_address = 5;
++  string result = 6;
++  string kick_message = 7;
++}
++
+@@ -12,0 +32,32 @@ message PlayerJoinEvent {
++
++message PlayerChangedWorldEvent {
++  patchbukkit.common.UUID player_uuid = 1;
++  patchbukkit.common.UUID previous_world_uuid = 2;
++}
 +
 +message PlayerQuitEvent {
 +  patchbukkit.common.UUID player_uuid = 1;
@@ -3032,28 +2652,17 @@ diff --git a/proto/patchbukkit/registry.proto b/proto/patchbukkit/registry.proto
 index a7dac34..4961ec9 100644
 --- a/proto/patchbukkit/registry.proto
 +++ b/proto/patchbukkit/registry.proto
-@@ -9,6 +9,12 @@ option java_package = "patchbukkit.registry";
- 
- enum RegistryType {
-   SOUND_EVENT = 0;
+@@ -11,0 +12,6 @@ enum RegistryType {
 +  DAMAGE_TYPE = 1;
 +  BLOCK_TAGS = 2;
 +  ITEM_TAGS = 3;
 +  FLUID_TAGS = 4;
 +  ENTITY_TYPE_TAGS = 5;
 +  GAME_EVENT_TAGS = 6;
- }
- 
- message GetRegistryDataRequest {
-@@ -18,9 +24,20 @@ message GetRegistryDataRequest {
- message GetRegistryDataResponse {
-   oneof registry {
-     SoundEventRegistryData sound_event = 1;
+@@ -20,0 +27,2 @@ message GetRegistryDataResponse {
 +    DamageTypeRegistryData damage_type = 2;
 +    TagRegistryData tag_registry = 3;
-   }
- }
- 
+@@ -23,0 +32,9 @@ message GetRegistryDataResponse {
 +message RegistryTagData {
 +  string name = 1;
 +  repeated string values = 2;
@@ -3063,13 +2672,7 @@ index a7dac34..4961ec9 100644
 +  repeated RegistryTagData tags = 1;
 +}
 +
- message SoundEvent {
-   uint32 id = 1;
-   string name = 2;
-@@ -29,3 +46,37 @@ message SoundEvent {
- message SoundEventRegistryData {
-   repeated SoundEvent sound_events = 1;
- }
+@@ -31,0 +49,34 @@ message SoundEventRegistryData {
 +
 +enum DamageScalingKind {
 +  DAMAGE_SCALING_NEVER = 0;
@@ -3108,55 +2711,171 @@ diff --git a/rust/src/commands/mod.rs b/rust/src/commands/mod.rs
 index 484dc62..22d354c 100644
 --- a/rust/src/commands/mod.rs
 +++ b/rust/src/commands/mod.rs
-@@ -34,7 +34,7 @@ pub struct AnyCommandNode {
- }
- 
- impl GetClientSideArgParser for AnyCommandNode {
+@@ -37 +37 @@ impl GetClientSideArgParser for AnyCommandNode {
 -    fn get_client_side_parser(&self) -> ArgumentType<'_> {
 +    fn get_client_side_parser(&self) -> ArgumentType {
-         ArgumentType::String(StringProtoArgBehavior::GreedyPhrase)
-     }
- 
 diff --git a/rust/src/events/handler.rs b/rust/src/events/handler.rs
-index 6705e20..2c197f4 100644
+index 6705e20..e55899d 100644
 --- a/rust/src/events/handler.rs
 +++ b/rust/src/events/handler.rs
-@@ -9,9 +9,14 @@ use pumpkin_api_macros::with_runtime;
- use tokio::sync::{mpsc, oneshot};
- 
- use crate::java::jvm::commands::JvmCommand;
+@@ -12 +12,3 @@ use crate::java::jvm::commands::JvmCommand;
 -use crate::proto::patchbukkit::common::Uuid;
 +use crate::proto::patchbukkit::common::{
 +    Location as ProtoLocation, Uuid, Vec3, World as ProtoWorld,
 +};
- use crate::proto::patchbukkit::events::event::Data;
+@@ -14 +16,5 @@ use crate::proto::patchbukkit::events::event::Data;
 -use crate::proto::patchbukkit::events::{Event, PlayerJoinEvent};
 +use crate::proto::patchbukkit::events::{
-+    Event, PlayerChatEvent, PlayerCommandPreprocessEvent, PlayerGameModeChangeEvent,
-+    PlayerJoinEvent, PlayerQuitEvent, PlayerRespawnEvent, ServerCommandEvent,
++    AsyncPlayerPreLoginEvent, Event, PlayerChangedWorldEvent, PlayerChatEvent,
++    PlayerCommandPreprocessEvent, PlayerGameModeChangeEvent, PlayerJoinEvent, PlayerLoginEvent,
++    PlayerQuitEvent, PlayerRespawnEvent, ServerCommandEvent,
 +};
- 
- pub struct EventContext {
-     pub server: Arc<Server>,
-@@ -26,6 +31,10 @@ pub struct JvmEventPayload {
- pub trait PatchBukkitEvent {
-     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload;
-     fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()>;
+@@ -28,0 +35,99 @@ pub trait PatchBukkitEvent {
 +
 +    fn carries_bukkit_cancellation(&self) -> bool {
 +        true
 +    }
- }
- 
- impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent {
-@@ -52,6 +61,239 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent
-                 self.join_message = serde_json::from_str(&event.join_message).ok()?;
-                 server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
-             }
++}
++
++impl PatchBukkitEvent for pumpkin::plugin::player::player_pre_login::PlayerPreLoginEvent {
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::AsyncPlayerPreLogin(AsyncPlayerPreLoginEvent {
++                    name: self.name.clone(),
++                    player_uuid: Some(Uuid {
++                        value: self.uuid.to_string(),
++                    }),
++                    hostname: self.hostname.clone(),
++                    address: self.address.ip().to_string(),
++                    real_address: self.real_address.ip().to_string(),
++                    result: if self.cancelled() {
++                        "KICK_OTHER".to_owned()
++                    } else {
++                        "ALLOWED".to_owned()
++                    },
++                    kick_message: serde_json::to_string(&self.kick_message).unwrap(),
++                })),
++            },
++            context: EventContext {
++                server,
++                player: None,
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
++        match data {
++            Data::AsyncPlayerPreLogin(event) => {
++                let player_uuid = uuid::Uuid::from_str(&event.player_uuid?.value).ok()?;
++                if player_uuid != self.uuid || event.name != self.name {
++                    return None;
++                }
++                self.kick_message = serde_json::from_str(&event.kick_message).ok()?;
++                self.set_cancelled(event.result != "ALLOWED");
++            }
 +            _ => return None,
 +        }
 +
 +        Some(())
++    }
++
++    fn carries_bukkit_cancellation(&self) -> bool {
++        false
++    }
++}
++
++impl PatchBukkitEvent for pumpkin::plugin::player::player_login::PlayerLoginEvent {
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::PlayerLogin(PlayerLoginEvent {
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
++                    hostname: self.player.login_hostname.clone(),
++                    address: self.player.login_address.ip().to_string(),
++                    real_address: self.player.login_real_address.ip().to_string(),
++                    result: if self.cancelled() {
++                        "KICK_OTHER".to_owned()
++                    } else {
++                        "ALLOWED".to_owned()
++                    },
++                    kick_message: serde_json::to_string(&self.kick_message).unwrap(),
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, _server: &Arc<Server>, data: Data) -> Option<()> {
++        match data {
++            Data::PlayerLogin(event) => {
++                let player_uuid = uuid::Uuid::from_str(&event.player_uuid?.value).ok()?;
++                if player_uuid != self.player.gameprofile.id {
++                    return None;
++                }
++                self.kick_message = serde_json::from_str(&event.kick_message).ok()?;
++                self.set_cancelled(event.result != "ALLOWED");
++            }
++            _ => return None,
++        }
++
++        Some(())
++    }
++
++    fn carries_bukkit_cancellation(&self) -> bool {
++        false
++    }
+@@ -54,0 +160,274 @@ impl PatchBukkitEvent for pumpkin::plugin::player::player_join::PlayerJoinEvent
++            _ => return None,
++        }
++
++        Some(())
++    }
++}
++
++impl PatchBukkitEvent for pumpkin::plugin::player::player_changed_world::PlayerChangedWorldEvent {
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::PlayerChangedWorld(PlayerChangedWorldEvent {
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
++                    previous_world_uuid: Some(Uuid {
++                        value: self.previous_world.uuid.to_string(),
++                    }),
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        match data {
++            Data::PlayerChangedWorld(event) => {
++                server.get_player_by_uuid(uuid::Uuid::from_str(&event.player_uuid?.value).ok()?)?;
++                let previous_world_uuid =
++                    uuid::Uuid::from_str(&event.previous_world_uuid?.value).ok()?;
++                if previous_world_uuid != self.previous_world.uuid {
++                    return None;
++                }
++            }
++            _ => return None,
++        }
++
++        Some(())
++    }
++
++    fn carries_bukkit_cancellation(&self) -> bool {
++        false
 +    }
 +}
 +
@@ -3386,13 +3105,7 @@ index 6705e20..2c197f4 100644
 +                self.command = event.command;
 +            }
 +            _ => return None,
-         }
- 
-         Some(())
-@@ -75,6 +317,55 @@ impl<E: PatchBukkitEvent> PatchBukkitEventHandler<E> {
-     }
- }
- 
+@@ -77,0 +457,49 @@ impl<E: PatchBukkitEvent> PatchBukkitEventHandler<E> {
 +pub struct PatchBukkitNotificationHandler<E: PatchBukkitEvent> {
 +    plugin_name: String,
 +    command_tx: mpsc::Sender<JvmCommand>,
@@ -3442,13 +3155,7 @@ index 6705e20..2c197f4 100644
 +    }
 +}
 +
- #[with_runtime(global)]
- impl<E> EventHandler<E> for PatchBukkitEventHandler<E>
- where
-@@ -88,28 +379,30 @@ where
-         let command_tx = self.command_tx.clone();
- 
-         Box::pin(async move {
+@@ -91,8 +519,3 @@ where
 -            let (tx, rx) = oneshot::channel();
 -            if let Err(e) = command_tx
 -                .send(JvmCommand::FireEvent {
@@ -3460,15 +3167,15 @@ index 6705e20..2c197f4 100644
 +            if let Some(cancelled) =
 +                forward_event_to_jvm(&self.plugin_name, &command_tx, server, event).await
 +                && event.carries_bukkit_cancellation()
-             {
+@@ -100,2 +523 @@ where
 -                tracing::error!("Failed to send event to JVM worker: {e}");
 -                return;
 +                event.set_cancelled(cancelled);
-             }
+@@ -102,0 +525,3 @@ where
 +        })
 +    }
 +}
- 
+@@ -104,9 +529,14 @@ where
 -            match rx.await {
 -                Ok(response) => {
 -                    event.set_cancelled(response.cancelled);
@@ -3492,28 +3199,16 @@ index 6705e20..2c197f4 100644
 +
 +        Box::pin(async move {
 +            forward_event_to_jvm(&self.plugin_name, &command_tx, server, event).await;
-         })
-     }
- }
 diff --git a/rust/src/java/jar.rs b/rust/src/java/jar.rs
 index f94134e..c60e6a2 100644
 --- a/rust/src/java/jar.rs
 +++ b/rust/src/java/jar.rs
-@@ -1,28 +1,41 @@
- use std::{
+@@ -2 +2 @@ use std::{
 -    fs::File,
 +    fs::{self, File},
-     io::Read,
-     path::{Path, PathBuf},
- };
- 
- use anyhow::Result;
+@@ -8 +7,0 @@ use anyhow::Result;
 -use glob::glob;
- use zip::ZipArchive;
- 
- use crate::config::{paper::PAPER_PLUGIN_CONFIG, spigot::SPIGOT_PLUGIN_CONFIG};
- 
- pub fn discover_jar_files(plugin_folder: &Path) -> impl Iterator<Item = PathBuf> {
+@@ -14,12 +13,26 @@ pub fn discover_jar_files(plugin_folder: &Path) -> impl Iterator<Item = PathBuf>
 -    let pattern = format!("{}/**/*.jar", plugin_folder.display());
 -
 -    glob(&pattern)
@@ -3552,13 +3247,7 @@ index f94134e..c60e6a2 100644
 +    };
 +
 +    jars.into_iter()
- }
- 
- pub fn read_configs_from_jar<P: AsRef<Path>>(
-@@ -51,3 +64,30 @@ pub fn read_configs_from_jar<P: AsRef<Path>>(
- 
-     Ok((paper_plugin_yml, spigot_plugin_yml))
- }
+@@ -53,0 +67,27 @@ pub fn read_configs_from_jar<P: AsRef<Path>>(
 +
 +#[cfg(test)]
 +mod tests {
@@ -3590,23 +3279,14 @@ diff --git a/rust/src/java/jvm/worker.rs b/rust/src/java/jvm/worker.rs
 index 4fe3703..85ac936 100644
 --- a/rust/src/java/jvm/worker.rs
 +++ b/rust/src/java/jvm/worker.rs
-@@ -224,7 +224,7 @@ impl JvmWorker {
- 
- pub fn setup_patchbukkit_server(jvm: &Jvm) -> anyhow::Result<()> {
-     let patchbukkit_server =
+@@ -227 +227 @@ pub fn setup_patchbukkit_server(jvm: &Jvm) -> anyhow::Result<()> {
 -        jvm.create_instance("org.patchbukkit.PatchBukkitServer", InvocationArg::empty())?;
 +        jvm.create_instance("org.bukkit.craftbukkit.CraftServer", InvocationArg::empty())?;
- 
-     jvm.invoke_static(
-         "org.bukkit.Bukkit",
 diff --git a/rust/src/java/native_callbacks/config.rs b/rust/src/java/native_callbacks/config.rs
 index eed3dec..b0d700d 100644
 --- a/rust/src/java/native_callbacks/config.rs
 +++ b/rust/src/java/native_callbacks/config.rs
-@@ -15,5 +15,12 @@ pub fn ffi_native_bridge_get_patch_bukkit_config_impl(
-                 .minimum_supported_plugin_api
-                 .clone()
-                 .unwrap_or("0.0.0".to_string()),
+@@ -17,0 +18,7 @@ pub fn ffi_native_bridge_get_patch_bukkit_config_impl(
 +            online_mode: context
 +                .plugin_context
 +                .server
@@ -3614,25 +3294,66 @@ index eed3dec..b0d700d 100644
 +                .networking
 +                .java
 +                .online_mode,
-         })
- }
 diff --git a/rust/src/java/native_callbacks/events.rs b/rust/src/java/native_callbacks/events.rs
-index d71e36d..9c4fcea 100644
+index d71e36d..73674f8 100644
 --- a/rust/src/java/native_callbacks/events.rs
 +++ b/rust/src/java/native_callbacks/events.rs
-@@ -4,7 +4,7 @@ use pumpkin::plugin::EventPriority;
- use pumpkin::plugin::player::player_join::PlayerJoinEvent;
- use pumpkin_util::text::TextComponent;
- 
+@@ -7 +7 @@ use pumpkin_util::text::TextComponent;
 -use crate::events::handler::PatchBukkitEventHandler;
 +use crate::events::handler::{PatchBukkitEventHandler, PatchBukkitNotificationHandler};
- use crate::java::native_callbacks::CALLBACK_CONTEXT;
- use crate::proto::patchbukkit::events::event::Data;
- use crate::proto::patchbukkit::events::{
-@@ -50,6 +50,98 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
-                         )
-                         .await;
-                 }
+@@ -37,0 +38,34 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
++                "org.bukkit.event.player.AsyncPlayerPreLoginEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::player_pre_login::PlayerPreLoginEvent,
++                            PatchBukkitEventHandler<
++                                pumpkin::plugin::player::player_pre_login::PlayerPreLoginEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
++                "org.bukkit.event.player.PlayerLoginEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::player_login::PlayerLoginEvent,
++                            PatchBukkitEventHandler<
++                                pumpkin::plugin::player::player_login::PlayerLoginEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
+@@ -52,0 +87,109 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
++                "org.bukkit.event.player.PlayerChangedWorldEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::player_changed_world::PlayerChangedWorldEvent,
++                            PatchBukkitNotificationHandler<
++                                pumpkin::plugin::player::player_changed_world::PlayerChangedWorldEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitNotificationHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
 +                "org.bukkit.event.player.PlayerQuitEvent" => {
 +                    context
 +                        .register_event::<
@@ -3725,33 +3446,15 @@ index d71e36d..9c4fcea 100644
 +                        )
 +                        .await;
 +                }
-                 _ => {
-                     tracing::warn!(
-                         "Unsupported Bukkit event type '{}' from plugin '{}'",
-@@ -84,6 +176,7 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
-                     context.server.plugin_manager.fire(pumpkin_event).await;
-                     Some(true)
-                 }
+@@ -86,0 +230 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
 +                _ => Some(false),
-             }
-         })
-     })?;
 diff --git a/rust/src/java/native_callbacks/location.rs b/rust/src/java/native_callbacks/location.rs
 index 7582945..631aaba 100644
 --- a/rust/src/java/native_callbacks/location.rs
 +++ b/rust/src/java/native_callbacks/location.rs
-@@ -33,6 +33,7 @@ pub fn ffi_native_bridge_get_location_impl(entity_uuid: Uuid) -> Option<Location
-                 uuid: Some(Uuid {
-                     value: world.to_string(),
-                 }),
+@@ -35,0 +36 @@ pub fn ffi_native_bridge_get_location_impl(entity_uuid: Uuid) -> Option<Location
 +                ..Default::default()
-             }),
-             position: Some(Vec3 {
-                 x: position.x,
-@@ -46,3 +47,32 @@ pub fn ffi_native_bridge_get_location_impl(entity_uuid: Uuid) -> Option<Location
- 
-     None
- }
+@@ -48,0 +50,29 @@ pub fn ffi_native_bridge_get_location_impl(entity_uuid: Uuid) -> Option<Location
 +
 +pub fn ffi_native_bridge_get_worlds_impl(
 +    _request: crate::proto::patchbukkit::common::EmptyRequest,
@@ -3785,16 +3488,10 @@ diff --git a/rust/src/java/native_callbacks/mod.rs b/rust/src/java/native_callba
 index 56698aa..d084ca1 100644
 --- a/rust/src/java/native_callbacks/mod.rs
 +++ b/rust/src/java/native_callbacks/mod.rs
-@@ -22,6 +22,9 @@ pub use location::*;
- pub mod message;
- pub use message::*;
- 
+@@ -24,0 +25,3 @@ pub use message::*;
 +pub mod player;
 +pub use player::*;
 +
- pub mod registry;
- pub use registry::*;
- 
 diff --git a/rust/src/java/native_callbacks/player.rs b/rust/src/java/native_callbacks/player.rs
 new file mode 100644
 index 0000000..e1d262f
@@ -3957,14 +3654,13 @@ diff --git a/rust/src/java/native_callbacks/registry.rs b/rust/src/java/native_c
 index d403ca1..f39e935 100644
 --- a/rust/src/java/native_callbacks/registry.rs
 +++ b/rust/src/java/native_callbacks/registry.rs
-@@ -1,7 +1,83 @@
- use crate::proto::patchbukkit::registry::{
+@@ -2,2 +2,3 @@ use crate::proto::patchbukkit::registry::{
 -    GetRegistryDataRequest, GetRegistryDataResponse, RegistryType, SoundEvent,
 -    SoundEventRegistryData, get_registry_data_response::Registry,
 +    DamageTypeData, DamageTypeRegistryData, GetRegistryDataRequest, GetRegistryDataResponse,
 +    RegistryTagData, RegistryType, SoundEvent, SoundEventRegistryData, TagRegistryData,
 +    get_registry_data_response::Registry,
- };
+@@ -4,0 +6,75 @@ use crate::proto::patchbukkit::registry::{
 +use pumpkin_data::damage::{DamageEffects, DamageScaling, DamageType, DeathMessageType};
 +use pumpkin_data::tag::{RegistryKey as PumpkinRegistryKey, get_registry_key_tags};
 +use pumpkin_util::version::JavaMinecraftVersion;
@@ -4040,13 +3736,7 @@ index d403ca1..f39e935 100644
 +
 +    Registry::TagRegistry(TagRegistryData { tags })
 +}
- 
- pub fn ffi_native_bridge_get_registry_data_impl(
-     request: GetRegistryDataRequest,
-@@ -19,6 +95,51 @@ pub fn ffi_native_bridge_get_registry_data_impl(
-                 sound_events: sounds,
-             })
-         }
+@@ -21,0 +98,45 @@ pub fn ffi_native_bridge_get_registry_data_impl(
 +        val if val == RegistryType::DamageType as i32 => {
 +            let damage_types = DAMAGE_TYPE_NAMES
 +                .iter()
@@ -4092,13 +3782,7 @@ index d403ca1..f39e935 100644
 +        val if val == RegistryType::GameEventTags as i32 => {
 +            build_tag_registry(PumpkinRegistryKey::GameEvent)
 +        }
-         _ => unreachable!(),
-     };
- 
-@@ -26,3 +147,32 @@ pub fn ffi_native_bridge_get_registry_data_impl(
-         registry: Some(registry),
-     })
- }
+@@ -28,0 +150,29 @@ pub fn ffi_native_bridge_get_registry_data_impl(
 +
 +#[cfg(test)]
 +mod tests {
@@ -4128,40 +3812,140 @@ index d403ca1..f39e935 100644
 +        );
 +    }
 +}
+diff --git a/rust/src/java/plugin/event_manager.rs b/rust/src/java/plugin/event_manager.rs
+index f295f98..ebc30c4 100644
+--- a/rust/src/java/plugin/event_manager.rs
++++ b/rust/src/java/plugin/event_manager.rs
+@@ -38 +37,0 @@ impl EventManager {
+-            && matches!(event, Data::PlayerJoin(_))
+@@ -41 +40,22 @@ impl EventManager {
+-            Self::register_player(jvm, &patch_server, player, &payload.context.server)?;
++            match event {
++                Data::PlayerLogin(_) => {
++                    Self::register_pending_player(
++                        jvm,
++                        &patch_server,
++                        player,
++                        &payload.context.server,
++                    )?;
++                }
++                Data::PlayerJoin(_) => {
++                    let j_uuid = Self::java_uuid(jvm, player)?;
++                    let promoted: bool = jvm.to_rust(jvm.invoke(
++                        &patch_server,
++                        "promotePendingPlayer",
++                        &[InvocationArg::from(j_uuid)],
++                    )?)?;
++                    if !promoted {
++                        Self::register_player(jvm, &patch_server, player, &payload.context.server)?;
++                    }
++                }
++                _ => {}
++            }
+@@ -93,0 +114,17 @@ impl EventManager {
++        if let Some(Data::PlayerLogin(login)) =
++            response.data.as_ref().and_then(|event| event.data.as_ref())
++            && login.result != "ALLOWED"
++            && let Some(uuid) = login.player_uuid.as_ref()
++        {
++            let j_uuid = jvm.invoke_static(
++                "java.util.UUID",
++                "fromString",
++                &[InvocationArg::try_from(uuid.value.clone())?],
++            )?;
++            jvm.invoke(
++                &patch_server,
++                "discardPendingPlayer",
++                &[InvocationArg::from(j_uuid)],
++            )?;
++        }
++
+@@ -97,14 +134,7 @@ impl EventManager {
+-    pub fn register_player(
+-        jvm: &Jvm,
+-        patch_server: &Instance,
+-        player: &Arc<Player>,
+-        server: &Arc<Server>,
+-    ) -> Result<()> {
+-        let j_uuid = jvm
+-            .invoke_static(
+-                "java.util.UUID",
+-                "fromString",
+-                &[InvocationArg::try_from(player.gameprofile.id.to_string())?],
+-            )
+-            .map_err(|e| format!("Failed to create Java UUID: {e}"))
+-            .unwrap();
++    fn java_uuid(jvm: &Jvm, player: &Arc<Player>) -> Result<Instance> {
++        Ok(jvm.invoke_static(
++            "java.util.UUID",
++            "fromString",
++            &[InvocationArg::try_from(player.gameprofile.id.to_string())?],
++        )?)
++    }
+@@ -111,0 +142,2 @@ impl EventManager {
++    fn create_player(jvm: &Jvm, player: &Arc<Player>, server: &Arc<Server>) -> Result<Instance> {
++        let j_uuid = Self::java_uuid(jvm, player)?;
+@@ -125,4 +157,30 @@ impl EventManager {
+-                &[InvocationArg::try_from(true)
+-                    .unwrap()
+-                    .into_primitive()
+-                    .unwrap()],
++                &[InvocationArg::try_from(true)?.into_primitive()?],
++            )?;
++        }
++
++        Ok(j_player)
++    }
++
++    fn register_pending_player(
++        jvm: &Jvm,
++        patch_server: &Instance,
++        player: &Arc<Player>,
++        server: &Arc<Server>,
++    ) -> Result<()> {
++        let j_uuid = Self::java_uuid(jvm, player)?;
++        let existing = jvm.invoke(
++            patch_server,
++            "getEventPlayer",
++            &[InvocationArg::from(j_uuid)],
++        )?;
++        let is_null: bool = jvm.to_rust(jvm.invoke_static(
++            "java.util.Objects",
++            "isNull",
++            &[InvocationArg::from(existing)],
++        )?)?;
++        if is_null {
++            let j_player = Self::create_player(jvm, player, server)?;
++            jvm.invoke(
++                patch_server,
++                "registerPendingPlayer",
++                &[InvocationArg::from(j_player)],
+@@ -130,0 +189,10 @@ impl EventManager {
++        Ok(())
++    }
++
++    pub fn register_player(
++        jvm: &Jvm,
++        patch_server: &Instance,
++        player: &Arc<Player>,
++        server: &Arc<Server>,
++    ) -> Result<()> {
++        let j_player = Self::create_player(jvm, player, server)?;
 diff --git a/rust/src/java/plugin/manager.rs b/rust/src/java/plugin/manager.rs
 index 8754934..cc59d36 100644
 --- a/rust/src/java/plugin/manager.rs
 +++ b/rust/src/java/plugin/manager.rs
-@@ -273,6 +273,8 @@ impl PluginManager {
-         let main_class = parsed_spigot_plugin.main.clone();
-         let spigot_config = parsed_spigot_plugin.clone();
-         let commands = parsed_spigot_plugin.commands.unwrap_or_default();
+@@ -275,0 +276,2 @@ impl PluginManager {
 +        let classpath_deps =
 +            dedupe_names(depends.iter().chain(soft_depends.iter()).cloned().collect());
- 
-         let plugin = Plugin {
-             name,
-@@ -291,7 +293,7 @@ impl PluginManager {
-             soft_depends: dedupe_names(soft_depends),
-             load_before: dedupe_names(load_before),
-             load_after: Vec::new(),
+@@ -294 +296 @@ impl PluginManager {
 -            classpath_deps: Vec::new(),
 +            classpath_deps,
-             libraries: dedupe_strings(libraries),
-         };
- 
-@@ -300,16 +302,50 @@ impl PluginManager {
-     }
- 
-     pub fn enable_all_plugins(&mut self, jvm: &Jvm) -> Result<()> {
+@@ -303 +305,2 @@ impl PluginManager {
 -        // IMPORTANT: enable trough PluginManager not manually
 +        let enable_order = self.compute_load_order();
 +        let provides_map = self.build_provides_map();
-         let plugin_manager = jvm.invoke_static(
-             "org.bukkit.Bukkit",
-             "getPluginManager",
-             InvocationArg::empty(),
-         )?;
+@@ -309 +312,23 @@ impl PluginManager {
 -        for plugin in self.plugins.values_mut() {
 +
 +        for plugin_key in enable_order {
@@ -4186,9 +3970,7 @@ index 8754934..cc59d36 100644
 +            let Some(plugin) = self.plugins.get_mut(&plugin_key) else {
 +                continue;
 +            };
-             if plugin.instance.is_none() {
-                 continue;
-             }
+@@ -312,0 +338,11 @@ impl PluginManager {
 +
 +            if !unavailable_dependencies.is_empty() {
 +                plugin.state = PluginState::Errored;
@@ -4200,40 +3982,19 @@ index 8754934..cc59d36 100644
 +                continue;
 +            }
 +
-             let plugin_instance = plugin.instance.as_ref().unwrap();
-             let plugin_instance = jvm.clone_instance(plugin_instance).unwrap();
- 
-@@ -338,6 +374,8 @@ impl PluginManager {
-     }
- 
-     pub fn disable_all_plugins(&mut self, jvm: &Jvm) -> Result<()> {
+@@ -340,0 +377,2 @@ impl PluginManager {
 +        let server = jvm.invoke_static("org.bukkit.Bukkit", "getServer", InvocationArg::empty())?;
 +        jvm.invoke(&server, "setStopping", &[InvocationArg::try_from(true)?])?;
-         let plugin_manager = jvm.invoke_static(
-             "org.bukkit.Bukkit",
-             "getPluginManager",
-@@ -384,9 +422,9 @@ impl PluginManager {
-         let load_order = self.compute_load_order();
- 
-         for plugin_key in load_order {
+@@ -387 +425 @@ impl PluginManager {
 -            let (classpath, libraries) = match self.plugins.get(&plugin_key) {
 +            let (dependencies, libraries) = match self.plugins.get(&plugin_key) {
-                 Some(plugin) => (
+@@ -389 +427 @@ impl PluginManager {
 -                    self.classpath_string_for(plugin),
 +                    self.dependency_string_for(plugin),
-                     Self::library_string_for(plugin),
-                 ),
-                 None => continue,
-@@ -402,11 +440,23 @@ impl PluginManager {
-                 &[
-                     InvocationArg::try_from(&plugin.path.to_string_lossy().to_string())?,
-                     InvocationArg::try_from(&plugin.main_class)?,
+@@ -405 +443 @@ impl PluginManager {
 -                    InvocationArg::try_from(&classpath)?,
 +                    InvocationArg::try_from(&dependencies)?,
-                     InvocationArg::try_from(&libraries)?,
-                 ],
-             )?;
- 
+@@ -409,0 +448,12 @@ impl PluginManager {
 +            // Bukkit's lifecycle calls onLoad after the plugin has been constructed and
 +            // initialized, but before any plugin is enabled. Some plugins (including
 +            // LuckPerms) load their runtime dependencies and configuration in this phase.
@@ -4246,49 +4007,32 @@ index 8754934..cc59d36 100644
 +                continue;
 +            }
 +
-             plugin.instance = Some(plugin_instance);
-             for (cmd_name, cmd_data) in &plugin.commands {
-                 match command_manager
-@@ -456,18 +506,22 @@ impl PluginManager {
-         }
-     }
- 
+@@ -459,2 +509,2 @@ impl PluginManager {
 -    fn compute_load_order(&mut self) -> Vec<String> {
 -        let mut provides_map: HashMap<String, String> = HashMap::new();
 +    fn build_provides_map(&self) -> HashMap<String, String> {
 +        let mut provides_map = HashMap::new();
-         for (key, plugin) in &self.plugins {
-             for provide in &plugin.provides {
+@@ -463,2 +513,4 @@ impl PluginManager {
 -                if provide.is_empty() {
 -                    continue;
 +                if !provide.is_empty() {
 +                    provides_map
 +                        .entry(provide.clone())
 +                        .or_insert_with(|| key.clone());
-                 }
+@@ -466,3 +517,0 @@ impl PluginManager {
 -                provides_map
 -                    .entry(provide.clone())
 -                    .or_insert_with(|| key.clone());
-             }
-         }
+@@ -470,0 +520,5 @@ impl PluginManager {
 +        provides_map
 +    }
 +
 +    fn compute_load_order(&mut self) -> Vec<String> {
 +        let provides_map = self.build_provides_map();
- 
-         let mut active: HashSet<String> = self.plugins.keys().cloned().collect();
- 
-@@ -579,33 +633,45 @@ impl PluginManager {
-         order
-     }
- 
+@@ -582 +636 @@ impl PluginManager {
 -    fn classpath_string_for(&self, plugin: &Plugin) -> String {
 +    fn dependency_string_for(&self, plugin: &Plugin) -> String {
-         if plugin.classpath_deps.is_empty() {
-             return String::new();
-         }
- 
+@@ -587,11 +641,12 @@ impl PluginManager {
 -        let mut provides_map: HashMap<String, String> = HashMap::new();
 -        for (key, plugin) in &self.plugins {
 -            for provide in &plugin.provides {
@@ -4312,7 +4056,7 @@ index 8754934..cc59d36 100644
 +
 +        dependencies.join("\n")
 +    }
- 
+@@ -599,2 +654,8 @@ impl PluginManager {
 -        let mut paths = Vec::new();
 -        for dep in &plugin.classpath_deps {
 +    fn append_classpath_dependencies(
@@ -4323,10 +4067,9 @@ index 8754934..cc59d36 100644
 +        dependencies: &mut Vec<String>,
 +    ) {
 +        for dep in requested_dependencies {
-             if let Some(resolved) = self.resolve_dependency_name(dep, &provides_map)
+@@ -601,0 +663 @@ impl PluginManager {
 +                && visited.insert(resolved.clone())
-                 && let Some(dep_plugin) = self.plugins.get(&resolved)
-             {
+@@ -604 +666,7 @@ impl PluginManager {
 -                paths.push(dep_plugin.path.to_string_lossy().to_string());
 +                dependencies.push(dep_plugin.name.clone());
 +                self.append_classpath_dependencies(
@@ -4335,17 +4078,10 @@ index 8754934..cc59d36 100644
 +                    visited,
 +                    dependencies,
 +                );
-             }
-         }
+@@ -607,2 +674,0 @@ impl PluginManager {
 -
 -        paths.join(";")
-     }
- 
-     fn library_string_for(plugin: &Plugin) -> String {
-@@ -671,3 +737,79 @@ fn add_edge(
-         *count += 1;
-     }
- }
+@@ -673,0 +740,76 @@ fn add_edge(
 +
 +#[cfg(test)]
 +mod tests {
@@ -4426,14 +4162,8 @@ diff --git a/rust/src/proto/mod.rs b/rust/src/proto/mod.rs
 index ebf5045..edf6c8d 100644
 --- a/rust/src/proto/mod.rs
 +++ b/rust/src/proto/mod.rs
-@@ -19,6 +19,10 @@ pub mod patchbukkit {
-         include!(concat!(env!("OUT_DIR"), "/patchbukkit.message.rs"));
-     }
- 
+@@ -21,0 +22,4 @@ pub mod patchbukkit {
 +    pub mod player {
 +        include!(concat!(env!("OUT_DIR"), "/patchbukkit.player.rs"));
 +    }
 +
-     pub mod registry {
-         include!(concat!(env!("OUT_DIR"), "/patchbukkit.registry.rs"));
-     }

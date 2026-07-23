@@ -5,6 +5,7 @@ use core::f32;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use std::f64::consts::TAU;
 use std::mem;
+use std::net::SocketAddr;
 use std::num::NonZeroU8;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, AtomicI8, AtomicI32, AtomicU8, AtomicU32, Ordering};
@@ -101,6 +102,7 @@ use crate::net::{DisconnectReason, PlayerConfig};
 use crate::plugin::player::exp_change::PlayerExpChangeEvent;
 use crate::plugin::player::inventory_interact::InventoryClickEvent;
 use crate::plugin::player::player_change_world::PlayerChangeWorldEvent;
+use crate::plugin::player::player_changed_world::PlayerChangedWorldEvent;
 use crate::plugin::player::player_gamemode_change::PlayerGamemodeChangeEvent;
 use crate::plugin::player::player_permission_check::PlayerPermissionCheckEvent;
 use crate::plugin::player::player_teleport::PlayerTeleportEvent;
@@ -412,6 +414,15 @@ pub struct Player {
     pub gameprofile: GameProfile,
     /// The client connection associated with the player.
     pub client: Arc<ClientPlatform>,
+    /// The hostname supplied in the client's initial handshake.
+    pub login_hostname: String,
+    /// The effective client address after proxy forwarding has been applied.
+    pub login_address: SocketAddr,
+    /// The transport address exposed to compatibility adapters.
+    ///
+    /// Pumpkin currently retains only the effective forwarded address, so this
+    /// matches [`Self::login_address`] until both values are retained.
+    pub login_real_address: SocketAddr,
     /// The player's inventory.
     pub inventory: Arc<PlayerInventory>,
     /// The player's `EnderChest` inventory.
@@ -581,6 +592,8 @@ impl Player {
 
         impl ScreenHandlerListener for ScreenListener {}
 
+        let (login_hostname, login_address) = client.login_connection_info().await;
+
         let server = world.server.upgrade().unwrap();
 
         let player_uuid = gameprofile.id;
@@ -636,6 +649,9 @@ impl Player {
             )),
             gameprofile,
             client,
+            login_hostname,
+            login_address,
+            login_real_address: login_address,
             awaiting_teleport: Mutex::new(None),
             breath_manager: BreathManager::default(),
             // TODO: Load this from previous instance
@@ -2520,6 +2536,13 @@ impl Player {
 
                 self.chunk_manager.lock().await.change_world(&current_world.level, new_world.clone());
                 self.living_entity.entity.set_world(new_world.clone());
+                let _ = server
+                    .plugin_manager
+                    .fire(PlayerChangedWorldEvent::new(
+                        self.clone(),
+                        current_world.clone(),
+                    ))
+                    .await;
 
                 if new_world.dimension == pumpkin_data::dimension::Dimension::THE_NETHER {
                     self.trigger_advancement(crate::entity::player::advancement::trigger::AdvancementTrigger::EnterDimension {

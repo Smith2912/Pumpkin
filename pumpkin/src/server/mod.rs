@@ -9,6 +9,7 @@ use crate::net::authentication::fetch_mojang_public_keys;
 use crate::net::{ClientPlatform, DisconnectReason, EncryptionError, GameProfile, PlayerConfig};
 use crate::plugin::PluginManager;
 use crate::plugin::player::player_login::PlayerLoginEvent;
+use crate::plugin::player::player_pre_login::PlayerPreLoginEvent;
 use crate::plugin::server::server_broadcast::ServerBroadcastEvent;
 use crate::server::tick_rate_manager::ServerTickRateManager;
 use crate::world::WorldPortal;
@@ -484,6 +485,25 @@ impl Server {
         profile: GameProfile,
         config: Option<PlayerConfig>,
     ) -> Option<(Arc<Player>, Arc<World>)> {
+        let (login_hostname, login_address) = client.login_connection_info().await;
+        let pre_login = self
+            .plugin_manager
+            .fire(PlayerPreLoginEvent::new(
+                profile.name.clone(),
+                profile.id,
+                login_hostname,
+                login_address,
+                login_address,
+                TextComponent::text("You have been kicked from the server"),
+            ))
+            .await;
+        if pre_login.cancelled {
+            client
+                .kick(DisconnectReason::Kicked, pre_login.kick_message)
+                .await;
+            return None;
+        }
+
         let gamemode = self.defaultgamemode.lock().await.gamemode;
 
         let (world, nbt) =

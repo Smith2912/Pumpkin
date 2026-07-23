@@ -122,6 +122,18 @@ pub enum ClientPlatform {
 }
 
 impl ClientPlatform {
+    /// Returns the hostname supplied during the initial handshake and the
+    /// effective remote address used by login lifecycle events.
+    pub async fn login_connection_info(&self) -> (String, SocketAddr) {
+        match self {
+            Self::Java(java) => (
+                java.server_address.lock().await.to_string(),
+                *java.address.lock().await,
+            ),
+            Self::Bedrock(bedrock) => (String::new(), bedrock.address),
+        }
+    }
+
     pub async fn address(&self) -> SocketAddr {
         match self {
             Self::Java(java) => *java.address.lock().await,

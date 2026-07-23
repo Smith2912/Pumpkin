@@ -43,7 +43,8 @@ use crate::{
     plugin::{
         block::block_break::BlockBreakEvent,
         player::{
-            player_change_world::PlayerChangeWorldEvent, player_join::PlayerJoinEvent,
+            player_change_world::PlayerChangeWorldEvent,
+            player_changed_world::PlayerChangedWorldEvent, player_join::PlayerJoinEvent,
             player_leave::PlayerLeaveEvent, player_respawn::PlayerRespawnEvent,
         },
     },
@@ -3525,6 +3526,15 @@ impl World {
         } else {
             (target_world, position, yaw, pitch)
         };
+
+        if target_world.uuid != self.uuid
+            && let Some(server) = target_world.server.upgrade()
+        {
+            let _ = server
+                .plugin_manager
+                .fire(PlayerChangedWorldEvent::new(player.clone(), self.clone()))
+                .await;
+        }
 
         // Send respawn packet with target dimension (using send_packet_now to ensure proper order)
         player
