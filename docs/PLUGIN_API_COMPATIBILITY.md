@@ -43,6 +43,60 @@ Plugins that directly use CraftBukkit or Minecraft internals require an
 additional internal-API shim. Their compatibility is tracked separately from
 public Bukkit, Spigot, and Paper API compatibility.
 
+## Human verification runbook
+
+Every compatibility change must leave evidence a maintainer can reproduce and
+understand. Test count alone is not evidence.
+
+### Reproducible build
+
+1. Confirm `PATCHBUKKIT_COMMIT` in the root `Dockerfile` is the reviewed
+   PatchBukkit revision.
+2. With clean Pumpkin and PatchBukkit checkouts, run:
+
+   ```text
+   git -C <patchbukkit-checkout> apply --check --unidiff-zero <pumpkin-checkout>/docker/patchbukkit-26.2.patch
+   ```
+
+3. Apply the patch and run PatchBukkit's full Java build. This verifies the
+   Java API surface, generated protobuf classes, and conformance plugin.
+4. Build the root Docker image. The image build compiles Pumpkin and
+   PatchBukkit's native bridge in release mode against the same local Pumpkin
+   crates; this is the deployable binary compatibility check.
+
+### Live startup
+
+For the exact deployed commit:
+
+1. Verify the deployment provider reports success and identifies the expected
+   commit.
+2. Verify Pumpkin reaches `Server is now running`.
+3. Verify every plugin in the current real-plugin matrix either enables
+   cleanly or has a documented configuration-only reason not to.
+4. Filter deployment logs by each newly bridged event/API name. A native
+   registration record must exist and there must be no matching
+   `Unsupported Bukkit event type` or unimplemented-method error.
+
+### Observable behavior
+
+Registration proves wiring, not behavior. For events or APIs that mutate game
+state, perform one focused action with a test player or purpose-built
+conformance plugin and record:
+
+- the action taken;
+- the plugin callback or state change expected;
+- the visible in-game or log result;
+- the deployed commit and timestamp.
+
+Do not mark that behavior verified when only compilation or listener
+registration has been observed.
+
+### Useful-test rule
+
+Add a test only when it protects a real contract, regression, safety property,
+or deployment outcome. Prefer a small, readable assertion that fails for the
+original bug over broad synthetic coverage with no human-observable meaning.
+
 ## Future loader adapters
 
 Fabric and Quilt can share a loader-adapter family. Forge and NeoForge can
