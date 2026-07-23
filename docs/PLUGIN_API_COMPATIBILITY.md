@@ -84,10 +84,33 @@ passes all of these checks:
    give/clear/equipment/ender-chest workflow all pass.
 
 Opaque native component preservation does not by itself implement arbitrary
-Bukkit `ItemMeta` mutation. Naming, lore, enchantment, repair, persistent-data,
-and modern Paper data-component writes remain a separate item-metadata
-milestone until their values round-trip in both directions and pass live
-plugin verification.
+Bukkit `ItemMeta` mutation.
+
+## Item-metadata milestone gate
+
+The Essentials-critical metadata subset is complete only when one deployed
+commit passes all of these checks:
+
+1. `Server.getItemFactory()` and `ItemStack#getItemMeta()` return
+   server-owned, cloneable metadata objects.
+2. Display name, lore, enchantments, durability damage, repair cost, and
+   unbreakable state round-trip from Pumpkin to Bukkit and back.
+3. `Registry.ENCHANTMENT` is populated from Pumpkin and Bukkit's built-in
+   enchantment constants use those registry instances.
+4. Applying supported metadata preserves every unrelated native item
+   component.
+5. Unsupported metadata mutations fail explicitly rather than appearing to
+   save data that the bridge discards.
+6. Focused native component and bridge round-trip tests, clean
+   Java/protobuf compilation, Rust compilation, clean pinned-patch
+   application, and live EssentialsX item-name/lore/enchant/repair workflows
+   all pass.
+
+This milestone does not include specialized metadata such as books, maps,
+potions, skull profiles, banners, fireworks, armor trims, or modern Paper
+data-component mutation. Item persistent-data writes and rich text formatting
+also remain explicit follow-up contracts until they have native storage,
+round-trip tests, and live plugin evidence.
 
 ## Human verification runbook
 

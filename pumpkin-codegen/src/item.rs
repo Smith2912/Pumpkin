@@ -799,7 +799,7 @@ impl ToTokens for ItemComponents {
             tokens.extend(quote! { (KineticWeapon, &KineticWeaponImpl), });
         }
         if self.lore.is_some() {
-            tokens.extend(quote! { (Lore, &LoreImpl), });
+            tokens.extend(quote! { (Lore, &LoreImpl { lines: Vec::new() }), });
         }
         if self.map_color.is_some() {
             tokens.extend(quote! { (MapColor, &MapColorImpl), });
@@ -846,7 +846,7 @@ impl ToTokens for ItemComponents {
             tokens.extend(quote! { (Recipes, &RecipesImpl), });
         }
         if self.repair_cost.is_some() {
-            tokens.extend(quote! { (RepairCost, &RepairCostImpl), });
+            tokens.extend(quote! { (RepairCost, &RepairCostImpl { cost: 0 }), });
         }
         if self.repairable.is_some() {
             tokens.extend(quote! { (Repairable, &RepairableImpl), });

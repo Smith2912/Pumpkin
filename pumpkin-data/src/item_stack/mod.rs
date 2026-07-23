@@ -760,7 +760,8 @@ mod tests {
     use super::*;
     use crate::data_component::DataComponent;
     use crate::data_component_impl::{
-        CustomDataImpl, CustomNameImpl, DataComponentImpl, EnchantmentsImpl, UnbreakableImpl,
+        CustomDataImpl, CustomNameImpl, DataComponentImpl, EnchantmentsImpl, LoreImpl,
+        RepairCostImpl, UnbreakableImpl,
     };
 
     /// Helper: creates a fresh Iron Sword (max_damage 250, damage 0).
@@ -932,6 +933,44 @@ mod tests {
             Some(NbtTag::String("pos1".into()))
         );
         assert!(decoded.get_data_component::<UnbreakableImpl>().is_some());
+    }
+
+    #[test]
+    fn bukkit_metadata_components_survive_item_stack_nbt_roundtrip() {
+        let mut stack = ItemStack::new(1, &Item::DIAMOND_SWORD);
+        stack.patch.push((
+            DataComponent::Lore,
+            Some(
+                LoreImpl {
+                    lines: vec!["First line".to_owned(), "Second line".to_owned()],
+                }
+                .to_dyn(),
+            ),
+        ));
+        stack.patch.push((
+            DataComponent::RepairCost,
+            Some(RepairCostImpl { cost: 7 }.to_dyn()),
+        ));
+
+        let bytes = stack.to_nbt_bytes().expect("stack should encode");
+        let decoded = ItemStack::from_nbt_bytes(&bytes)
+            .expect("NBT should decode")
+            .expect("stack should validate");
+
+        assert_eq!(
+            decoded
+                .get_data_component::<LoreImpl>()
+                .expect("lore should decode")
+                .lines,
+            ["First line", "Second line"]
+        );
+        assert_eq!(
+            decoded
+                .get_data_component::<RepairCostImpl>()
+                .expect("repair cost should decode")
+                .cost,
+            7
+        );
     }
 
     // ── damage_item ───────────────────────────────────────────────
