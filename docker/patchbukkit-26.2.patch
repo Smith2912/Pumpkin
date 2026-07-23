@@ -52,6 +52,8 @@ diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.ja
 @@ -15,0 +16,2 @@ import java.io.File;
 +import java.io.PrintWriter;
 +import java.io.StringWriter;
+@@ -99,0 +102 @@ import patchbukkit.bridge.NativeBridgeFfi;
++import patchbukkit.common.EmptyRequest;
 @@ -144,0 +147,6 @@ public class PatchBukkitServer implements Server {
 +                String message = record.getMessage();
 +                if (record.getThrown() != null) {
@@ -62,6 +64,14 @@ diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.ja
 @@ -148 +156 @@ public class PatchBukkitServer implements Server {
 -                                .setMessage(record.getMessage())
 +                                .setMessage(message)
+@@ -870,4 +879,3 @@ public class PatchBukkitServer implements Server {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getOnlineMode'"
+-        );
++        return NativeBridgeFfi
++            .getPatchBukkitConfig(EmptyRequest.newBuilder().build())
++            .getOnlineMode();
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
@@ -98,3 +108,28 @@ index 8754934..4c5a0da 100644
 +                continue;
 +            }
 +
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
+@@ -77,0 +78,5 @@ public final class ServerTests {
++    @ConformanceTest(name = "Server.getOnlineMode() is implemented", category = TestCategory.SERVER)
++    public void testGetOnlineMode() {
++        Bukkit.getServer().getOnlineMode();
++    }
++
+diff --git a/proto/patchbukkit/config.proto b/proto/patchbukkit/config.proto
+--- a/proto/patchbukkit/config.proto
++++ b/proto/patchbukkit/config.proto
+@@ -11,0 +12 @@ message GetPatchBukkitConfigResponse {
++  bool online_mode = 2;
+diff --git a/rust/src/java/native_callbacks/config.rs b/rust/src/java/native_callbacks/config.rs
+--- a/rust/src/java/native_callbacks/config.rs
++++ b/rust/src/java/native_callbacks/config.rs
+@@ -17,0 +18,7 @@ pub fn ffi_native_bridge_get_patch_bukkit_config_impl(
++            online_mode: context
++                .plugin_context
++                .server
++                .advanced_config
++                .networking
++                .java
++                .online_mode,
