@@ -37,6 +37,22 @@ index d90de1b..fff84ba 100644
 +                    "Error enabling " + plugin.getName(),
 +                    ex
 +                );
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
+@@ -15,0 +16,2 @@ import java.io.File;
++import java.io.PrintWriter;
++import java.io.StringWriter;
+@@ -144,0 +147,6 @@ public class PatchBukkitServer implements Server {
++                String message = record.getMessage();
++                if (record.getThrown() != null) {
++                    StringWriter stackTrace = new StringWriter();
++                    record.getThrown().printStackTrace(new PrintWriter(stackTrace));
++                    message += System.lineSeparator() + stackTrace;
++                }
+@@ -148 +156 @@ public class PatchBukkitServer implements Server {
+-                                .setMessage(record.getMessage())
++                                .setMessage(message)
 diff --git a/rust/src/commands/mod.rs b/rust/src/commands/mod.rs
 index 484dc62..22d354c 100644
 --- a/rust/src/commands/mod.rs

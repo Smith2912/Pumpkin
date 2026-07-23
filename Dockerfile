@@ -22,9 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN git init /patchbukkit \
     && git -C /patchbukkit remote add origin https://github.com/Pumpkin-MC/PatchBukkit.git \
     && git -C /patchbukkit fetch --depth=1 origin ${PATCHBUKKIT_COMMIT} \
-    && git -C /patchbukkit checkout --detach FETCH_HEAD \
-    && cd /patchbukkit/java \
-    && ./gradlew --no-daemon jar
+    && git -C /patchbukkit checkout --detach FETCH_HEAD
 
 WORKDIR /pumpkin
 COPY . /pumpkin
@@ -32,6 +30,10 @@ COPY . /pumpkin
 # PatchBukkit's pinned source predates Pumpkin 26.2 by one small command API
 # signature change. Keep the compatibility adjustment explicit and reviewable.
 RUN git -C /patchbukkit apply --unidiff-zero /pumpkin/docker/patchbukkit-26.2.patch
+
+# Build the Java bridge only after applying the compatibility/lifecycle patch.
+RUN cd /patchbukkit/java \
+    && ./gradlew --no-daemon jar
 
 # Railway builds from a source archive, which does not populate Git submodules.
 # Fetch the pinned WIT definitions when they are missing from the build context.
