@@ -202,18 +202,20 @@ index 032bce0..8de40c4 100644
 +    }
 +
 diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
-index e8bd1a6..9c0ee9d 100644
+index e8bd1a6..9bfd9dc 100644
 --- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
 +++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/RegistryTests.java
 @@ -3,0 +4,2 @@ import org.bukkit.Bukkit;
 +import org.bukkit.Material;
 +import org.bukkit.NamespacedKey;
-@@ -5,0 +8,2 @@ import org.bukkit.Sound;
+@@ -5,0 +8,4 @@ import org.bukkit.Sound;
 +import org.bukkit.Tag;
 +import org.bukkit.damage.DamageType;
-@@ -8 +11,0 @@ import org.patchbukkit.testplugin.TestCategory;
++import org.bukkit.inventory.ItemStack;
++import org.bukkit.inventory.ItemType;
+@@ -8 +13,0 @@ import org.patchbukkit.testplugin.TestCategory;
 -import org.patchbukkit.testplugin.TestExpectation;
-@@ -36,2 +39,15 @@ public final class RegistryTests {
+@@ -36,2 +41,39 @@ public final class RegistryTests {
 -    @ConformanceTest(name = "Server.getRegistry(Sound.class) returns registry", category = TestCategory.REGISTRY,
 -            expectation = TestExpectation.EXPECT_UNSUPPORTED)
 +    @ConformanceTest(name = "Damage types are populated from Pumpkin", category = TestCategory.REGISTRY)
@@ -230,8 +232,32 @@ index e8bd1a6..9c0ee9d 100644
 +        );
 +    }
 +
++    @ConformanceTest(name = "Item registry creates usable Bukkit stacks", category = TestCategory.REGISTRY)
++    public void testItemRegistryCreatesStacks() {
++        ItemType stone = Registry.ITEM.get(NamespacedKey.minecraft("stone"));
++        assertNotNull(stone, "minecraft:stone item type");
++        assertNotNull(ItemType.DIAMOND_SWORD, "ItemType.DIAMOND_SWORD");
++        assertNotNull(ItemType.PLAYER_HEAD, "specialized ItemType.PLAYER_HEAD");
++
++        ItemStack stack = stone.createItemStack(3);
++        assertTrue(stack.getType() == Material.STONE, "created stack material");
++        assertTrue(stack.getAmount() == 3, "created stack amount");
++        assertTrue(stack.getMaxStackSize() == 64, "created stack max size");
++    }
++
++    @ConformanceTest(name = "Bukkit ItemStack constructors use Pumpkin items", category = TestCategory.REGISTRY)
++    public void testBukkitItemStackConstruction() {
++        ItemStack stack = new ItemStack(Material.DIAMOND_SWORD);
++        assertTrue(stack.getType() == Material.DIAMOND_SWORD, "constructed stack material");
++        assertTrue(stack.getAmount() == 1, "constructed stack amount");
++        assertTrue(stack.getMaxStackSize() == 1, "sword max stack size");
++
++        ItemStack empty = ItemStack.empty();
++        assertTrue(empty.isEmpty(), "empty stack should report empty");
++    }
++
 +    @ConformanceTest(name = "Server.getRegistry(Sound.class) returns registry", category = TestCategory.REGISTRY)
-@@ -39,5 +55,13 @@ public final class RegistryTests {
+@@ -39,5 +81,13 @@ public final class RegistryTests {
 -        // Server.getRegistry() returns null in PatchBukkit — might throw or return null
 -        Registry<Sound> reg = Bukkit.getServer().getRegistry(Sound.class);
 -        if (reg == null) {
@@ -250,7 +276,7 @@ index e8bd1a6..9c0ee9d 100644
 +        );
 +        assertNotNull(logs, "minecraft:logs block tag");
 +        assertTrue(logs.isTagged(Material.OAK_LOG), "logs should include oak_log");
-@@ -45,0 +70,25 @@ public final class RegistryTests {
+@@ -45,0 +96,25 @@ public final class RegistryTests {
 +    @ConformanceTest(name = "Bukkit built-in tags match the API data version", category = TestCategory.REGISTRY)
 +    public void testBuiltInTagVersion() {
 +        assertNotNull(Tag.CONCRETE_POWDER, "Tag.CONCRETE_POWDER");
@@ -1163,40 +1189,45 @@ index d935769..299fa66 100644
 -        );
 +        return stopping.get();
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
-index 53a254c..c6d19d6 100644
+index 53a254c..4d1443f 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitUnsafeValues.java
 @@ -8,0 +9 @@ import io.papermc.paper.registry.RegistryKey;
 +import io.papermc.paper.registry.RegistryAccess;
-@@ -49,0 +51 @@ import org.patchbukkit.events.PatchBukkitLifecycleEventManager;
+@@ -49,0 +51,2 @@ import org.patchbukkit.events.PatchBukkitLifecycleEventManager;
 +import org.patchbukkit.damage.PatchBukkitDamageSource;
-@@ -56,0 +59,4 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
++import org.patchbukkit.inventory.PatchBukkitItemStack;
+@@ -56,0 +60,4 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
 +    // Minecraft Java Edition 26.2 world data version, from the official
 +    // Mojang server version.json. Keep this aligned with Pumpkin's protocol.
 +    private static final int DATA_VERSION = 4903;
 +
-@@ -64 +70,3 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+@@ -64 +71,3 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
 -        var minimumApi = NativeBridgeFfi.getPatchBukkitConfig(EmptyRequest.newBuilder().build()).getMinimumSupportedPluginApi();
 +        var minimumApi = NativeBridgeFfi
 +            .getPatchBukkitConfig(EmptyRequest.newBuilder().setPresent(true).build())
 +            .getMinimumSupportedPluginApi();
-@@ -81,2 +89 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+@@ -81,2 +90 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
 -		// TODO Auto-generated method stub
 -		throw new UnsupportedOperationException("Unimplemented method 'componentFlattener'");
 +		return ComponentFlattener.basic();
-@@ -157,2 +164 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+@@ -157,2 +165 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
 -		// TODO Auto-generated method stub
 -		throw new UnsupportedOperationException("Unimplemented method 'getDataVersion'");
 +		return DATA_VERSION;
-@@ -235,2 +241 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+@@ -235,2 +242 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
 -		// TODO Auto-generated method stub
 -		throw new UnsupportedOperationException("Unimplemented method 'createDamageSourceBuilder'");
 +		return PatchBukkitDamageSource.builder(damageType);
-@@ -247,2 +252,2 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+@@ -247,2 +253,2 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
 -		// TODO Auto-generated method stub
 -		throw new UnsupportedOperationException("Unimplemented method 'get'");
 +		Registry<B> values = RegistryAccess.registryAccess().getRegistry(registry);
 +		return values == null ? null : values.get(key);
+@@ -366,2 +372 @@ public class PatchBukkitUnsafeValues implements UnsafeValues {
+-		// TODO Auto-generated method stub
+-		throw new UnsupportedOperationException("Unimplemented method 'createEmptyStack'");
++		return PatchBukkitItemStack.empty();
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/damage/PatchBukkitDamageSource.java b/java/patchbukkit/src/main/java/org/patchbukkit/damage/PatchBukkitDamageSource.java
 new file mode 100644
 index 0000000..ed415a4
@@ -1425,23 +1456,40 @@ index c950b98..9b759b8 100644
 -        throw new UnsupportedOperationException("Unimplemented method 'teleportAsync'");
 +        return CompletableFuture.completedFuture(this.teleport(loc, cause, teleportFlags));
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
-index e48457f..45bea6e 100644
+index e48457f..417bb9d 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
 @@ -39 +38,0 @@ import org.bukkit.inventory.InventoryView.Property;
 -import org.bukkit.permissions.PermissibleBase;
-@@ -52,0 +52 @@ import org.jetbrains.annotations.Range;
+@@ -52,0 +52,4 @@ import org.jetbrains.annotations.Range;
 +import org.patchbukkit.bridge.BridgeUtils;
-@@ -60,0 +61,3 @@ import net.kyori.adventure.util.TriState;
++import org.patchbukkit.inventory.PatchBukkitInventory;
++import org.patchbukkit.inventory.PatchBukkitItemStack;
++import org.patchbukkit.inventory.PatchBukkitPlayerInventory;
+@@ -60,0 +64,5 @@ import net.kyori.adventure.util.TriState;
 +import patchbukkit.bridge.NativeBridgeFfi;
 +import patchbukkit.player.PlayerVitals;
++import patchbukkit.player.InventoryKind;
++import patchbukkit.player.SetCursorItemRequest;
 +import patchbukkit.player.UpdatePlayerVitalsRequest;
-@@ -64 +67 @@ public class PatchBukkitHumanEntity
+@@ -64 +72 @@ public class PatchBukkitHumanEntity
 -    extends PatchBukkitLivingEntity
 +    extends org.bukkit.craftbukkit.entity.CraftHumanEntity
-@@ -67 +69,0 @@ public class PatchBukkitHumanEntity
+@@ -67 +75,2 @@ public class PatchBukkitHumanEntity
 -    protected final PermissibleBase perm = new PermissibleBase(this);
-@@ -73,0 +76,17 @@ public class PatchBukkitHumanEntity
++    private final PatchBukkitPlayerInventory inventory;
++    private final PatchBukkitInventory enderChest;
+@@ -71,0 +81,25 @@ public class PatchBukkitHumanEntity
++        this.inventory = new PatchBukkitPlayerInventory(uuid, this);
++        this.enderChest = new PatchBukkitInventory(
++            uuid,
++            InventoryKind.INVENTORY_KIND_ENDER_CHEST,
++            this,
++            27,
++            org.bukkit.event.inventory.InventoryType.ENDER_CHEST
++        );
++    }
++
 +    private PlayerVitals getPlayerVitals() {
 +        PlayerVitals vitals = NativeBridgeFfi.getPlayerVitals(BridgeUtils.convertUuid(this.uuid));
 +        if (vitals == null) {
@@ -1457,13 +1505,11 @@ index e48457f..45bea6e 100644
 +        if (response == null || !response.getSuccess()) {
 +            throw new IllegalStateException("Failed to update player state: " + this.uuid);
 +        }
-+    }
-+
-@@ -815,2 +834 @@ public class PatchBukkitHumanEntity
+@@ -815,2 +849 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getHealth'");
 +        return this.getPlayerVitals().getHealth();
-@@ -821,2 +839,6 @@ public class PatchBukkitHumanEntity
+@@ -821,2 +854,6 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setHealth'");
 +        if (!Double.isFinite(health) || health < 0.0 || health > this.getMaxHealth()) {
@@ -1472,11 +1518,11 @@ index e48457f..45bea6e 100644
 +        this.updatePlayerVitals(
 +            UpdatePlayerVitalsRequest.newBuilder().setHealth(health)
 +        );
-@@ -833,2 +855 @@ public class PatchBukkitHumanEntity
+@@ -833,2 +870 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getAbsorptionAmount'");
 +        return this.getPlayerVitals().getAbsorption();
-@@ -839,2 +860,6 @@ public class PatchBukkitHumanEntity
+@@ -839,2 +875,6 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setAbsorptionAmount'");
 +        if (!Double.isFinite(amount) || amount < 0.0) {
@@ -1485,11 +1531,11 @@ index e48457f..45bea6e 100644
 +        this.updatePlayerVitals(
 +            UpdatePlayerVitalsRequest.newBuilder().setAbsorption(amount)
 +        );
-@@ -845,2 +870 @@ public class PatchBukkitHumanEntity
+@@ -845,2 +885 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getMaxHealth'");
 +        return this.getPlayerVitals().getMaxHealth();
-@@ -851,2 +875,6 @@ public class PatchBukkitHumanEntity
+@@ -851,2 +890,6 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setMaxHealth'");
 +        if (!Double.isFinite(health) || health <= 0.0) {
@@ -1498,11 +1544,53 @@ index e48457f..45bea6e 100644
 +        this.updatePlayerVitals(
 +            UpdatePlayerVitalsRequest.newBuilder().setMaxHealth(health)
 +        );
-@@ -857,2 +885 @@ public class PatchBukkitHumanEntity
+@@ -857,2 +900 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'resetMaxHealth'");
 +        this.setMaxHealth(20.0);
-@@ -1131,2 +1158,8 @@ public class PatchBukkitHumanEntity
+@@ -882,2 +924 @@ public class PatchBukkitHumanEntity
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getEquipment'");
++        return this.inventory;
+@@ -888,2 +929 @@ public class PatchBukkitHumanEntity
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getInventory'");
++        return this.inventory;
+@@ -894,2 +934 @@ public class PatchBukkitHumanEntity
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getEnderChest'");
++        return this.enderChest;
+@@ -900,2 +939 @@ public class PatchBukkitHumanEntity
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getMainHand'");
++        return MainHand.RIGHT;
+@@ -1010,2 +1048 @@ public class PatchBukkitHumanEntity
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getItemInHand'");
++        return this.inventory.getItemInMainHand();
+@@ -1016,2 +1053 @@ public class PatchBukkitHumanEntity
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setItemInHand'");
++        this.inventory.setItemInMainHand(item);
+@@ -1022,2 +1058,3 @@ public class PatchBukkitHumanEntity
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getItemOnCursor'");
++        return PatchBukkitItemStack.fromBridge(
++            NativeBridgeFfi.getCursorItem(BridgeUtils.convertUuid(this.uuid))
++        );
+@@ -1028,2 +1065,9 @@ public class PatchBukkitHumanEntity
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setItemOnCursor'");
++        var response = NativeBridgeFfi.setCursorItem(
++            SetCursorItemRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.uuid))
++                .setItem(PatchBukkitItemStack.toBridge(item))
++                .build()
++        );
++        if (response == null || !response.getSuccess()) {
++            throw new IllegalStateException("Failed to update cursor item: " + this.uuid);
++        }
+@@ -1131,2 +1175,8 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getGameMode'");
 +        patchbukkit.player.PlayerGameMode gameMode =
@@ -1513,7 +1601,7 @@ index e48457f..45bea6e 100644
 +            throw new IllegalStateException("Player is no longer online: " + this.uuid);
 +        }
 +        return GameMode.valueOf(gameMode.getCurrent().toUpperCase(java.util.Locale.ROOT));
-@@ -1137,2 +1170,24 @@ public class PatchBukkitHumanEntity
+@@ -1137,2 +1187,24 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setGameMode'");
 +        java.util.Objects.requireNonNull(mode, "mode");
@@ -1540,11 +1628,11 @@ index e48457f..45bea6e 100644
 +                "Failed to apply game mode " + mode + " for player " + this.uuid
 +            );
 +        }
-@@ -1260,2 +1315 @@ public class PatchBukkitHumanEntity
+@@ -1260,2 +1332 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getExhaustion'");
 +        return this.getPlayerVitals().getExhaustion();
-@@ -1266,2 +1320,6 @@ public class PatchBukkitHumanEntity
+@@ -1266,2 +1337,6 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setExhaustion'");
 +        if (!Float.isFinite(value) || value < 0.0f) {
@@ -1553,11 +1641,11 @@ index e48457f..45bea6e 100644
 +        this.updatePlayerVitals(
 +            UpdatePlayerVitalsRequest.newBuilder().setExhaustion(value)
 +        );
-@@ -1272,2 +1330 @@ public class PatchBukkitHumanEntity
+@@ -1272,2 +1347 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getSaturation'");
 +        return this.getPlayerVitals().getSaturation();
-@@ -1278,2 +1335,6 @@ public class PatchBukkitHumanEntity
+@@ -1278,2 +1352,6 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setSaturation'");
 +        if (!Float.isFinite(value) || value < 0.0f) {
@@ -1566,11 +1654,11 @@ index e48457f..45bea6e 100644
 +        this.updatePlayerVitals(
 +            UpdatePlayerVitalsRequest.newBuilder().setSaturation(value)
 +        );
-@@ -1284,2 +1345 @@ public class PatchBukkitHumanEntity
+@@ -1284,2 +1362 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getFoodLevel'");
 +        return this.getPlayerVitals().getFoodLevel();
-@@ -1290,2 +1350,6 @@ public class PatchBukkitHumanEntity
+@@ -1290,2 +1367,6 @@ public class PatchBukkitHumanEntity
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setFoodLevel'");
 +        if (value < 0 || value > 20) {
@@ -1580,7 +1668,7 @@ index e48457f..45bea6e 100644
 +            UpdatePlayerVitalsRequest.newBuilder().setFoodLevel(value)
 +        );
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
-index 458bbb9..66285af 100644
+index 458bbb9..de710c3 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
 @@ -166,2 +166 @@ public class PatchBukkitPlayer
@@ -1595,7 +1683,11 @@ index 458bbb9..66285af 100644
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getPlayer'");
 +        return org.bukkit.Bukkit.getPlayer(this.uuid);
-@@ -1066,2 +1063,8 @@ public class PatchBukkitPlayer
+@@ -1060,2 +1057 @@ public class PatchBukkitPlayer
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'updateInventory'");
++        // Inventory mutations are synchronized immediately by the native bridge.
+@@ -1066,2 +1062,8 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getPreviousGameMode'");
 +        patchbukkit.player.PlayerGameMode gameMode =
@@ -1606,21 +1698,21 @@ index 458bbb9..66285af 100644
 +        return GameMode.valueOf(
 +            gameMode.getPrevious().toUpperCase(java.util.Locale.ROOT)
 +        );
-@@ -1223 +1226 @@ public class PatchBukkitPlayer
+@@ -1223 +1225 @@ public class PatchBukkitPlayer
 -        if (abilities.getFlying()) abilities.setFlying(false);
 +        if (!flight && abilities.getFlying()) abilities.setFlying(false);
-@@ -1311,2 +1314 @@ public class PatchBukkitPlayer
+@@ -1311,2 +1313 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'isFlying'");
 +        return NativeBridgeFfi.getAbilities(BridgeUtils.convertUuid(this.uuid)).getFlying();
-@@ -1318 +1320,5 @@ public class PatchBukkitPlayer
+@@ -1318 +1319,5 @@ public class PatchBukkitPlayer
 -        var abilities = NativeBridgeFfi.getAbilities(playerUuid).toBuilder().setFlying(value).build();
 +        var abilitiesBuilder = NativeBridgeFfi.getAbilities(playerUuid).toBuilder();
 +        if (value && !abilitiesBuilder.getAllowFlying()) {
 +            throw new IllegalArgumentException("Cannot make player fly when flight is not allowed");
 +        }
 +        var abilities = abilitiesBuilder.setFlying(value).build();
-@@ -1324,2 +1330,8 @@ public class PatchBukkitPlayer
+@@ -1324,2 +1329,8 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setFlySpeed'");
 +        validateSpeed(value);
@@ -1631,7 +1723,7 @@ index 458bbb9..66285af 100644
 +        NativeBridgeFfi.setAbilities(
 +            SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(playerUuid).build()
 +        );
-@@ -1330,2 +1342,8 @@ public class PatchBukkitPlayer
+@@ -1330,2 +1341,8 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'setWalkSpeed'");
 +        validateSpeed(value);
@@ -1642,11 +1734,11 @@ index 458bbb9..66285af 100644
 +        NativeBridgeFfi.setAbilities(
 +            SetAbilitiesRequest.newBuilder().setAbilities(abilities).setUuid(playerUuid).build()
 +        );
-@@ -1336,2 +1354 @@ public class PatchBukkitPlayer
+@@ -1336,2 +1353 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getFlySpeed'");
 +        return NativeBridgeFfi.getAbilities(BridgeUtils.convertUuid(this.uuid)).getFlySpeed() * 2.0f;
-@@ -1342,2 +1359,7 @@ public class PatchBukkitPlayer
+@@ -1342,2 +1358,7 @@ public class PatchBukkitPlayer
 -        // TODO Auto-generated method stub
 -        throw new UnsupportedOperationException("Unimplemented method 'getWalkSpeed'");
 +        return NativeBridgeFfi.getAbilities(BridgeUtils.convertUuid(this.uuid)).getWalkSpeed() * 2.0f;
@@ -2163,6 +2255,1350 @@ index ba94bfa..9420cad 100644
 +            || eventClass.getClassLoader() instanceof PatchBukkitPluginClassLoader;
 +    }
 +
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/inventory/PatchBukkitInventory.java b/java/patchbukkit/src/main/java/org/patchbukkit/inventory/PatchBukkitInventory.java
+new file mode 100644
+index 0000000..66dbce2
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/inventory/PatchBukkitInventory.java
+@@ -0,0 +1,562 @@
++package org.patchbukkit.inventory;
++
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.Collections;
++import java.util.HashMap;
++import java.util.List;
++import java.util.ListIterator;
++import java.util.Objects;
++import java.util.UUID;
++import java.util.stream.IntStream;
++
++import org.bukkit.Location;
++import org.bukkit.Material;
++import org.bukkit.entity.HumanEntity;
++import org.bukkit.event.inventory.InventoryType;
++import org.bukkit.inventory.Inventory;
++import org.bukkit.inventory.InventoryHolder;
++import org.bukkit.inventory.ItemStack;
++import org.jetbrains.annotations.Nullable;
++import org.patchbukkit.bridge.BridgeUtils;
++
++import patchbukkit.bridge.NativeBridgeFfi;
++import patchbukkit.player.GetInventoryRequest;
++import patchbukkit.player.InventoryKind;
++import patchbukkit.player.InventorySnapshot;
++import patchbukkit.player.SetInventoryItemRequest;
++
++/**
++ * Live Bukkit inventory view backed by Pumpkin bridge snapshots.
++ */
++public class PatchBukkitInventory implements Inventory {
++    protected final UUID playerUuid;
++    protected final InventoryKind kind;
++    protected final HumanEntity holder;
++    private final int size;
++    private final InventoryType type;
++    private int maxStackSize = 64;
++
++    public PatchBukkitInventory(
++        UUID playerUuid,
++        InventoryKind kind,
++        HumanEntity holder,
++        int size,
++        InventoryType type
++    ) {
++        this.playerUuid = Objects.requireNonNull(playerUuid, "playerUuid");
++        this.kind = Objects.requireNonNull(kind, "kind");
++        this.holder = Objects.requireNonNull(holder, "holder");
++        this.size = size;
++        this.type = Objects.requireNonNull(type, "type");
++    }
++
++    protected InventorySnapshot snapshot() {
++        InventorySnapshot snapshot = NativeBridgeFfi.getInventory(
++            GetInventoryRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.playerUuid))
++                .setKind(this.kind)
++                .build()
++        );
++        if (snapshot == null || snapshot.getContentsCount() != this.size) {
++            throw new IllegalStateException(
++                "Failed to read " + this.kind + " inventory for player " + this.playerUuid
++            );
++        }
++        return snapshot;
++    }
++
++    protected int[] storageSlots() {
++        return IntStream.range(0, this.size).toArray();
++    }
++
++    protected static boolean isEmpty(@Nullable ItemStack item) {
++        return item == null || item.getType() == Material.AIR || item.getAmount() <= 0;
++    }
++
++    protected static boolean similar(@Nullable ItemStack first, @Nullable ItemStack second) {
++        if (isEmpty(first) || isEmpty(second)) {
++            return isEmpty(first) && isEmpty(second);
++        }
++        if (first instanceof PatchBukkitItemStack nativeItem) {
++            return nativeItem.bridgeSimilar(second);
++        }
++        if (second instanceof PatchBukkitItemStack nativeItem) {
++            return nativeItem.bridgeSimilar(first);
++        }
++        return first.getType() == second.getType()
++            && !first.hasItemMeta()
++            && !second.hasItemMeta();
++    }
++
++    protected void validateSlot(int slot) {
++        if (slot < 0 || slot >= this.size) {
++            throw new IndexOutOfBoundsException(
++                "Inventory slot " + slot + " is outside 0.." + (this.size - 1)
++            );
++        }
++    }
++
++    @Override
++    public int getSize() {
++        return this.size;
++    }
++
++    @Override
++    public int getMaxStackSize() {
++        return this.maxStackSize;
++    }
++
++    @Override
++    public void setMaxStackSize(int size) {
++        if (size < 1 || size > 255) {
++            throw new IllegalArgumentException("Max stack size must be between 1 and 255");
++        }
++        this.maxStackSize = size;
++    }
++
++    @Override
++    public @Nullable ItemStack getItem(int index) {
++        this.validateSlot(index);
++        return PatchBukkitItemStack.fromBridge(this.snapshot().getContents(index));
++    }
++
++    @Override
++    public void setItem(int index, @Nullable ItemStack item) {
++        this.validateSlot(index);
++        var response = NativeBridgeFfi.setInventoryItem(
++            SetInventoryItemRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.playerUuid))
++                .setKind(this.kind)
++                .setSlot(index)
++                .setItem(PatchBukkitItemStack.toBridge(item))
++                .build()
++        );
++        if (response == null || !response.getSuccess()) {
++            throw new IllegalStateException(
++                "Failed to update " + this.kind + " slot " + index
++                    + " for player " + this.playerUuid
++            );
++        }
++    }
++
++    private int stackLimit(ItemStack item) {
++        return Math.min(this.maxStackSize, item.getType().getMaxStackSize());
++    }
++
++    @Override
++    public HashMap<Integer, ItemStack> addItem(ItemStack... items) {
++        Objects.requireNonNull(items, "items");
++        HashMap<Integer, ItemStack> leftovers = new HashMap<>();
++        ItemStack[] contents = this.getContents();
++        int[] slots = this.storageSlots();
++
++        for (int inputIndex = 0; inputIndex < items.length; inputIndex++) {
++            ItemStack input = Objects.requireNonNull(items[inputIndex], "item").clone();
++            if (isEmpty(input)) {
++                continue;
++            }
++
++            int remaining = input.getAmount();
++            for (int slot : slots) {
++                ItemStack current = contents[slot];
++                if (!similar(current, input)) {
++                    continue;
++                }
++                int capacity = this.stackLimit(current) - current.getAmount();
++                if (capacity <= 0) {
++                    continue;
++                }
++                int moved = Math.min(capacity, remaining);
++                current.setAmount(current.getAmount() + moved);
++                this.setItem(slot, current);
++                remaining -= moved;
++                if (remaining == 0) {
++                    break;
++                }
++            }
++
++            for (int slot : slots) {
++                if (remaining == 0) {
++                    break;
++                }
++                if (!isEmpty(contents[slot])) {
++                    continue;
++                }
++                int moved = Math.min(this.stackLimit(input), remaining);
++                ItemStack inserted = input.clone();
++                inserted.setAmount(moved);
++                contents[slot] = inserted;
++                this.setItem(slot, inserted);
++                remaining -= moved;
++            }
++
++            if (remaining > 0) {
++                input.setAmount(remaining);
++                leftovers.put(inputIndex, input);
++            }
++        }
++        return leftovers;
++    }
++
++    private HashMap<Integer, ItemStack> removeItems(boolean anySlot, ItemStack... items) {
++        Objects.requireNonNull(items, "items");
++        HashMap<Integer, ItemStack> leftovers = new HashMap<>();
++        ItemStack[] contents = this.getContents();
++        int[] slots = anySlot
++            ? IntStream.range(0, this.size).toArray()
++            : this.storageSlots();
++
++        for (int inputIndex = 0; inputIndex < items.length; inputIndex++) {
++            ItemStack input = Objects.requireNonNull(items[inputIndex], "item").clone();
++            if (isEmpty(input)) {
++                continue;
++            }
++
++            int remaining = input.getAmount();
++            for (int slot : slots) {
++                ItemStack current = contents[slot];
++                if (!similar(current, input)) {
++                    continue;
++                }
++                int removed = Math.min(current.getAmount(), remaining);
++                int newAmount = current.getAmount() - removed;
++                contents[slot] = newAmount == 0 ? null : current;
++                if (newAmount > 0) {
++                    current.setAmount(newAmount);
++                }
++                this.setItem(slot, contents[slot]);
++                remaining -= removed;
++                if (remaining == 0) {
++                    break;
++                }
++            }
++
++            if (remaining > 0) {
++                input.setAmount(remaining);
++                leftovers.put(inputIndex, input);
++            }
++        }
++        return leftovers;
++    }
++
++    @Override
++    public HashMap<Integer, ItemStack> removeItem(ItemStack... items) {
++        return this.removeItems(false, items);
++    }
++
++    @Override
++    public HashMap<Integer, ItemStack> removeItemAnySlot(ItemStack... items) {
++        return this.removeItems(true, items);
++    }
++
++    @Override
++    public ItemStack[] getContents() {
++        InventorySnapshot snapshot = this.snapshot();
++        ItemStack[] result = new ItemStack[this.size];
++        for (int slot = 0; slot < this.size; slot++) {
++            result[slot] = PatchBukkitItemStack.fromBridge(snapshot.getContents(slot));
++        }
++        return result;
++    }
++
++    @Override
++    public void setContents(ItemStack[] items) {
++        Objects.requireNonNull(items, "items");
++        if (items.length > this.size) {
++            throw new IllegalArgumentException(
++                "Expected at most " + this.size + " items, got " + items.length
++            );
++        }
++        for (int slot = 0; slot < this.size; slot++) {
++            this.setItem(slot, slot < items.length ? items[slot] : null);
++        }
++    }
++
++    @Override
++    public ItemStack[] getStorageContents() {
++        int[] slots = this.storageSlots();
++        ItemStack[] contents = this.getContents();
++        ItemStack[] result = new ItemStack[slots.length];
++        for (int index = 0; index < slots.length; index++) {
++            result[index] = contents[slots[index]];
++        }
++        return result;
++    }
++
++    @Override
++    public void setStorageContents(ItemStack[] items) {
++        Objects.requireNonNull(items, "items");
++        int[] slots = this.storageSlots();
++        if (items.length > slots.length) {
++            throw new IllegalArgumentException(
++                "Expected at most " + slots.length + " storage items, got " + items.length
++            );
++        }
++        for (int index = 0; index < slots.length; index++) {
++            this.setItem(slots[index], index < items.length ? items[index] : null);
++        }
++    }
++
++    @Override
++    public boolean contains(Material material) {
++        return this.first(Objects.requireNonNull(material, "material")) >= 0;
++    }
++
++    @Override
++    public boolean contains(@Nullable ItemStack item) {
++        return this.first(item) >= 0;
++    }
++
++    @Override
++    public boolean contains(Material material, int amount) {
++        Objects.requireNonNull(material, "material");
++        if (amount <= 0) {
++            return true;
++        }
++        int total = 0;
++        for (ItemStack item : this.getContents()) {
++            if (!isEmpty(item) && item.getType() == material) {
++                total += item.getAmount();
++                if (total >= amount) {
++                    return true;
++                }
++            }
++        }
++        return false;
++    }
++
++    @Override
++    public boolean contains(@Nullable ItemStack item, int amount) {
++        if (amount <= 0) {
++            return true;
++        }
++        if (isEmpty(item)) {
++            return false;
++        }
++        int total = 0;
++        for (ItemStack current : this.getContents()) {
++            if (similar(current, item)) {
++                total += current.getAmount();
++                if (total >= amount) {
++                    return true;
++                }
++            }
++        }
++        return false;
++    }
++
++    @Override
++    public boolean containsAtLeast(@Nullable ItemStack item, int amount) {
++        return this.contains(item, amount);
++    }
++
++    @Override
++    public HashMap<Integer, ItemStack> all(Material material) {
++        Objects.requireNonNull(material, "material");
++        HashMap<Integer, ItemStack> result = new HashMap<>();
++        ItemStack[] contents = this.getContents();
++        for (int slot = 0; slot < contents.length; slot++) {
++            if (!isEmpty(contents[slot]) && contents[slot].getType() == material) {
++                result.put(slot, contents[slot]);
++            }
++        }
++        return result;
++    }
++
++    @Override
++    public HashMap<Integer, ItemStack> all(@Nullable ItemStack item) {
++        HashMap<Integer, ItemStack> result = new HashMap<>();
++        ItemStack[] contents = this.getContents();
++        for (int slot = 0; slot < contents.length; slot++) {
++            if (similar(contents[slot], item)) {
++                result.put(slot, contents[slot]);
++            }
++        }
++        return result;
++    }
++
++    @Override
++    public int first(Material material) {
++        Objects.requireNonNull(material, "material");
++        ItemStack[] contents = this.getContents();
++        for (int slot = 0; slot < contents.length; slot++) {
++            if (!isEmpty(contents[slot]) && contents[slot].getType() == material) {
++                return slot;
++            }
++        }
++        return -1;
++    }
++
++    @Override
++    public int first(@Nullable ItemStack item) {
++        ItemStack[] contents = this.getContents();
++        for (int slot = 0; slot < contents.length; slot++) {
++            if (similar(contents[slot], item)) {
++                return slot;
++            }
++        }
++        return -1;
++    }
++
++    @Override
++    public int firstEmpty() {
++        ItemStack[] contents = this.getContents();
++        for (int slot : this.storageSlots()) {
++            if (isEmpty(contents[slot])) {
++                return slot;
++            }
++        }
++        return -1;
++    }
++
++    @Override
++    public boolean isEmpty() {
++        for (ItemStack item : this.getContents()) {
++            if (!isEmpty(item)) {
++                return false;
++            }
++        }
++        return true;
++    }
++
++    @Override
++    public void remove(Material material) {
++        Objects.requireNonNull(material, "material");
++        ItemStack[] contents = this.getContents();
++        for (int slot = 0; slot < contents.length; slot++) {
++            if (!isEmpty(contents[slot]) && contents[slot].getType() == material) {
++                this.setItem(slot, null);
++            }
++        }
++    }
++
++    @Override
++    public void remove(@Nullable ItemStack item) {
++        ItemStack[] contents = this.getContents();
++        for (int slot = 0; slot < contents.length; slot++) {
++            if (similar(contents[slot], item)) {
++                this.setItem(slot, null);
++            }
++        }
++    }
++
++    @Override
++    public void clear(int index) {
++        this.setItem(index, null);
++    }
++
++    @Override
++    public void clear() {
++        for (int slot = 0; slot < this.size; slot++) {
++            this.setItem(slot, null);
++        }
++    }
++
++    @Override
++    public int close() {
++        return 0;
++    }
++
++    @Override
++    public List<HumanEntity> getViewers() {
++        return Collections.singletonList(this.holder);
++    }
++
++    @Override
++    public InventoryType getType() {
++        return this.type;
++    }
++
++    @Override
++    public InventoryHolder getHolder() {
++        return this.holder;
++    }
++
++    @Override
++    public InventoryHolder getHolder(boolean useSnapshot) {
++        return this.holder;
++    }
++
++    @Override
++    public ListIterator<ItemStack> iterator() {
++        return this.iterator(0);
++    }
++
++    @Override
++    public ListIterator<ItemStack> iterator(int index) {
++        if (index < 0 || index > this.size) {
++            throw new IndexOutOfBoundsException("Iterator index: " + index);
++        }
++        List<ItemStack> snapshot = new ArrayList<>(Arrays.asList(this.getContents()));
++        ListIterator<ItemStack> delegate = snapshot.listIterator(index);
++        return new ListIterator<>() {
++            private int lastSlot = -1;
++
++            @Override
++            public boolean hasNext() {
++                return delegate.hasNext();
++            }
++
++            @Override
++            public ItemStack next() {
++                ItemStack item = delegate.next();
++                this.lastSlot = delegate.previousIndex();
++                return item;
++            }
++
++            @Override
++            public boolean hasPrevious() {
++                return delegate.hasPrevious();
++            }
++
++            @Override
++            public ItemStack previous() {
++                ItemStack item = delegate.previous();
++                this.lastSlot = delegate.nextIndex();
++                return item;
++            }
++
++            @Override
++            public int nextIndex() {
++                return delegate.nextIndex();
++            }
++
++            @Override
++            public int previousIndex() {
++                return delegate.previousIndex();
++            }
++
++            @Override
++            public void remove() {
++                if (this.lastSlot < 0) {
++                    throw new IllegalStateException("next or previous must be called first");
++                }
++                PatchBukkitInventory.this.setItem(this.lastSlot, null);
++                delegate.set(null);
++                this.lastSlot = -1;
++            }
++
++            @Override
++            public void set(ItemStack item) {
++                if (this.lastSlot < 0) {
++                    throw new IllegalStateException("next or previous must be called first");
++                }
++                PatchBukkitInventory.this.setItem(this.lastSlot, item);
++                delegate.set(item);
++            }
++
++            @Override
++            public void add(ItemStack item) {
++                throw new UnsupportedOperationException(
++                    "Inventory iterators cannot change the fixed inventory size"
++                );
++            }
++        };
++    }
++
++    @Override
++    public @Nullable Location getLocation() {
++        return this.holder.getLocation();
++    }
++}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/inventory/PatchBukkitItemStack.java b/java/patchbukkit/src/main/java/org/patchbukkit/inventory/PatchBukkitItemStack.java
+new file mode 100644
+index 0000000..e35794e
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/inventory/PatchBukkitItemStack.java
+@@ -0,0 +1,210 @@
++package org.patchbukkit.inventory;
++
++import java.util.Arrays;
++import java.util.Objects;
++
++import org.bukkit.Material;
++import org.bukkit.inventory.ItemType;
++import org.bukkit.inventory.ItemStack;
++import org.bukkit.inventory.meta.ItemMeta;
++import org.jetbrains.annotations.Nullable;
++
++import com.google.protobuf.ByteString;
++
++/**
++ * Bukkit item view that retains Pumpkin's complete native item snapshot.
++ *
++ * <p>The opaque data is returned only while the material still matches the
++ * original native item. Amount changes are applied by the native bridge after
++ * validation, allowing ordinary Bukkit inventory operations to preserve
++ * components they do not understand.</p>
++ */
++public final class PatchBukkitItemStack extends ItemStack {
++    private Material type;
++    private int amount;
++    private final Material nativeType;
++    private byte[] nativeNbt;
++    private boolean nativeComponents;
++
++    private PatchBukkitItemStack(
++        Material type,
++        int amount,
++        byte[] nativeNbt,
++        boolean nativeComponents
++    ) {
++        super();
++        this.type = Objects.requireNonNull(type, "type");
++        if (amount < 0) {
++            throw new IllegalArgumentException("Item amount cannot be negative");
++        }
++        this.amount = amount;
++        this.nativeType = type;
++        this.nativeNbt = nativeNbt.clone();
++        this.nativeComponents = nativeComponents;
++    }
++
++    public static PatchBukkitItemStack create(Material type, int amount) {
++        return new PatchBukkitItemStack(type, amount, new byte[0], false);
++    }
++
++    public static PatchBukkitItemStack empty() {
++        return create(Material.AIR, 0);
++    }
++
++    public static @Nullable PatchBukkitItemStack fromBridge(
++        patchbukkit.itemstack.ItemStack item
++    ) {
++        if (item == null || item.getAmount() == 0) {
++            return null;
++        }
++
++        Material material = Material.matchMaterial(item.getType());
++        if (material == null && item.getType().startsWith("minecraft:")) {
++            material = Material.matchMaterial(item.getType().substring("minecraft:".length()));
++        }
++        if (material == null || material == Material.AIR) {
++            return null;
++        }
++
++        return new PatchBukkitItemStack(
++            material,
++            Math.toIntExact(item.getAmount()),
++            item.getNativeNbt().toByteArray(),
++            item.getHasNativeComponents()
++        );
++    }
++
++    public static patchbukkit.itemstack.ItemStack toBridge(@Nullable ItemStack item) {
++        if (item == null || item.getType() == Material.AIR || item.getAmount() <= 0) {
++            return patchbukkit.itemstack.ItemStack.newBuilder()
++                .setType("minecraft:air")
++                .setAmount(0)
++                .build();
++        }
++
++        var builder = patchbukkit.itemstack.ItemStack.newBuilder()
++            .setType(item.getType().getKey().asString())
++            .setAmount(item.getAmount());
++
++        if (item instanceof PatchBukkitItemStack nativeItem
++            && item.getType() == nativeItem.nativeType
++            && nativeItem.nativeNbt.length > 0) {
++            builder.setNativeNbt(ByteString.copyFrom(nativeItem.nativeNbt));
++            builder.setHasNativeComponents(nativeItem.nativeComponents);
++        }
++
++        return builder.build();
++    }
++
++    @Override
++    public Material getType() {
++        return this.type;
++    }
++
++    @Override
++    public void setType(Material type) {
++        this.type = Objects.requireNonNull(type, "type");
++        if (type != this.nativeType) {
++            this.nativeNbt = new byte[0];
++            this.nativeComponents = false;
++        }
++    }
++
++    @Override
++    public ItemStack withType(Material type) {
++        Objects.requireNonNull(type, "type");
++        if (type == this.type) {
++            return this.clone();
++        }
++        return create(type, this.amount);
++    }
++
++    @Override
++    public int getAmount() {
++        return this.amount;
++    }
++
++    @Override
++    public void setAmount(int amount) {
++        if (amount < 0) {
++            throw new IllegalArgumentException("Item amount cannot be negative");
++        }
++        this.amount = amount;
++    }
++
++    @Override
++    public int getMaxStackSize() {
++        ItemType itemType = this.type.asItemType();
++        return itemType == null ? 64 : itemType.getMaxStackSize();
++    }
++
++    @Override
++    public boolean isEmpty() {
++        return this.type == Material.AIR || this.amount <= 0;
++    }
++
++    @Override
++    public boolean hasItemMeta() {
++        return this.nativeComponents;
++    }
++
++    @Override
++    public ItemMeta getItemMeta() {
++        throw new UnsupportedOperationException(
++            "Bukkit item metadata is not implemented for " + this.type
++        );
++    }
++
++    public boolean bridgeSimilar(@Nullable ItemStack other) {
++        if (other == null || this.getType() != other.getType()) {
++            return false;
++        }
++        if (other instanceof PatchBukkitItemStack nativeOther
++            && this.nativeNbt.length > 0
++            && nativeOther.nativeNbt.length > 0) {
++            return Arrays.equals(this.nativeNbt, nativeOther.nativeNbt);
++        }
++        return !this.nativeComponents && !other.hasItemMeta();
++    }
++
++    @Override
++    public boolean setItemMeta(@Nullable ItemMeta itemMeta) {
++        if (itemMeta == null) {
++            this.nativeNbt = new byte[0];
++            this.nativeComponents = false;
++            return true;
++        }
++        throw new UnsupportedOperationException(
++            "Bukkit item metadata is not implemented for " + this.type
++        );
++    }
++
++    @Override
++    public boolean isSimilar(ItemStack other) {
++        return this.bridgeSimilar(other);
++    }
++
++    @Override
++    public boolean equals(Object other) {
++        return other instanceof ItemStack item
++            && this.amount == item.getAmount()
++            && this.bridgeSimilar(item);
++    }
++
++    @Override
++    public int hashCode() {
++        int result = Objects.hash(this.type, this.amount);
++        result = 31 * result + Arrays.hashCode(this.nativeNbt);
++        return result;
++    }
++
++    @Override
++    public PatchBukkitItemStack clone() {
++        return new PatchBukkitItemStack(
++            this.getType(),
++            this.getAmount(),
++            this.nativeNbt,
++            this.nativeComponents
++        );
++    }
++}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/inventory/PatchBukkitItemType.java b/java/patchbukkit/src/main/java/org/patchbukkit/inventory/PatchBukkitItemType.java
+new file mode 100644
+index 0000000..5d0bce1
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/inventory/PatchBukkitItemType.java
+@@ -0,0 +1,212 @@
++package org.patchbukkit.inventory;
++
++import java.util.Objects;
++import java.util.Set;
++import java.util.function.Consumer;
++
++import org.bukkit.Material;
++import org.bukkit.NamespacedKey;
++import org.bukkit.Registry;
++import org.bukkit.World;
++import org.bukkit.attribute.Attribute;
++import org.bukkit.attribute.AttributeModifier;
++import org.bukkit.block.BlockType;
++import org.bukkit.inventory.CreativeCategory;
++import org.bukkit.inventory.EquipmentSlot;
++import org.bukkit.inventory.ItemRarity;
++import org.bukkit.inventory.ItemStack;
++import org.bukkit.inventory.ItemType;
++import org.bukkit.inventory.meta.ItemMeta;
++
++import com.google.common.collect.ImmutableMultimap;
++import com.google.common.collect.Multimap;
++
++import io.papermc.paper.datacomponent.DataComponentType;
++import patchbukkit.registry.ItemData;
++
++/**
++ * Bukkit item registry entry backed by Pumpkin's generated item registry.
++ */
++public final class PatchBukkitItemType implements ItemType.Typed<ItemMeta> {
++    private final NamespacedKey key;
++    private final Material material;
++    private final String translationKey;
++    private final int maxStackSize;
++    private final short maxDurability;
++    private final boolean edible;
++    private final boolean record;
++    private final boolean blockType;
++
++    public PatchBukkitItemType(ItemData item) {
++        this.key = new NamespacedKey(NamespacedKey.MINECRAFT, item.getName());
++        this.material = Objects.requireNonNull(
++            Material.matchMaterial(item.getName()),
++            "No Bukkit material for native item " + item.getName()
++        );
++        this.translationKey = item.getTranslationKey();
++        this.maxStackSize = Math.toIntExact(item.getMaxStackSize());
++        this.maxDurability = (short) Math.min(Short.MAX_VALUE, item.getMaxDurability());
++        this.edible = item.getEdible();
++        this.record = item.getRecord();
++        this.blockType = item.getHasBlockType();
++    }
++
++    @Override
++    public NamespacedKey getKey() {
++        return this.key;
++    }
++
++    @Override
++    public ItemType.Typed<ItemMeta> typed() {
++        return this;
++    }
++
++    @Override
++    @SuppressWarnings("unchecked")
++    public <M extends ItemMeta> ItemType.Typed<M> typed(Class<M> metaClass) {
++        Objects.requireNonNull(metaClass, "metaClass");
++        return (ItemType.Typed<M>) (ItemType.Typed<?>) this;
++    }
++
++    @Override
++    public ItemStack createItemStack() {
++        return PatchBukkitItemStack.create(this.material, 1);
++    }
++
++    @Override
++    public ItemStack createItemStack(int amount) {
++        if (amount <= 0) {
++            throw new IllegalArgumentException("Item amount must be positive");
++        }
++        return PatchBukkitItemStack.create(this.material, amount);
++    }
++
++    @Override
++    public ItemStack createItemStack(Consumer<? super ItemMeta> consumer) {
++        return this.createItemStack(1, consumer);
++    }
++
++    @Override
++    public ItemStack createItemStack(int amount, Consumer<? super ItemMeta> consumer) {
++        ItemStack stack = this.createItemStack(amount);
++        stack.editMeta(Objects.requireNonNull(consumer, "consumer"));
++        return stack;
++    }
++
++    @Override
++    public boolean hasBlockType() {
++        return this.blockType;
++    }
++
++    @Override
++    public BlockType getBlockType() {
++        return this.blockType ? Registry.BLOCK.get(this.key) : null;
++    }
++
++    @Override
++    public Class<ItemMeta> getItemMetaClass() {
++        return ItemMeta.class;
++    }
++
++    @Override
++    public int getMaxStackSize() {
++        return this.maxStackSize;
++    }
++
++    @Override
++    public short getMaxDurability() {
++        return this.maxDurability;
++    }
++
++    @Override
++    public boolean isEdible() {
++        return this.edible;
++    }
++
++    @Override
++    public boolean isRecord() {
++        return this.record;
++    }
++
++    @Override
++    public boolean isFuel() {
++        return false;
++    }
++
++    @Override
++    public int getBurnDuration() {
++        return 0;
++    }
++
++    @Override
++    public boolean isCompostable() {
++        return false;
++    }
++
++    @Override
++    public float getCompostChance() {
++        return 0.0f;
++    }
++
++    @Override
++    public ItemType getCraftingRemainingItem() {
++        return null;
++    }
++
++    @Override
++    public Multimap<Attribute, AttributeModifier> getDefaultAttributeModifiers() {
++        return ImmutableMultimap.of();
++    }
++
++    @Override
++    public Multimap<Attribute, AttributeModifier> getDefaultAttributeModifiers(
++        EquipmentSlot slot
++    ) {
++        return ImmutableMultimap.of();
++    }
++
++    @Override
++    public CreativeCategory getCreativeCategory() {
++        return CreativeCategory.MISC;
++    }
++
++    @Override
++    public boolean isEnabledByFeature(World world) {
++        return true;
++    }
++
++    @Override
++    public Material asMaterial() {
++        return this.material;
++    }
++
++    @Override
++    public String getTranslationKey() {
++        return this.translationKey;
++    }
++
++    @Override
++    public String translationKey() {
++        return this.translationKey;
++    }
++
++    @Override
++    public ItemRarity getItemRarity() {
++        return ItemRarity.COMMON;
++    }
++
++    @Override
++    public <T> T getDefaultData(DataComponentType.Valued<T> type) {
++        return null;
++    }
++
++    @Override
++    public boolean hasDefaultData(DataComponentType type) {
++        return false;
++    }
++
++    @Override
++    public Set<DataComponentType> getDefaultDataTypes() {
++        return Set.of();
++    }
++}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/inventory/PatchBukkitPlayerInventory.java b/java/patchbukkit/src/main/java/org/patchbukkit/inventory/PatchBukkitPlayerInventory.java
+new file mode 100644
+index 0000000..2ce025f
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/inventory/PatchBukkitPlayerInventory.java
+@@ -0,0 +1,336 @@
++package org.patchbukkit.inventory;
++
++import java.util.EnumMap;
++import java.util.Map;
++import java.util.UUID;
++import java.util.stream.IntStream;
++
++import org.bukkit.entity.HumanEntity;
++import org.bukkit.event.inventory.InventoryType;
++import org.bukkit.inventory.EntityEquipment;
++import org.bukkit.inventory.EquipmentSlot;
++import org.bukkit.inventory.ItemStack;
++import org.bukkit.inventory.PlayerInventory;
++import org.jetbrains.annotations.Nullable;
++import org.patchbukkit.bridge.BridgeUtils;
++
++import patchbukkit.bridge.NativeBridgeFfi;
++import patchbukkit.player.GetInventoryRequest;
++import patchbukkit.player.InventoryKind;
++import patchbukkit.player.SetHeldItemSlotRequest;
++
++/**
++ * Pumpkin-backed player inventory and equipment view.
++ */
++public final class PatchBukkitPlayerInventory
++    extends PatchBukkitInventory
++    implements PlayerInventory, EntityEquipment {
++    private static final int BOOTS_SLOT = 36;
++    private static final int LEGGINGS_SLOT = 37;
++    private static final int CHESTPLATE_SLOT = 38;
++    private static final int HELMET_SLOT = 39;
++    private static final int OFF_HAND_SLOT = 40;
++
++    private final Map<EquipmentSlot, Float> dropChances =
++        new EnumMap<>(EquipmentSlot.class);
++
++    public PatchBukkitPlayerInventory(UUID playerUuid, HumanEntity holder) {
++        super(playerUuid, InventoryKind.INVENTORY_KIND_PLAYER, holder, 41, InventoryType.PLAYER);
++    }
++
++    @Override
++    protected int[] storageSlots() {
++        return IntStream.range(0, 36).toArray();
++    }
++
++    @Override
++    public ItemStack[] getArmorContents() {
++        ItemStack[] contents = this.getContents();
++        return new ItemStack[] {
++            contents[BOOTS_SLOT],
++            contents[LEGGINGS_SLOT],
++            contents[CHESTPLATE_SLOT],
++            contents[HELMET_SLOT]
++        };
++    }
++
++    @Override
++    public ItemStack[] getExtraContents() {
++        return new ItemStack[] { this.getItem(OFF_HAND_SLOT) };
++    }
++
++    @Override
++    public @Nullable ItemStack getHelmet() {
++        return this.getItem(HELMET_SLOT);
++    }
++
++    @Override
++    public @Nullable ItemStack getChestplate() {
++        return this.getItem(CHESTPLATE_SLOT);
++    }
++
++    @Override
++    public @Nullable ItemStack getLeggings() {
++        return this.getItem(LEGGINGS_SLOT);
++    }
++
++    @Override
++    public @Nullable ItemStack getBoots() {
++        return this.getItem(BOOTS_SLOT);
++    }
++
++    private int slot(EquipmentSlot equipmentSlot) {
++        return switch (equipmentSlot) {
++            case HAND -> this.getHeldItemSlot();
++            case OFF_HAND -> OFF_HAND_SLOT;
++            case FEET -> BOOTS_SLOT;
++            case LEGS -> LEGGINGS_SLOT;
++            case CHEST -> CHESTPLATE_SLOT;
++            case HEAD -> HELMET_SLOT;
++            default -> throw new IllegalArgumentException(
++                "Unsupported player equipment slot: " + equipmentSlot
++            );
++        };
++    }
++
++    @Override
++    public void setItem(EquipmentSlot slot, @Nullable ItemStack item) {
++        this.setItem(this.slot(slot), item);
++    }
++
++    @Override
++    public @Nullable ItemStack getItem(EquipmentSlot slot) {
++        return this.getItem(this.slot(slot));
++    }
++
++    @Override
++    public void setArmorContents(ItemStack[] items) {
++        if (items == null || items.length > 4) {
++            throw new IllegalArgumentException("Armor contents may contain at most 4 items");
++        }
++        this.setBoots(items.length > 0 ? items[0] : null);
++        this.setLeggings(items.length > 1 ? items[1] : null);
++        this.setChestplate(items.length > 2 ? items[2] : null);
++        this.setHelmet(items.length > 3 ? items[3] : null);
++    }
++
++    @Override
++    public void setExtraContents(ItemStack[] items) {
++        if (items == null || items.length > 1) {
++            throw new IllegalArgumentException("Extra contents may contain at most 1 item");
++        }
++        this.setItemInOffHand(items.length == 0 ? null : items[0]);
++    }
++
++    @Override
++    public void setHelmet(@Nullable ItemStack helmet) {
++        this.setItem(HELMET_SLOT, helmet);
++    }
++
++    @Override
++    public void setChestplate(@Nullable ItemStack chestplate) {
++        this.setItem(CHESTPLATE_SLOT, chestplate);
++    }
++
++    @Override
++    public void setLeggings(@Nullable ItemStack leggings) {
++        this.setItem(LEGGINGS_SLOT, leggings);
++    }
++
++    @Override
++    public void setBoots(@Nullable ItemStack boots) {
++        this.setItem(BOOTS_SLOT, boots);
++    }
++
++    @Override
++    public @Nullable ItemStack getItemInMainHand() {
++        return this.getItem(this.getHeldItemSlot());
++    }
++
++    @Override
++    public void setItemInMainHand(@Nullable ItemStack item) {
++        this.setItem(this.getHeldItemSlot(), item);
++    }
++
++    @Override
++    public @Nullable ItemStack getItemInOffHand() {
++        return this.getItem(OFF_HAND_SLOT);
++    }
++
++    @Override
++    public void setItemInOffHand(@Nullable ItemStack item) {
++        this.setItem(OFF_HAND_SLOT, item);
++    }
++
++    @Override
++    public @Nullable ItemStack getItemInHand() {
++        return this.getItemInMainHand();
++    }
++
++    @Override
++    public void setItemInHand(@Nullable ItemStack item) {
++        this.setItemInMainHand(item);
++    }
++
++    @Override
++    public int getHeldItemSlot() {
++        var snapshot = NativeBridgeFfi.getInventory(
++            GetInventoryRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.playerUuid))
++                .setKind(this.kind)
++                .build()
++        );
++        if (snapshot == null || !snapshot.hasHeldItemSlot()) {
++            throw new IllegalStateException(
++                "Failed to read held slot for player " + this.playerUuid
++            );
++        }
++        return snapshot.getHeldItemSlot();
++    }
++
++    @Override
++    public void setHeldItemSlot(int slot) {
++        if (slot < 0 || slot > 8) {
++            throw new IllegalArgumentException("Held item slot must be between 0 and 8");
++        }
++        var response = NativeBridgeFfi.setHeldItemSlot(
++            SetHeldItemSlotRequest.newBuilder()
++                .setPlayerUuid(BridgeUtils.convertUuid(this.playerUuid))
++                .setSlot(slot)
++                .build()
++        );
++        if (response == null || !response.getSuccess()) {
++            throw new IllegalStateException(
++                "Failed to update held slot for player " + this.playerUuid
++            );
++        }
++    }
++
++    @Override
++    public HumanEntity getHolder() {
++        return this.holder;
++    }
++
++    @Override
++    public void setItem(EquipmentSlot slot, @Nullable ItemStack item, boolean silent) {
++        this.setItem(slot, item);
++    }
++
++    @Override
++    public void setItemInMainHand(@Nullable ItemStack item, boolean silent) {
++        this.setItemInMainHand(item);
++    }
++
++    @Override
++    public void setItemInOffHand(@Nullable ItemStack item, boolean silent) {
++        this.setItemInOffHand(item);
++    }
++
++    @Override
++    public void setHelmet(@Nullable ItemStack helmet, boolean silent) {
++        this.setHelmet(helmet);
++    }
++
++    @Override
++    public void setChestplate(@Nullable ItemStack chestplate, boolean silent) {
++        this.setChestplate(chestplate);
++    }
++
++    @Override
++    public void setLeggings(@Nullable ItemStack leggings, boolean silent) {
++        this.setLeggings(leggings);
++    }
++
++    @Override
++    public void setBoots(@Nullable ItemStack boots, boolean silent) {
++        this.setBoots(boots);
++    }
++
++    @Override
++    public void clear() {
++        super.clear();
++    }
++
++    @Override
++    public float getItemInHandDropChance() {
++        return this.getItemInMainHandDropChance();
++    }
++
++    @Override
++    public void setItemInHandDropChance(float chance) {
++        this.setItemInMainHandDropChance(chance);
++    }
++
++    @Override
++    public float getItemInMainHandDropChance() {
++        return this.getDropChance(EquipmentSlot.HAND);
++    }
++
++    @Override
++    public void setItemInMainHandDropChance(float chance) {
++        this.setDropChance(EquipmentSlot.HAND, chance);
++    }
++
++    @Override
++    public float getItemInOffHandDropChance() {
++        return this.getDropChance(EquipmentSlot.OFF_HAND);
++    }
++
++    @Override
++    public void setItemInOffHandDropChance(float chance) {
++        this.setDropChance(EquipmentSlot.OFF_HAND, chance);
++    }
++
++    @Override
++    public float getHelmetDropChance() {
++        return this.getDropChance(EquipmentSlot.HEAD);
++    }
++
++    @Override
++    public void setHelmetDropChance(float chance) {
++        this.setDropChance(EquipmentSlot.HEAD, chance);
++    }
++
++    @Override
++    public float getChestplateDropChance() {
++        return this.getDropChance(EquipmentSlot.CHEST);
++    }
++
++    @Override
++    public void setChestplateDropChance(float chance) {
++        this.setDropChance(EquipmentSlot.CHEST, chance);
++    }
++
++    @Override
++    public float getLeggingsDropChance() {
++        return this.getDropChance(EquipmentSlot.LEGS);
++    }
++
++    @Override
++    public void setLeggingsDropChance(float chance) {
++        this.setDropChance(EquipmentSlot.LEGS, chance);
++    }
++
++    @Override
++    public float getBootsDropChance() {
++        return this.getDropChance(EquipmentSlot.FEET);
++    }
++
++    @Override
++    public void setBootsDropChance(float chance) {
++        this.setDropChance(EquipmentSlot.FEET, chance);
++    }
++
++    @Override
++    public float getDropChance(EquipmentSlot slot) {
++        return this.dropChances.getOrDefault(slot, 1.0f);
++    }
++
++    @Override
++    public void setDropChance(EquipmentSlot slot, float chance) {
++        if (!Float.isFinite(chance) || chance < 0.0f || chance > 1.0f) {
++            throw new IllegalArgumentException("Drop chance must be between 0 and 1");
++        }
++        this.dropChances.put(slot, chance);
++    }
++}
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitDamageType.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitDamageType.java
 new file mode 100644
 index 0000000..4e2745c
@@ -2496,17 +3932,25 @@ index 0000000..fda3181
 +    }
 +}
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
-index 854db6f..35f95bb 100644
+index 854db6f..5bdd926 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/registry/PatchBukkitRegistryAccess.java
-@@ -7,0 +8 @@ import org.bukkit.Sound;
+@@ -7,0 +8,2 @@ import org.bukkit.Sound;
 +import org.bukkit.damage.DamageType;
-@@ -34,0 +36,5 @@ public class PatchBukkitRegistryAccess implements RegistryAccess {
++import org.bukkit.inventory.ItemType;
+@@ -12,0 +15 @@ import patchbukkit.registry.RegistryType;
++import org.patchbukkit.inventory.PatchBukkitItemType;
+@@ -34,0 +38,10 @@ public class PatchBukkitRegistryAccess implements RegistryAccess {
 +        ),
 +        RegistryKey.DAMAGE_TYPE, new RegistryFactory<>(
 +            RegistryType.DAMAGE_TYPE,
 +            response -> response.getDamageType().getDamageTypesList(),
 +            PatchBukkitDamageType::new
++        ),
++        RegistryKey.ITEM, new RegistryFactory<>(
++            RegistryType.ITEM,
++            response -> response.getItem().getItemsList(),
++            PatchBukkitItemType::new
 diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
 index e8c2c36..1c566bc 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
@@ -2588,12 +4032,13 @@ index e8c2c36..1c566bc 100644
 -        );
 +        return maxHeight;
 diff --git a/proto/patchbukkit/bridge.proto b/proto/patchbukkit/bridge.proto
-index 85df0ae..f59147d 100644
+index 85df0ae..a0eb4bb 100644
 --- a/proto/patchbukkit/bridge.proto
 +++ b/proto/patchbukkit/bridge.proto
-@@ -11,0 +12 @@ import "patchbukkit/message.proto";
+@@ -11,0 +12,2 @@ import "patchbukkit/message.proto";
++import "patchbukkit/itemstack.proto";
 +import "patchbukkit/player.proto";
-@@ -24,0 +26,7 @@ service NativeBridge {
+@@ -24,0 +27,12 @@ service NativeBridge {
 +  rpc GetWorlds(patchbukkit.common.EmptyRequest) returns (patchbukkit.common.WorldList);
 +
 +  rpc GetPlayerGameMode(patchbukkit.common.UUID) returns (patchbukkit.player.PlayerGameMode);
@@ -2601,6 +4046,11 @@ index 85df0ae..f59147d 100644
 +  rpc GetPlayerVitals(patchbukkit.common.UUID) returns (patchbukkit.player.PlayerVitals);
 +  rpc UpdatePlayerVitals(patchbukkit.player.UpdatePlayerVitalsRequest) returns (patchbukkit.player.UpdatePlayerVitalsResponse);
 +  rpc TeleportPlayer(patchbukkit.player.TeleportPlayerRequest) returns (patchbukkit.player.TeleportPlayerResponse);
++  rpc GetInventory(patchbukkit.player.GetInventoryRequest) returns (patchbukkit.player.InventorySnapshot);
++  rpc SetInventoryItem(patchbukkit.player.SetInventoryItemRequest) returns (patchbukkit.player.SetInventoryItemResponse);
++  rpc SetHeldItemSlot(patchbukkit.player.SetHeldItemSlotRequest) returns (patchbukkit.player.SetHeldItemSlotResponse);
++  rpc GetCursorItem(patchbukkit.common.UUID) returns (patchbukkit.itemstack.ItemStack);
++  rpc SetCursorItem(patchbukkit.player.SetCursorItemRequest) returns (patchbukkit.player.SetCursorItemResponse);
 diff --git a/proto/patchbukkit/common/types.proto b/proto/patchbukkit/common/types.proto
 index 52ab136..d9627ce 100644
 --- a/proto/patchbukkit/common/types.proto
@@ -2727,17 +4177,27 @@ index cd92e96..9be7e2f 100644
 +  patchbukkit.common.Location respawn_location = 2;
 +  bool alive = 3;
 +}
+diff --git a/proto/patchbukkit/itemstack.proto b/proto/patchbukkit/itemstack.proto
+index 75429d3..814e67f 100644
+--- a/proto/patchbukkit/itemstack.proto
++++ b/proto/patchbukkit/itemstack.proto
+@@ -17,0 +18,4 @@ message ItemStack {
++  // Opaque Pumpkin NBT used to preserve native components that Bukkit code
++  // did not replace. The bridge validates type and amount before restoring it.
++  bytes native_nbt = 3;
++  bool has_native_components = 4;
 diff --git a/proto/patchbukkit/player.proto b/proto/patchbukkit/player.proto
 new file mode 100644
-index 0000000..95c9864
+index 0000000..c0e9a34
 --- /dev/null
 +++ b/proto/patchbukkit/player.proto
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,100 @@
 +syntax = "proto3";
 +
 +package patchbukkit.player;
 +
 +import "patchbukkit/common/types.proto";
++import "patchbukkit/itemstack.proto";
 +
 +option java_multiple_files = true;
 +option java_package = "patchbukkit.player";
@@ -2787,21 +4247,68 @@ index 0000000..95c9864
 +message TeleportPlayerResponse {
 +  bool success = 1;
 +}
++
++enum InventoryKind {
++  INVENTORY_KIND_UNSPECIFIED = 0;
++  INVENTORY_KIND_PLAYER = 1;
++  INVENTORY_KIND_ENDER_CHEST = 2;
++}
++
++message GetInventoryRequest {
++  patchbukkit.common.UUID player_uuid = 1;
++  InventoryKind kind = 2;
++}
++
++message InventorySnapshot {
++  repeated patchbukkit.itemstack.ItemStack contents = 1;
++  optional uint32 held_item_slot = 2;
++}
++
++message SetInventoryItemRequest {
++  patchbukkit.common.UUID player_uuid = 1;
++  InventoryKind kind = 2;
++  uint32 slot = 3;
++  patchbukkit.itemstack.ItemStack item = 4;
++}
++
++message SetInventoryItemResponse {
++  bool success = 1;
++}
++
++message SetHeldItemSlotRequest {
++  patchbukkit.common.UUID player_uuid = 1;
++  uint32 slot = 2;
++}
++
++message SetHeldItemSlotResponse {
++  bool success = 1;
++}
++
++message SetCursorItemRequest {
++  patchbukkit.common.UUID player_uuid = 1;
++  patchbukkit.itemstack.ItemStack item = 2;
++}
++
++message SetCursorItemResponse {
++  bool success = 1;
++}
 diff --git a/proto/patchbukkit/registry.proto b/proto/patchbukkit/registry.proto
-index a7dac34..4961ec9 100644
+index a7dac34..9784588 100644
 --- a/proto/patchbukkit/registry.proto
 +++ b/proto/patchbukkit/registry.proto
-@@ -11,0 +12,6 @@ enum RegistryType {
+@@ -11,0 +12,7 @@ enum RegistryType {
 +  DAMAGE_TYPE = 1;
 +  BLOCK_TAGS = 2;
 +  ITEM_TAGS = 3;
 +  FLUID_TAGS = 4;
 +  ENTITY_TYPE_TAGS = 5;
 +  GAME_EVENT_TAGS = 6;
-@@ -20,0 +27,2 @@ message GetRegistryDataResponse {
++  ITEM = 7;
+@@ -20,0 +28,3 @@ message GetRegistryDataResponse {
 +    DamageTypeRegistryData damage_type = 2;
 +    TagRegistryData tag_registry = 3;
-@@ -23,0 +32,9 @@ message GetRegistryDataResponse {
++    ItemRegistryData item = 4;
+@@ -23,0 +34,9 @@ message GetRegistryDataResponse {
 +message RegistryTagData {
 +  string name = 1;
 +  repeated string values = 2;
@@ -2811,7 +4318,22 @@ index a7dac34..4961ec9 100644
 +  repeated RegistryTagData tags = 1;
 +}
 +
-@@ -31,0 +49,34 @@ message SoundEventRegistryData {
+@@ -31,0 +51,49 @@ message SoundEventRegistryData {
++
++message ItemData {
++  uint32 id = 1;
++  string name = 2;
++  string translation_key = 3;
++  uint32 max_stack_size = 4;
++  uint32 max_durability = 5;
++  bool edible = 6;
++  bool record = 7;
++  bool has_block_type = 8;
++}
++
++message ItemRegistryData {
++  repeated ItemData items = 1;
++}
 +
 +enum DamageScalingKind {
 +  DAMAGE_SCALING_NEVER = 0;
@@ -2846,6 +4368,15 @@ index a7dac34..4961ec9 100644
 +message DamageTypeRegistryData {
 +  repeated DamageTypeData damage_types = 1;
 +}
+diff --git a/rust/build/main.rs b/rust/build/main.rs
+index 09f8db3..23529db 100644
+--- a/rust/build/main.rs
++++ b/rust/build/main.rs
+@@ -8,2 +8,2 @@ fn main() -> Result<(), Box<dyn Error>> {
+-    println!("cargo::rerun-if-changed=rust/src/build.rs");
+-    println!("cargo::rerun-if-changed=java/build/libs/");
++    println!("cargo::rerun-if-changed=../proto");
++    println!("cargo::rerun-if-changed=../java/build/libs/");
 diff --git a/rust/src/commands/mod.rs b/rust/src/commands/mod.rs
 index 484dc62..22d354c 100644
 --- a/rust/src/commands/mod.rs
@@ -3792,6 +5323,103 @@ index d71e36d..16a2c12 100644
 +                }
 @@ -86,0 +298 @@ pub fn ffi_native_bridge_call_event_impl(request: CallEventRequest) -> Option<Ca
 +                _ => Some(false),
+diff --git a/rust/src/java/native_callbacks/itemstack.rs b/rust/src/java/native_callbacks/itemstack.rs
+index 769e490..58dc073 100644
+--- a/rust/src/java/native_callbacks/itemstack.rs
++++ b/rust/src/java/native_callbacks/itemstack.rs
+@@ -1,5 +1,87 @@
+-// pub fn ffi_native_bridge_serialize_item_stack_impl(
+-//     request: SerializeItemStackRequest,
+-// ) -> Option<SerializeItemStackResponse> {
+-//     Some(())
+-// }
++use pumpkin_data::{item::Item, item_stack::ItemStack};
++
++use crate::proto::patchbukkit::itemstack::ItemStack as BridgeItemStack;
++
++const MAX_NATIVE_NBT_BYTES: usize = 1024 * 1024;
++
++pub fn serialize_item_stack(stack: &ItemStack) -> Option<BridgeItemStack> {
++    let has_native_components = !stack.patch.is_empty();
++    let mut normalized = stack.clone();
++    if !normalized.is_empty() {
++        normalized.item_count = 1;
++    }
++
++    Some(BridgeItemStack {
++        r#type: format!("minecraft:{}", stack.item.registry_key),
++        amount: u32::from(stack.item_count),
++        native_nbt: normalized.to_nbt_bytes().ok()?,
++        has_native_components,
++    })
++}
++
++pub fn deserialize_item_stack(stack: BridgeItemStack) -> Option<ItemStack> {
++    let amount = u8::try_from(stack.amount).ok()?;
++    let requested_type = stack
++        .r#type
++        .strip_prefix("minecraft:")
++        .unwrap_or(&stack.r#type);
++
++    if amount == 0 || requested_type == "air" {
++        return Some(ItemStack::EMPTY.clone());
++    }
++
++    if !stack.native_nbt.is_empty() {
++        if stack.native_nbt.len() > MAX_NATIVE_NBT_BYTES {
++            return None;
++        }
++
++        let mut restored = ItemStack::from_nbt_bytes(&stack.native_nbt).ok()??;
++        if restored.item.registry_key != requested_type {
++            return None;
++        }
++        restored.item_count = amount;
++        return Some(restored);
++    }
++
++    Some(ItemStack::new(
++        amount,
++        Item::from_registry_key(requested_type)?,
++    ))
++}
++
++#[cfg(test)]
++mod tests {
++    use pumpkin_data::{
++        data_component::DataComponent,
++        data_component_impl::{DataComponentImpl, UnbreakableImpl},
++        item::Item,
++        item_stack::ItemStack,
++    };
++
++    use super::{deserialize_item_stack, serialize_item_stack};
++
++    #[test]
++    fn bridge_roundtrip_preserves_native_components_and_allows_amount_changes() {
++        let mut native = ItemStack::new(1, &Item::WOODEN_AXE);
++        native
++            .patch
++            .push((DataComponent::Unbreakable, Some(UnbreakableImpl.to_dyn())));
++
++        let mut bridge = serialize_item_stack(&native).expect("item should serialize");
++        bridge.amount = 3;
++        let restored = deserialize_item_stack(bridge).expect("item should restore");
++
++        assert_eq!(restored.item.registry_key, Item::WOODEN_AXE.registry_key);
++        assert_eq!(restored.item_count, 3);
++        assert!(restored.get_data_component::<UnbreakableImpl>().is_some());
++    }
++
++    #[test]
++    fn bridge_rejects_native_snapshot_for_a_different_material() {
++        let native = ItemStack::new(1, &Item::WOODEN_AXE);
++        let mut bridge = serialize_item_stack(&native).expect("item should serialize");
++        bridge.r#type = "minecraft:stone".to_owned();
++
++        assert!(deserialize_item_stack(bridge).is_none());
++    }
++}
 diff --git a/rust/src/java/native_callbacks/location.rs b/rust/src/java/native_callbacks/location.rs
 index 7582945..631aaba 100644
 --- a/rust/src/java/native_callbacks/location.rs
@@ -3838,20 +5466,24 @@ index 56698aa..d084ca1 100644
 +
 diff --git a/rust/src/java/native_callbacks/player.rs b/rust/src/java/native_callbacks/player.rs
 new file mode 100644
-index 0000000..e1d262f
+index 0000000..6407d0e
 --- /dev/null
 +++ b/rust/src/java/native_callbacks/player.rs
-@@ -0,0 +1,152 @@
+@@ -0,0 +1,261 @@
 +use std::str::FromStr;
 +
 +use pumpkin_util::{GameMode, math::vector3::Vector3};
 +
 +use crate::java::native_callbacks::CALLBACK_CONTEXT;
++use crate::java::native_callbacks::itemstack::{deserialize_item_stack, serialize_item_stack};
 +use crate::proto::patchbukkit::{
 +    common::Uuid,
++    itemstack::ItemStack as BridgeItemStack,
 +    player::{
-+        PlayerGameMode, PlayerVitals, SetPlayerGameModeRequest, TeleportPlayerRequest,
-+        UpdatePlayerVitalsRequest,
++        GetInventoryRequest, InventoryKind, InventorySnapshot, PlayerGameMode, PlayerVitals,
++        SetCursorItemRequest, SetCursorItemResponse, SetHeldItemSlotRequest,
++        SetHeldItemSlotResponse, SetInventoryItemRequest, SetInventoryItemResponse,
++        SetPlayerGameModeRequest, TeleportPlayerRequest, UpdatePlayerVitalsRequest,
 +    },
 +};
 +
@@ -3994,18 +5626,127 @@ index 0000000..e1d262f
 +
 +    Some(success)
 +}
++
++pub fn ffi_native_bridge_get_inventory_impl(
++    request: GetInventoryRequest,
++) -> Option<InventorySnapshot> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++    let kind = InventoryKind::try_from(request.kind).ok()?;
++
++    tokio::task::block_in_place(|| {
++        ctx.runtime.block_on(async {
++            let (size, held_item_slot) = match kind {
++                InventoryKind::Player => {
++                    (41, Some(u32::from(player.inventory.get_selected_slot())))
++                }
++                InventoryKind::EnderChest => (27, None),
++                InventoryKind::Unspecified => return None,
++            };
++
++            let mut contents = Vec::with_capacity(size);
++            for slot in 0..size {
++                let stack = match kind {
++                    InventoryKind::Player => player.inventory_stack(slot).await?,
++                    InventoryKind::EnderChest => player.ender_chest_stack(slot).await?,
++                    InventoryKind::Unspecified => return None,
++                };
++                contents.push(serialize_item_stack(&stack)?);
++            }
++
++            Some(InventorySnapshot {
++                contents,
++                held_item_slot,
++            })
++        })
++    })
++}
++
++pub fn ffi_native_bridge_set_inventory_item_impl(
++    request: SetInventoryItemRequest,
++) -> Option<SetInventoryItemResponse> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++    let kind = InventoryKind::try_from(request.kind).ok()?;
++    let slot = usize::try_from(request.slot).ok()?;
++    let stack = deserialize_item_stack(request.item?)?;
++
++    let success = tokio::task::block_in_place(|| {
++        ctx.runtime.block_on(async {
++            match kind {
++                InventoryKind::Player => player.replace_inventory_stack(slot, stack).await,
++                InventoryKind::EnderChest => player.replace_ender_chest_stack(slot, stack).await,
++                InventoryKind::Unspecified => false,
++            }
++        })
++    });
++
++    Some(SetInventoryItemResponse { success })
++}
++
++pub fn ffi_native_bridge_set_held_item_slot_impl(
++    request: SetHeldItemSlotRequest,
++) -> Option<SetHeldItemSlotResponse> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++    let slot = u8::try_from(request.slot).ok()?;
++
++    let success = tokio::task::block_in_place(|| {
++        ctx.runtime
++            .block_on(player.replace_selected_inventory_slot(slot))
++    });
++    Some(SetHeldItemSlotResponse { success })
++}
++
++pub fn ffi_native_bridge_get_cursor_item_impl(request: Uuid) -> Option<BridgeItemStack> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.value).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++
++    tokio::task::block_in_place(|| {
++        ctx.runtime.block_on(async {
++            let stack = player
++                .cursor_stack()
++                .await
++                .unwrap_or_else(|| pumpkin_data::item_stack::ItemStack::EMPTY.clone());
++            serialize_item_stack(&stack)
++        })
++    })
++}
++
++pub fn ffi_native_bridge_set_cursor_item_impl(
++    request: SetCursorItemRequest,
++) -> Option<SetCursorItemResponse> {
++    let ctx = CALLBACK_CONTEXT.get()?;
++    let player_uuid = uuid::Uuid::parse_str(&request.player_uuid?.value).ok()?;
++    let player = ctx.plugin_context.server.get_player_by_uuid(player_uuid)?;
++    let stack = deserialize_item_stack(request.item?)?;
++    let stack = (!stack.is_empty()).then_some(stack);
++
++    tokio::task::block_in_place(|| {
++        ctx.runtime.block_on(player.replace_cursor_stack(stack));
++    });
++    Some(SetCursorItemResponse { success: true })
++}
 diff --git a/rust/src/java/native_callbacks/registry.rs b/rust/src/java/native_callbacks/registry.rs
-index d403ca1..f39e935 100644
+index d403ca1..6b042d1 100644
 --- a/rust/src/java/native_callbacks/registry.rs
 +++ b/rust/src/java/native_callbacks/registry.rs
 @@ -2,2 +2,3 @@ use crate::proto::patchbukkit::registry::{
 -    GetRegistryDataRequest, GetRegistryDataResponse, RegistryType, SoundEvent,
 -    SoundEventRegistryData, get_registry_data_response::Registry,
 +    DamageTypeData, DamageTypeRegistryData, GetRegistryDataRequest, GetRegistryDataResponse,
-+    RegistryTagData, RegistryType, SoundEvent, SoundEventRegistryData, TagRegistryData,
-+    get_registry_data_response::Registry,
-@@ -4,0 +6,75 @@ use crate::proto::patchbukkit::registry::{
++    ItemData, ItemRegistryData, RegistryTagData, RegistryType, SoundEvent, SoundEventRegistryData,
++    TagRegistryData, get_registry_data_response::Registry,
+@@ -4,0 +6,128 @@ use crate::proto::patchbukkit::registry::{
++use pumpkin_data::Block;
 +use pumpkin_data::damage::{DamageEffects, DamageScaling, DamageType, DeathMessageType};
++use pumpkin_data::data_component::DataComponent;
++use pumpkin_data::data_component_impl::{ItemNameImpl, MaxDamageImpl, MaxStackSizeImpl, get};
++use pumpkin_data::item::Item;
 +use pumpkin_data::tag::{RegistryKey as PumpkinRegistryKey, get_registry_key_tags};
 +use pumpkin_util::version::JavaMinecraftVersion;
 +
@@ -4080,7 +5821,56 @@ index d403ca1..f39e935 100644
 +
 +    Registry::TagRegistry(TagRegistryData { tags })
 +}
-@@ -21,0 +98,45 @@ pub fn ffi_native_bridge_get_registry_data_impl(
++
++fn build_item_registry() -> Registry {
++    let items = (0..=u16::MAX)
++        .filter_map(Item::from_id)
++        .map(|item| {
++            let max_stack_size = item
++                .components
++                .iter()
++                .find_map(|(kind, value)| {
++                    (*kind == DataComponent::MaxStackSize)
++                        .then(|| get::<MaxStackSizeImpl>(*value).size)
++                })
++                .unwrap_or(64);
++            let max_durability = item
++                .components
++                .iter()
++                .find_map(|(kind, value)| {
++                    (*kind == DataComponent::MaxDamage)
++                        .then(|| get::<MaxDamageImpl>(*value).max_damage)
++                })
++                .unwrap_or(0);
++            let translation_key = item
++                .components
++                .iter()
++                .find_map(|(kind, value)| {
++                    (*kind == DataComponent::ItemName).then(|| get::<ItemNameImpl>(*value).name)
++                })
++                .unwrap_or("item.minecraft.air");
++
++            ItemData {
++                id: u32::from(item.id),
++                name: item.registry_key.to_owned(),
++                translation_key: translation_key.to_owned(),
++                max_stack_size: u32::from(max_stack_size),
++                max_durability: u32::try_from(max_durability).unwrap_or_default(),
++                edible: item
++                    .components
++                    .iter()
++                    .any(|(kind, _)| *kind == DataComponent::Food),
++                record: item
++                    .components
++                    .iter()
++                    .any(|(kind, _)| *kind == DataComponent::JukeboxPlayable),
++                has_block_type: Block::from_registry_key(item.registry_key).is_some(),
++            }
++        })
++        .collect();
++    Registry::Item(ItemRegistryData { items })
++}
+@@ -21,0 +151,46 @@ pub fn ffi_native_bridge_get_registry_data_impl(
 +        val if val == RegistryType::DamageType as i32 => {
 +            let damage_types = DAMAGE_TYPE_NAMES
 +                .iter()
@@ -4126,11 +5916,37 @@ index d403ca1..f39e935 100644
 +        val if val == RegistryType::GameEventTags as i32 => {
 +            build_tag_registry(PumpkinRegistryKey::GameEvent)
 +        }
-@@ -28,0 +150,29 @@ pub fn ffi_native_bridge_get_registry_data_impl(
++        val if val == RegistryType::Item as i32 => build_item_registry(),
+@@ -28,0 +204,54 @@ pub fn ffi_native_bridge_get_registry_data_impl(
 +
 +#[cfg(test)]
 +mod tests {
-+    use super::{PumpkinRegistryKey, Registry, build_tag_registry};
++    use super::{PumpkinRegistryKey, Registry, build_item_registry, build_tag_registry};
++
++    #[test]
++    fn item_registry_exposes_stack_limits_and_durability() {
++        let Registry::Item(item_registry) = build_item_registry() else {
++            panic!("expected item registry");
++        };
++
++        let stone = item_registry
++            .items
++            .iter()
++            .find(|item| item.name == "stone")
++            .expect("stone should be registered");
++        assert_eq!(stone.max_stack_size, 64);
++        assert_eq!(stone.max_durability, 0);
++        assert!(stone.has_block_type);
++
++        let diamond_sword = item_registry
++            .items
++            .iter()
++            .find(|item| item.name == "diamond_sword")
++            .expect("diamond sword should be registered");
++        assert_eq!(diamond_sword.max_stack_size, 1);
++        assert!(diamond_sword.max_durability > 0);
++        assert!(!diamond_sword.has_block_type);
++    }
 +
 +    #[test]
 +    fn tag_registry_matches_the_bukkit_api_data_version() {

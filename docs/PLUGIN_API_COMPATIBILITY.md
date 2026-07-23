@@ -62,6 +62,33 @@ Plugins that directly use CraftBukkit or Minecraft internals require an
 additional internal-API shim. Their compatibility is tracked separately from
 public Bukkit, Spigot, and Paper API compatibility.
 
+## Inventory milestone gate
+
+The player-inventory milestone is complete only when one deployed commit
+passes all of these checks:
+
+1. Bukkit can read and write all 41 player slots: hotbar, storage, armor, and
+   off-hand.
+2. `Registry.ITEM`, modern Bukkit `ItemStack` constructors, and empty stacks
+   produce usable Pumpkin-backed item objects with native stack limits.
+3. Bukkit can read and write the selected hotbar slot, cursor item, and all 27
+   ender-chest slots.
+4. `addItem`, `removeItem`, `clear`, contents/storage accessors, equipment
+   accessors, and iterators preserve Bukkit slot semantics.
+5. The owning client sees mutations immediately, and held/armor/off-hand
+   changes are visible to other players.
+6. Untouched Pumpkin item components survive Bukkit reads, amount changes, and
+   writes without loss.
+7. Focused native round-trip tests, clean Java/protobuf compilation, Rust
+   compilation, clean pinned-patch application, and a live EssentialsX
+   give/clear/equipment/ender-chest workflow all pass.
+
+Opaque native component preservation does not by itself implement arbitrary
+Bukkit `ItemMeta` mutation. Naming, lore, enchantment, repair, persistent-data,
+and modern Paper data-component writes remain a separate item-metadata
+milestone until their values round-trip in both directions and pass live
+plugin verification.
+
 ## Human verification runbook
 
 Every compatibility change must leave evidence a maintainer can reproduce and

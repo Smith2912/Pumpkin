@@ -874,6 +874,110 @@ impl Player {
         &self.ender_chest_inventory
     }
 
+    /// Returns a snapshot of a native player-inventory slot.
+    ///
+    /// Slots 0-35 are storage/hotbar, 36-39 are armor, and 40 is off-hand.
+    pub async fn inventory_stack(&self, slot: usize) -> Option<ItemStack> {
+        if slot >= PlayerInventory::MAIN_SIZE && !self.inventory.equipment_slots.contains_key(&slot)
+        {
+            return None;
+        }
+
+        let stack = self.inventory.get_stack(slot).await;
+        Some(stack.lock().await.clone())
+    }
+
+    /// Replaces a native player-inventory slot and synchronizes both the owning
+    /// client and any visible equipment state.
+    pub async fn replace_inventory_stack(&self, slot: usize, stack: ItemStack) -> bool {
+        if slot >= PlayerInventory::MAIN_SIZE && !self.inventory.equipment_slots.contains_key(&slot)
+        {
+            return false;
+        }
+
+        self.inventory.set_stack(slot, stack.clone()).await;
+        self.enqueue_slot_set_packet(&CSetPlayerInventory::new(
+            (slot as i32).into(),
+            &ItemStackSerializer::from(stack.clone()),
+        ))
+        .await;
+
+        let equipment_slot = match slot {
+            slot if slot == self.inventory.get_selected_slot() as usize => {
+                Some(EquipmentSlot::MAIN_HAND)
+            }
+            36 => Some(EquipmentSlot::FEET),
+            37 => Some(EquipmentSlot::LEGS),
+            38 => Some(EquipmentSlot::CHEST),
+            39 => Some(EquipmentSlot::HEAD),
+            PlayerInventory::OFF_HAND_SLOT => Some(EquipmentSlot::OFF_HAND),
+            _ => None,
+        };
+
+        if let Some(equipment_slot) = equipment_slot {
+            self.living_entity
+                .send_equipment_changes(&[(equipment_slot, stack)]);
+        }
+
+        true
+    }
+
+    /// Changes the selected hotbar slot and synchronizes the held item.
+    pub async fn replace_selected_inventory_slot(&self, slot: u8) -> bool {
+        if !PlayerInventory::is_valid_hotbar_index(slot as usize) {
+            return false;
+        }
+
+        self.inventory.set_selected_slot(slot);
+        self.enqueue_set_held_item_packet(&CSetSelectedSlot::new(slot as i8))
+            .await;
+
+        let stack = self.inventory.get_stack(slot as usize).await;
+        let stack = stack.lock().await.clone();
+        self.living_entity
+            .send_equipment_changes(&[(EquipmentSlot::MAIN_HAND, stack)]);
+        true
+    }
+
+    /// Returns the item currently carried by the player's inventory cursor.
+    pub async fn cursor_stack(&self) -> Option<ItemStack> {
+        self.carried_item.lock().await.clone()
+    }
+
+    /// Replaces the cursor item and synchronizes the owning client.
+    pub async fn replace_cursor_stack(&self, stack: Option<ItemStack>) {
+        let stack = stack.filter(|stack| !stack.is_empty());
+        *self.carried_item.lock().await = stack.clone();
+
+        let stack = stack.unwrap_or_else(|| ItemStack::EMPTY.clone());
+        let serialized = ItemStackSerializer::from(stack);
+        self.enqueue_cursor_packet(&CSetCursorItem::new(&serialized))
+            .await;
+    }
+
+    /// Returns a snapshot of an ender-chest slot.
+    pub async fn ender_chest_stack(&self, slot: usize) -> Option<ItemStack> {
+        if slot >= EnderChestInventory::INVENTORY_SIZE {
+            return None;
+        }
+
+        let stack = self.ender_chest_inventory.get_stack(slot).await;
+        Some(stack.lock().await.clone())
+    }
+
+    /// Replaces an ender-chest slot and refreshes the current screen handler.
+    /// If no ender chest is open, the next view reads the updated contents.
+    pub async fn replace_ender_chest_stack(&self, slot: usize, stack: ItemStack) -> bool {
+        if slot >= EnderChestInventory::INVENTORY_SIZE {
+            return false;
+        }
+
+        self.ender_chest_inventory.set_stack(slot, stack).await;
+        let screen_handler = self.current_screen_handler.lock().await.clone();
+        screen_handler.lock().await.send_content_updates().await;
+        true
+    }
+
     /// Removes the [`Player`] out of the current [`World`].
     pub async fn remove(self: &Arc<Self>) {
         self.stats

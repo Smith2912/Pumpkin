@@ -15,6 +15,7 @@ use pumpkin_util::GameMode;
 use rand;
 use std::borrow::Cow;
 use std::cmp::{max, min};
+use std::io::Cursor;
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -720,6 +721,28 @@ impl ItemStack {
 
         Some(item_stack)
     }
+
+    /// Serializes the complete native item representation for lossless adapter
+    /// round-trips. Callers may inspect the stable type/count fields separately,
+    /// but should preserve these bytes whenever an item is not being replaced.
+    pub fn to_nbt_bytes(&self) -> Result<Vec<u8>, pumpkin_nbt::Error> {
+        let mut compound = NbtCompound::new();
+        self.write_item_stack(&mut compound);
+
+        let mut bytes = Vec::new();
+        pumpkin_nbt::to_bytes(&compound, &mut bytes)?;
+        Ok(bytes)
+    }
+
+    /// Restores an item serialized by [`Self::to_nbt_bytes`].
+    ///
+    /// A valid NBT document can still describe an unknown or malformed item, so
+    /// the outer result reports decoding failures and the inner option reports
+    /// item validation failures.
+    pub fn from_nbt_bytes(bytes: &[u8]) -> Result<Option<Self>, pumpkin_nbt::Error> {
+        let compound: NbtCompound = pumpkin_nbt::from_bytes(Cursor::new(bytes))?;
+        Ok(Self::read_item_stack(&compound))
+    }
 }
 
 impl From<&RecipeResultStruct> for ItemStack {
@@ -886,17 +909,20 @@ mod tests {
 
     #[test]
     fn custom_data_survives_item_stack_nbt_roundtrip() {
-        let mut stack = ItemStack::new(1, &Item::WOODEN_AXE);
+        let mut stack = ItemStack::new(3, &Item::WOODEN_AXE);
         stack.set_custom_data("test_plugin", "marker", NbtTag::Byte(1));
         stack.set_custom_data("test_plugin", "mode", NbtTag::String("pos1".into()));
         stack
             .patch
             .push((DataComponent::Unbreakable, Some(UnbreakableImpl.to_dyn())));
 
-        let mut compound = NbtCompound::new();
-        stack.write_item_stack(&mut compound);
-        let decoded = ItemStack::read_item_stack(&compound).expect("stack should decode");
+        let bytes = stack.to_nbt_bytes().expect("stack should encode");
+        let decoded = ItemStack::from_nbt_bytes(&bytes)
+            .expect("NBT should decode")
+            .expect("stack should validate");
 
+        assert_eq!(decoded.item.registry_key, Item::WOODEN_AXE.registry_key);
+        assert_eq!(decoded.item_count, 3);
         assert_eq!(
             decoded.get_custom_data("test_plugin", "marker"),
             Some(NbtTag::Byte(1))
