@@ -69,6 +69,17 @@ use crate::command::args::entities::{
 use crate::data::advancement_data::AdvancementManager;
 use crate::server::scheduler::TaskScheduler;
 
+struct PendingPlayerGuard<'a> {
+    server: &'a Server,
+    player: Arc<Player>,
+}
+
+impl Drop for PendingPlayerGuard<'_> {
+    fn drop(&mut self) {
+        self.server.unregister_pending_player(&self.player);
+    }
+}
+
 /// Represents a Minecraft server instance.
 pub struct Server {
     pub basic_config: BasicConfiguration,
@@ -573,13 +584,24 @@ impl Server {
             advancements.player = Arc::downgrade(&player);
         };
 
-        self.register_pending_player(player.clone());
+        if !self.try_register_pending_player(player.clone()) {
+            player
+                .kick(
+                    DisconnectReason::Kicked,
+                    TextComponent::text("You logged in from another location"),
+                )
+                .await;
+            return None;
+        }
+        let _pending_player = PendingPlayerGuard {
+            server: self,
+            player: player.clone(),
+        };
 
         send_cancellable! {{
             self;
             PlayerLoginEvent::new(player.clone(), TextComponent::text("You have been kicked from the server"));
             'after: {
-                self.unregister_pending_player(player.gameprofile.id);
                 player.screen_handler_sync_handler.store_player(player.clone()).await;
                 if world
                     .add_player(&player)
@@ -602,7 +624,6 @@ impl Server {
             }
 
             'cancelled: {
-                self.unregister_pending_player(player.gameprofile.id);
                 player.kick(DisconnectReason::Kicked, event.kick_message).await;
                 None
             }
@@ -828,19 +849,29 @@ impl Server {
         self.pending_players.load().get(&id).cloned()
     }
 
-    fn register_pending_player(&self, player: Arc<Player>) {
+    fn try_register_pending_player(&self, player: Arc<Player>) -> bool {
         let player_id = player.gameprofile.id;
         self.pending_players.rcu(|players| {
             let mut next = (**players).clone();
-            next.insert(player_id, player.clone());
+            next.entry(player_id).or_insert_with(|| player.clone());
             next
         });
+        self.pending_players
+            .load()
+            .get(&player_id)
+            .is_some_and(|registered| Arc::ptr_eq(registered, &player))
     }
 
-    fn unregister_pending_player(&self, player_id: uuid::Uuid) {
+    fn unregister_pending_player(&self, player: &Arc<Player>) {
+        let player_id = player.gameprofile.id;
         self.pending_players.rcu(|players| {
             let mut next = (**players).clone();
-            next.remove(&player_id);
+            if next
+                .get(&player_id)
+                .is_some_and(|registered| Arc::ptr_eq(registered, player))
+            {
+                next.remove(&player_id);
+            }
             next
         });
     }

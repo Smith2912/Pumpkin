@@ -32,7 +32,8 @@ COPY . /pumpkin
 # Apply reviewed compatibility batches to the pinned PatchBukkit source in
 # dependency order. Keeping them separate makes each behavior easy to review.
 RUN git -C /patchbukkit apply --unidiff-zero /pumpkin/docker/patchbukkit-26.2.patch \
-    && git -C /patchbukkit apply --unidiff-zero /pumpkin/docker/patchbukkit-world-time-weather.patch
+    && git -C /patchbukkit apply --unidiff-zero /pumpkin/docker/patchbukkit-world-time-weather.patch \
+    && git -C /patchbukkit apply --unidiff-zero /pumpkin/docker/patchbukkit-player-profile.patch
 
 # Build the Java bridge only after applying the compatibility/lifecycle patch.
 RUN --mount=type=cache,id=s/c4f5b7dc-c554-4f52-a998-ab086c9613f2-/root/.gradle,target=/root/.gradle \
