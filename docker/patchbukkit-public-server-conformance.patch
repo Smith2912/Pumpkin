@@ -1,0 +1,231 @@
+diff --git a/java/patchbukkit-test-plugin/build.gradle.kts b/java/patchbukkit-test-plugin/build.gradle.kts
+index 9e9728ff8bfd552a1107beea371b9e00da09c1a0..4b40c71e9f1977461d11eae225957e744c6c7618 100644
+--- a/java/patchbukkit-test-plugin/build.gradle.kts
++++ b/java/patchbukkit-test-plugin/build.gradle.kts
+@@ -11,6 +11,7 @@ repositories {
+ 
+ dependencies {
+     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
++    compileOnly(project(":patchbukkit"))
+ }
+ 
+ java {
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
+index 96de0074811674654727f1c88c4000833252a629..c16fc51378ff5465e7d61228fe7b73e006707bec 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
+@@ -44,7 +44,7 @@ public final class PatchBukkitTestPlugin extends JavaPlugin {
+         framework.registerSuite(new PluginManagerTests(this));
+         framework.registerSuite(new CommandSystemTests());
+         framework.registerSuite(new EventSystemTests(this));
+-        framework.registerSuite(new PermissionsTests());
++        framework.registerSuite(new PermissionsTests(this));
+         framework.registerSuite(new RegistryTests());
+         framework.registerSuite(new EntityTests());
+         framework.registerSuite(new ConsoleSenderTests());
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
+index d2a0fd796431b4d0ebc33532b15e19df735b468f..031798c43d0003990034281d837ffca20dc93643 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
+@@ -23,6 +23,8 @@ import org.bukkit.event.player.PlayerGameModeChangeEvent;
+ import org.bukkit.event.player.PlayerItemHeldEvent;
+ import org.bukkit.event.player.PlayerLoginEvent;
+ import org.bukkit.event.player.PlayerInteractEvent;
++import org.bukkit.event.player.PlayerInteractEntityEvent;
++import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+ import org.bukkit.event.player.PlayerQuitEvent;
+ import org.bukkit.event.player.PlayerRespawnEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent;
+@@ -167,6 +169,17 @@ public final class EventSystemTests {
+             public void onPlayerInteract(PlayerInteractEvent event) {
+             }
+ 
++            @EventHandler
++            public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
++            }
++
++            @EventHandler
++            public void onPlayerInteractAtEntity(PlayerInteractAtEntityEvent event) {
++                // The specialised event must remain cancellable. The native
++                // bridge consumes that cancellation before performing the use.
++                event.setCancelled(event.isCancelled());
++            }
++
+             @EventHandler
+             public void onServerCommand(ServerCommandEvent event) {
+             }
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PermissionsTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PermissionsTests.java
+index 2c7cc37dc0b1a702b95f605b9425eff2f2c287a5..f54333152dffdd04a34c4dbc7c7cf65e69d3a7e5 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PermissionsTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PermissionsTests.java
+@@ -3,15 +3,57 @@ package org.patchbukkit.testplugin.tests;
+ import org.bukkit.Bukkit;
+ import org.bukkit.permissions.Permission;
+ import org.bukkit.permissions.PermissionDefault;
++import org.bukkit.permissions.PermissionAttachment;
++import org.bukkit.plugin.java.JavaPlugin;
+ import org.bukkit.plugin.PluginManager;
++import org.patchbukkit.entity.PatchBukkitHumanEntity;
+ import org.patchbukkit.testplugin.ConformanceTest;
+ import org.patchbukkit.testplugin.TestCategory;
+ 
+ import java.util.Set;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.TimeUnit;
+ 
+ import static org.patchbukkit.testplugin.TestAssertions.*;
+ 
+ public final class PermissionsTests {
++    private final JavaPlugin plugin;
++
++    public PermissionsTests(JavaPlugin plugin) {
++        this.plugin = plugin;
++    }
++
++    @ConformanceTest(name = "HumanEntity permission delegates are isolated and expire timed attachments", category = TestCategory.PERMISSIONS)
++    public void testHumanEntityPermissionDelegation() throws InterruptedException {
++        PatchBukkitHumanEntity first = new PatchBukkitHumanEntity(
++            java.util.UUID.randomUUID(), "permission-first"
++        );
++        PatchBukkitHumanEntity second = new PatchBukkitHumanEntity(
++            java.util.UUID.randomUUID(), "permission-second"
++        );
++        PermissionAttachment immediate = first.addAttachment(plugin, "patchbukkit.test.isolated", true);
++        PermissionAttachment timed = first.addAttachment(plugin, "patchbukkit.test.timed", true, 1);
++        CountDownLatch timedRemoval = new CountDownLatch(1);
++        timed.setRemovalCallback(attachment -> timedRemoval.countDown());
++        try {
++            assertTrue(first.hasPermission("patchbukkit.test.isolated"), "attachment should delegate to player perm");
++            assertTrue(!second.hasPermission("patchbukkit.test.isolated"), "player permission delegates must be isolated");
++            assertTrue(
++                first.getEffectivePermissions().stream().anyMatch(
++                    value -> value.getPermission().equals("patchbukkit.test.isolated") && value.getValue()
++                ),
++                "effective permissions should reflect delegated attachments"
++            );
++            assertTrue(first.hasPermission("patchbukkit.test.timed"), "timed attachment should apply first");
++            assertTrue(
++                timedRemoval.await(2, TimeUnit.SECONDS),
++                "timed attachment removal callback should run"
++            );
++            assertTrue(!first.hasPermission("patchbukkit.test.timed"), "timed attachment should expire after its tick delay");
++        } finally {
++            first.removeAttachment(immediate);
++        }
++    }
+ 
+     @ConformanceTest(name = "addPermission() and getPermission()", category = TestCategory.PERMISSIONS)
+     public void testAddAndGetPermission() {
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
+index 58a3538c93c4a0a13e00feab92529643bfe93558..406d98f8bb0dba5191b6001d838cbc2c0a3e7278 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
+@@ -1,12 +1,15 @@
+ package org.patchbukkit.testplugin.tests;
+ 
+ import java.io.File;
++import java.lang.reflect.Proxy;
+ import java.lang.reflect.Modifier;
++import java.util.logging.Logger;
+ import org.bukkit.Bukkit;
+ import org.bukkit.GameMode;
+ import org.bukkit.World;
+ import org.bukkit.Server;
+ import org.bukkit.block.Block;
++import org.bukkit.metadata.FixedMetadataValue;
+ import org.bukkit.command.CommandMap;
+ import org.bukkit.command.ConsoleCommandSender;
+ import org.bukkit.event.EventHandler;
+@@ -15,6 +18,8 @@ import org.bukkit.event.Listener;
+ import org.bukkit.event.weather.ThunderChangeEvent;
+ import org.bukkit.event.weather.WeatherChangeEvent;
+ import org.bukkit.plugin.PluginManager;
++import org.bukkit.plugin.Plugin;
++import org.bukkit.plugin.PluginLoader;
+ import org.bukkit.permissions.PermissibleBase;
+ import org.bukkit.scheduler.BukkitScheduler;
+ import org.patchbukkit.testplugin.ConformanceTest;
+@@ -22,6 +27,7 @@ import org.patchbukkit.testplugin.TestCategory;
+ import org.patchbukkit.testplugin.TestExpectation;
+ import org.bukkit.plugin.java.JavaPlugin;
+ import java.util.concurrent.atomic.AtomicBoolean;
++import org.patchbukkit.entity.PatchBukkitHumanEntity;
+ 
+ import static org.patchbukkit.testplugin.TestAssertions.*;
+ 
+@@ -51,6 +57,75 @@ public final class ServerTests {
+         assertNotNull(block.getType(), "block material");
+     }
+ 
++    @ConformanceTest(name = "Metadata is shared by stable entity, block, and world identities", category = TestCategory.SERVER)
++    public void testRuntimeMetadataOwnershipAndCleanup() {
++        PluginLoader failingLoader = (PluginLoader) Proxy.newProxyInstance(
++            PluginLoader.class.getClassLoader(),
++            new Class<?>[] { PluginLoader.class },
++            (proxy, method, args) -> {
++                if (method.getName().equals("disablePlugin")) {
++                    throw new IllegalStateException("intentional metadata cleanup test failure");
++                }
++                return null;
++            }
++        );
++        Plugin secondaryOwner = (Plugin) Proxy.newProxyInstance(
++            Plugin.class.getClassLoader(),
++            new Class<?>[] { Plugin.class },
++            (proxy, method, args) -> switch (method.getName()) {
++                case "getName" -> "PatchBukkitMetadataSecondaryOwner";
++                case "getLogger" -> Logger.getLogger("PatchBukkitMetadataSecondaryOwner");
++                case "getPluginLoader" -> failingLoader;
++                case "isEnabled" -> true;
++                case "equals" -> proxy == args[0];
++                case "hashCode" -> System.identityHashCode(proxy);
++                default -> null;
++            }
++        );
++        PatchBukkitHumanEntity firstPlayer = new PatchBukkitHumanEntity(
++            java.util.UUID.randomUUID(), "metadata-first"
++        );
++        PatchBukkitHumanEntity samePlayer = new PatchBukkitHumanEntity(
++            firstPlayer.getUniqueId(), "metadata-second-wrapper"
++        );
++        World world = Bukkit.getWorlds().get(0);
++        Block firstBlock = world.getBlockAt(10, world.getMinHeight() + 1, 10);
++        Block secondBlock = world.getBlockAt(10, world.getMinHeight() + 1, 10);
++
++        firstPlayer.setMetadata("owner-check", new FixedMetadataValue(plugin, "first"));
++        firstPlayer.setMetadata("owner-check", new FixedMetadataValue(secondaryOwner, "second"));
++        firstBlock.setMetadata("wrapper-check", new FixedMetadataValue(plugin, "block"));
++        world.setMetadata("world-check", new FixedMetadataValue(plugin, "world"));
++        try {
++            assertTrue(samePlayer.hasMetadata("owner-check"), "entity metadata should be shared by UUID");
++            assertTrue(
++                samePlayer.getMetadata("owner-check").size() == 2,
++                "different plugin owners should retain independent values"
++            );
++            firstPlayer.removeMetadata("owner-check", plugin);
++            assertTrue(
++                samePlayer.getMetadata("owner-check").size() == 1,
++                "removing one owner must preserve the other owner's metadata"
++            );
++            assertTrue(secondBlock.hasMetadata("wrapper-check"), "block metadata should survive a fresh wrapper");
++            assertTrue(world.hasMetadata("world-check"), "world metadata should be available");
++
++            boolean disableFailed = false;
++            try {
++                Bukkit.getPluginManager().disablePlugin(secondaryOwner);
++            } catch (IllegalStateException expected) {
++                disableFailed = true;
++            }
++            assertTrue(disableFailed, "test plugin loader should exercise exceptional disable cleanup");
++            assertTrue(!samePlayer.hasMetadata("owner-check"), "plugin cleanup should remove owned metadata");
++        } finally {
++            firstPlayer.removeMetadata("owner-check", plugin);
++            firstPlayer.removeMetadata("owner-check", secondaryOwner);
++            firstBlock.removeMetadata("wrapper-check", plugin);
++            world.removeMetadata("world-check", plugin);
++        }
++    }
++
+     @ConformanceTest(name = "World time and weather round-trip through Pumpkin", category = TestCategory.SERVER)
+     public void testWorldTimeAndWeather() {
+         World world = Bukkit.getWorlds().get(0);

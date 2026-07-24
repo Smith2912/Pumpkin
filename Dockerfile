@@ -40,6 +40,8 @@ RUN git -C /patchbukkit apply --check /pumpkin/docker/patchbukkit-26.2.patch \
     && git -C /patchbukkit apply /pumpkin/docker/patchbukkit-public-server-metadata.patch \
     && git -C /patchbukkit apply --check /pumpkin/docker/patchbukkit-public-server-interaction.patch \
     && git -C /patchbukkit apply /pumpkin/docker/patchbukkit-public-server-interaction.patch \
+    && git -C /patchbukkit apply --check /pumpkin/docker/patchbukkit-public-server-conformance.patch \
+    && git -C /patchbukkit apply /pumpkin/docker/patchbukkit-public-server-conformance.patch \
     && git -C /patchbukkit diff --check
 
 # Build the Java bridge only after applying the compatibility/lifecycle patch.
