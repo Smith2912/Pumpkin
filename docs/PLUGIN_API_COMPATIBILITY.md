@@ -136,8 +136,10 @@ The first slice covers live block reads, `BlockBreakEvent`,
 `BlockPlaceEvent`, and `PlayerInteractEvent`. Placement carries the real
 placed position, placed material, player, cancellation, `canBuild`, and the
 live replaced block state. Pumpkin does not yet expose the placed-against
-position, face, or hand, so those fields use documented placeholders and are
-not counted as complete. Piston, explosion,
+position, face, or a lock-free held-item snapshot. The Bukkit event therefore
+uses a one-count item with the real placed material and documented placeholders
+for the placed-against block and hand; item amount and metadata are not counted
+as complete. Piston, explosion,
 entity-damage, hanging, dispense, craft, pickup, and drop events remain
 separate native contracts and are not represented as complete by listener
 registration alone.

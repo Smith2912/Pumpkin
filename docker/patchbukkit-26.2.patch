@@ -3334,7 +3334,7 @@ diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEv
 index 14c24f1..9c8750d 100644
 --- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
 +++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
-@@ -5,14 +5,55 @@ import net.kyori.adventure.text.Component;
+@@ -5,14 +5,56 @@ import net.kyori.adventure.text.Component;
  import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
  import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
  import org.bukkit.Bukkit;
@@ -3346,6 +3346,7 @@ index 14c24f1..9c8750d 100644
 +import org.bukkit.inventory.EquipmentSlot;
  import org.jetbrains.annotations.NotNull;
  import org.jetbrains.annotations.Nullable;
++import org.patchbukkit.inventory.PatchBukkitItemStack;
 +import org.patchbukkit.world.PatchBukkitBlock;
 +import org.patchbukkit.world.PatchBukkitBlockState;
 +import org.patchbukkit.world.PatchBukkitWorld;
@@ -3466,7 +3467,7 @@ index 14c24f1..9c8750d 100644
              case PLAYER_JOIN -> {
                  PlayerJoinEvent joinEvent = event.getPlayerJoin();
                  Player player = getPlayer(joinEvent.getPlayerUuid().getValue());
-@@ -42,6 +152,385 @@ public class PatchBukkitEventFactory {
+@@ -42,6 +152,386 @@ public class PatchBukkitEventFactory {
                  Component joinMessage = GsonComponentSerializer.gson().deserialize(joinEvent.getJoinMessage());
                  yield new org.bukkit.event.player.PlayerJoinEvent(player, joinMessage);
              }
@@ -3734,17 +3735,18 @@ index 14c24f1..9c8750d 100644
 +                }
 +
 +                /*
-+                 * Pumpkin exposes the placed position and the type of the block
-+                 * placed against, but not that block's position, face, or hand.
-+                 * Preserve the cancellation/canBuild contract now and use the
-+                 * replaced block at the placed position as the safest location
-+                 * placeholder until the native event carries those fields.
++                 * Pumpkin currently holds the selected inventory slot lock while
++                 * this synchronous event is dispatched. Reading the live inventory
++                 * here would re-enter that lock and deadlock placement. Preserve
++                 * the placed material without performing a nested inventory query;
++                 * the native event must carry a full item snapshot before metadata,
++                 * amount, and hand can be represented exactly.
 +                 */
 +                yield new org.bukkit.event.block.BlockPlaceEvent(
 +                    placedBlock,
 +                    PatchBukkitBlockState.create(replacedBlock),
 +                    replacedBlock,
-+                    player.getInventory().getItemInMainHand(),
++                    PatchBukkitItemStack.create(placedBlock.getType(), 1),
 +                    player,
 +                    placeEvent.getCanBuild(),
 +                    EquipmentSlot.HAND
@@ -14100,7 +14102,7 @@ diff --git a/rust/src/java/native_callbacks/itemstack.rs b/rust/src/java/native_
 index 769e490..713a961 100644
 --- a/rust/src/java/native_callbacks/itemstack.rs
 +++ b/rust/src/java/native_callbacks/itemstack.rs
-@@ -1,5 +1,285 @@
+@@ -1,5 +1,341 @@
 -// pub fn ffi_native_bridge_serialize_item_stack_impl(
 -//     request: SerializeItemStackRequest,
 -// ) -> Option<SerializeItemStackResponse> {
@@ -14132,13 +14134,20 @@ index 769e490..713a961 100644
 +    if !normalized.is_empty() {
 +        normalized.item_count = 1;
 +    }
++    let native_nbt = normalized.to_nbt_bytes().ok()?;
++
++    // Native plugins are separate dynamic libraries, so Rust TypeIds for
++    // pumpkin-data components are not shared with the server executable. Read
++    // metadata from an NBT round-trip owned by this library instead of
++    // downcasting component trait objects borrowed from the server.
++    let local_stack = ItemStack::from_nbt_bytes(&native_nbt).ok()??;
 +
 +    Some(BridgeItemStack {
 +        r#type: format!("minecraft:{}", stack.item.registry_key),
 +        amount: u32::from(stack.item_count),
-+        native_nbt: normalized.to_nbt_bytes().ok()?,
++        native_nbt,
 +        has_native_components,
-+        metadata: Some(serialize_metadata(stack)),
++        metadata: Some(serialize_metadata(&local_stack)),
 +    })
 +}
 +
@@ -14293,6 +14302,8 @@ index 769e490..713a961 100644
 +
 +#[cfg(test)]
 +mod tests {
++    use std::any::Any;
++
 +    use pumpkin_data::{
 +        Enchantment,
 +        data_component::DataComponent,
@@ -14305,6 +14316,53 @@ index 769e490..713a961 100644
 +    };
 +
 +    use super::{deserialize_item_stack, serialize_item_stack};
++
++    #[derive(Clone)]
++    struct ForeignUnbreakable;
++
++    impl DataComponentImpl for ForeignUnbreakable {
++        fn equal(&self, other: &dyn DataComponentImpl) -> bool {
++            other.as_any().is::<Self>()
++        }
++
++        fn get_enum() -> DataComponent {
++            DataComponent::Unbreakable
++        }
++
++        fn get_self_enum(&self) -> DataComponent {
++            DataComponent::Unbreakable
++        }
++
++        fn to_dyn(self) -> Box<dyn DataComponentImpl> {
++            Box::new(self)
++        }
++
++        fn clone_dyn(&self) -> Box<dyn DataComponentImpl> {
++            Box::new(self.clone())
++        }
++
++        fn as_any(&self) -> &dyn Any {
++            self
++        }
++
++        fn as_mut_any(&mut self) -> &mut dyn Any {
++            self
++        }
++    }
++
++    #[test]
++    fn bridge_localizes_foreign_component_types_before_metadata_reads() {
++        let mut native = ItemStack::new(1, &Item::CRAFTING_TABLE);
++        native.patch.push((
++            DataComponent::Unbreakable,
++            Some(ForeignUnbreakable.to_dyn()),
++        ));
++
++        let bridge = serialize_item_stack(&native).expect("foreign item should serialize");
++
++        assert_eq!(bridge.r#type, "minecraft:crafting_table");
++        assert!(bridge.has_native_components);
++    }
 +
 +    #[test]
 +    fn bridge_roundtrip_preserves_native_components_and_allows_amount_changes() {
