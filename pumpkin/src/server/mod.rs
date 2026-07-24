@@ -43,7 +43,7 @@ use pumpkin_world::world_info::anvil::{
 use pumpkin_world::world_info::{LevelData, WorldInfoError, WorldInfoReader, WorldInfoWriter};
 use rand::seq::{IndexedRandom, SliceRandom};
 use rsa::RsaPublicKey;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -102,6 +102,12 @@ pub struct Server {
     pub item_registry: Arc<ItemRegistry>,
     /// Manages multiple worlds within the server.
     pub worlds: ArcSwap<Vec<Arc<World>>>,
+    /// Players constructed for `PlayerLoginEvent` but not yet admitted to a world.
+    ///
+    /// Login-event APIs must be able to resolve the exact player object before
+    /// the admission decision is complete. Pending players are intentionally
+    /// excluded from online-player listings and ticking.
+    pending_players: ArcSwap<HashMap<uuid::Uuid, Arc<Player>>>,
     /// All the dimensions that exist on the server.
     pub dimensions: Vec<Dimension>,
     /// Assigns unique IDs to containers.
@@ -268,6 +274,7 @@ impl Server {
             recipe_manager: Arc::new(recipe::RecipeManager::new()),
             map_id: level_info.load().map_id.into(),
             worlds: ArcSwap::from_pointee(vec![]),
+            pending_players: ArcSwap::from_pointee(HashMap::new()),
             dimensions,
             command_dispatcher,
             block_registry: block_registry.clone(),
@@ -566,10 +573,13 @@ impl Server {
             advancements.player = Arc::downgrade(&player);
         };
 
+        self.register_pending_player(player.clone());
+
         send_cancellable! {{
             self;
             PlayerLoginEvent::new(player.clone(), TextComponent::text("You have been kicked from the server"));
             'after: {
+                self.unregister_pending_player(player.gameprofile.id);
                 player.screen_handler_sync_handler.store_player(player.clone()).await;
                 if world
                     .add_player(&player)
@@ -592,6 +602,7 @@ impl Server {
             }
 
             'cancelled: {
+                self.unregister_pending_player(player.gameprofile.id);
                 player.kick(DisconnectReason::Kicked, event.kick_message).await;
                 None
             }
@@ -814,7 +825,24 @@ impl Server {
                 return Some(player);
             }
         }
-        None
+        self.pending_players.load().get(&id).cloned()
+    }
+
+    fn register_pending_player(&self, player: Arc<Player>) {
+        let player_id = player.gameprofile.id;
+        self.pending_players.rcu(|players| {
+            let mut next = (**players).clone();
+            next.insert(player_id, player.clone());
+            next
+        });
+    }
+
+    fn unregister_pending_player(&self, player_id: uuid::Uuid) {
+        self.pending_players.rcu(|players| {
+            let mut next = (**players).clone();
+            next.remove(&player_id);
+            next
+        });
     }
 
     /// Counts the total number of players across all worlds.
