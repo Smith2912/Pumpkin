@@ -1,0 +1,611 @@
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
+index 3b82cc75adfc00374bb623c25d093593250b690f..fc7f435c5b934b190e30f45c10697ec6a0ae2afb 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitPluginManager.java
+@@ -5,6 +5,7 @@ import java.io.File;
+ import java.util.HashMap;
+ import java.util.Map;
+ import java.util.concurrent.ConcurrentHashMap;
++import java.util.logging.Level;
+ 
+ import org.bukkit.Server;
+ import org.bukkit.command.SimpleCommandMap;
+@@ -18,6 +19,7 @@ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
+ import org.jspecify.annotations.NonNull;
+ import org.patchbukkit.events.PatchBukkitEventManager;
++import org.patchbukkit.metadata.PatchBukkitMetadataStore;
+ 
+ @SuppressWarnings("removal")
+ public class PatchBukkitPluginManager extends SimplePluginManager {
+@@ -86,16 +88,24 @@ public class PatchBukkitPluginManager extends SimplePluginManager {
+ 
+     @Override
+     public void disablePlugins() {
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'disablePlugins'"
+-        );
++        for (Plugin plugin : getPlugins()) {
++            try {
++                disablePlugin(plugin);
++            } catch (RuntimeException exception) {
++                plugin.getLogger().log(
++                    Level.SEVERE,
++                    "Error disabling " + plugin.getName(),
++                    exception
++                );
++            }
++        }
+     }
+ 
+     @Override
+     public void clearPlugins() {
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'clearPlugins'"
+-        );
++        disablePlugins();
++        this.eventManager.clearEvents();
++        this.plugins.clear();
+     }
+ 
+     @Override
+@@ -169,10 +179,16 @@ public class PatchBukkitPluginManager extends SimplePluginManager {
+ 
+     @Override
+     public void disablePlugin(@NotNull Plugin plugin) {
+-        if (plugin.isEnabled()) {
++        if (!plugin.isEnabled()) {
++            PatchBukkitMetadataStore.clearPlugin(plugin);
++            return;
++        }
++        try {
+             plugin.getPluginLoader().disablePlugin(plugin);
+-            callEvent(new PluginDisableEvent(plugin));
++        } finally {
++            PatchBukkitMetadataStore.clearPlugin(plugin);
+         }
++        callEvent(new PluginDisableEvent(plugin));
+     }
+ 
+     @Override
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
+index a6e7ec397557d06cbd827b4501c7c8ee9e4b7b8c..4d1fd4c002ededfa02059e33dd377f1fbb840883 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
+@@ -101,6 +101,7 @@ import org.jetbrains.annotations.Nullable;
+ import org.patchbukkit.command.PatchBukkitCommandMap;
+ import org.patchbukkit.command.PatchBukkitConsoleCommandSender;
+ import org.patchbukkit.events.PatchBukkitEventManager;
++import org.patchbukkit.metadata.PatchBukkitMetadataStore;
+ import org.patchbukkit.registry.PatchBukkitLegacyTags;
+ import org.patchbukkit.scheduler.PatchBukkitScheduler;
+ import org.patchbukkit.versioning.Versioning;
+@@ -223,6 +224,7 @@ public class PatchBukkitServer implements Server {
+      */
+     public void discardPendingPlayer(UUID uuid) {
+         this.pendingPlayers.remove(uuid);
++        PatchBukkitMetadataStore.clear(PatchBukkitMetadataStore.entity(uuid));
+     }
+ 
+     /**
+@@ -242,6 +244,7 @@ public class PatchBukkitServer implements Server {
+      */
+     public void unregisterPlayer(UUID uuid) {
+         this.pendingPlayers.remove(uuid);
++        PatchBukkitMetadataStore.clear(PatchBukkitMetadataStore.entity(uuid));
+         Player p = this.onlinePlayers.remove(uuid);
+         if (p != null) {
+             this.onlinePlayersByName.remove(p.getName().toLowerCase());
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEntity.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEntity.java
+index 9b759b83cad91a8fa2f7cb70d4c6396d8d21d7d3..a02fe5d094cafef25311f8a236b2252e772110d7 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEntity.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEntity.java
+@@ -32,7 +32,6 @@ import org.bukkit.permissions.PermissibleBase;
+ import org.bukkit.permissions.Permission;
+ import org.bukkit.permissions.PermissionAttachment;
+ import org.bukkit.permissions.PermissionAttachmentInfo;
+-import org.bukkit.permissions.ServerOperator;
+ import org.bukkit.persistence.PersistentDataContainer;
+ import org.bukkit.plugin.Plugin;
+ import org.bukkit.util.BoundingBox;
+@@ -40,6 +39,7 @@ import org.bukkit.util.Vector;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
+ import org.patchbukkit.bridge.BridgeUtils;
++import org.patchbukkit.metadata.PatchBukkitMetadataStore;
+ import org.patchbukkit.world.PatchBukkitWorld;
+ 
+ import io.papermc.paper.datacomponent.DataComponentType;
+@@ -55,7 +55,8 @@ public class PatchBukkitEntity implements Entity {
+ 
+     protected final UUID uuid;
+     private final String name;
+-    private static PermissibleBase perm;
++    private volatile PermissibleBase perm;
++    private boolean op;
+     private boolean visibleByDefault = true;
+ 
+     public PatchBukkitEntity(
+@@ -66,46 +67,41 @@ public class PatchBukkitEntity implements Entity {
+         this.name = name;
+     }
+ 
+-    private static PermissibleBase getPermissibleBase() {
+-        if (PatchBukkitEntity.perm == null) {
+-            PatchBukkitEntity.perm = new PermissibleBase(new ServerOperator() {
+-
+-                @Override
+-                public boolean isOp() {
+-                    return false;
+-                }
+-
+-                @Override
+-                public void setOp(boolean value) {
++    protected PatchBukkitMetadataStore.TargetKey metadataTarget() {
++        return PatchBukkitMetadataStore.entity(this.uuid);
++    }
+ 
+-                }
+-            });
++    private PermissibleBase getPermissibleBase() {
++        PermissibleBase current = this.perm;
++        if (current != null) {
++            return current;
++        }
++        synchronized (this) {
++            if (this.perm == null) {
++                this.perm = new PermissibleBase(this);
++            }
++            return this.perm;
+         }
+-        return PatchBukkitEntity.perm;
+     }
+ 
+     @Override
+     public void setMetadata(@NotNull String metadataKey, @NotNull MetadataValue newMetadataValue) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setMetadata'");
++        PatchBukkitMetadataStore.set(metadataTarget(), metadataKey, newMetadataValue);
+     }
+ 
+     @Override
+     public @NotNull List<MetadataValue> getMetadata(@NotNull String metadataKey) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getMetadata'");
++        return PatchBukkitMetadataStore.get(metadataTarget(), metadataKey);
+     }
+ 
+     @Override
+     public boolean hasMetadata(@NotNull String metadataKey) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'hasMetadata'");
++        return PatchBukkitMetadataStore.has(metadataTarget(), metadataKey);
+     }
+ 
+     @Override
+     public void removeMetadata(@NotNull String metadataKey, @NotNull Plugin owningPlugin) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'removeMetadata'");
++        PatchBukkitMetadataStore.remove(metadataTarget(), metadataKey, owningPlugin);
+     }
+ 
+     @Override
+@@ -141,77 +137,72 @@ public class PatchBukkitEntity implements Entity {
+ 
+     @Override
+     public boolean isPermissionSet(@NotNull String name) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'isPermissionSet'");
++        return getPermissibleBase().isPermissionSet(name);
+     }
+ 
+     @Override
+     public boolean isPermissionSet(@NotNull Permission perm) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'isPermissionSet'");
++        return getPermissibleBase().isPermissionSet(perm);
+     }
+ 
+     @Override
+     public boolean hasPermission(String name) {
+-        return PatchBukkitEntity.getPermissibleBase().hasPermission(name);
++        return getPermissibleBase().hasPermission(name);
+     }
+ 
+     @Override
+     public boolean hasPermission(Permission perm) {
+-        return PatchBukkitEntity.getPermissibleBase().hasPermission(perm);
++        return getPermissibleBase().hasPermission(perm);
+     }
+ 
+     @Override
+     public @NotNull PermissionAttachment addAttachment(@NotNull Plugin plugin, @NotNull String name, boolean value) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'addAttachment'");
++        return getPermissibleBase().addAttachment(plugin, name, value);
+     }
+ 
+     @Override
+     public @NotNull PermissionAttachment addAttachment(@NotNull Plugin plugin) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'addAttachment'");
++        return getPermissibleBase().addAttachment(plugin);
+     }
+ 
+     @Override
+     public @Nullable PermissionAttachment addAttachment(@NotNull Plugin plugin, @NotNull String name, boolean value,
+             int ticks) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'addAttachment'");
++        return getPermissibleBase().addAttachment(plugin, name, value, ticks);
+     }
+ 
+     @Override
+     public @Nullable PermissionAttachment addAttachment(@NotNull Plugin plugin, int ticks) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'addAttachment'");
++        return getPermissibleBase().addAttachment(plugin, ticks);
+     }
+ 
+     @Override
+     public void removeAttachment(@NotNull PermissionAttachment attachment) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'removeAttachment'");
++        getPermissibleBase().removeAttachment(attachment);
+     }
+ 
+     @Override
+     public void recalculatePermissions() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'recalculatePermissions'");
++        getPermissibleBase().recalculatePermissions();
+     }
+ 
+     @Override
+     public @NotNull Set<PermissionAttachmentInfo> getEffectivePermissions() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'getEffectivePermissions'");
++        return getPermissibleBase().getEffectivePermissions();
+     }
+ 
+     @Override
+     public boolean isOp() {
+-        return PatchBukkitEntity.getPermissibleBase().isOp();
++        return this.op;
+     }
+ 
+     @Override
+     public void setOp(boolean value) {
+-        PatchBukkitEntity.getPermissibleBase().setOp(value);
++        this.op = value;
++        PermissibleBase current = this.perm;
++        if (current != null) {
++            current.recalculatePermissions();
++        }
+     }
+ 
+     @Override
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
+index 417bb9dc751043bed049b8b539b46f0594f9b6c6..5181bec5d4650b45b031ed96152853905b9ac6af 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitHumanEntity.java
+@@ -37,6 +37,8 @@ import org.bukkit.inventory.Inventory;
+ import org.bukkit.inventory.InventoryView;
+ import org.bukkit.inventory.InventoryView.Property;
+ import org.bukkit.permissions.Permission;
++import org.bukkit.permissions.PermissionAttachment;
++import org.bukkit.permissions.PermissionAttachmentInfo;
+ import org.bukkit.inventory.ItemStack;
+ import org.bukkit.inventory.MainHand;
+ import org.bukkit.inventory.Merchant;
+@@ -136,6 +138,53 @@ public class PatchBukkitHumanEntity
+         return this.perm.hasPermission(perm);
+     }
+ 
++    @Override
++    public @NotNull PermissionAttachment addAttachment(
++        @NotNull org.bukkit.plugin.Plugin plugin,
++        @NotNull String name,
++        boolean value
++    ) {
++        return this.perm.addAttachment(plugin, name, value);
++    }
++
++    @Override
++    public @NotNull PermissionAttachment addAttachment(@NotNull org.bukkit.plugin.Plugin plugin) {
++        return this.perm.addAttachment(plugin);
++    }
++
++    @Override
++    public @Nullable PermissionAttachment addAttachment(
++        @NotNull org.bukkit.plugin.Plugin plugin,
++        @NotNull String name,
++        boolean value,
++        int ticks
++    ) {
++        return this.perm.addAttachment(plugin, name, value, ticks);
++    }
++
++    @Override
++    public @Nullable PermissionAttachment addAttachment(
++        @NotNull org.bukkit.plugin.Plugin plugin,
++        int ticks
++    ) {
++        return this.perm.addAttachment(plugin, ticks);
++    }
++
++    @Override
++    public void removeAttachment(@NotNull PermissionAttachment attachment) {
++        this.perm.removeAttachment(attachment);
++    }
++
++    @Override
++    public void recalculatePermissions() {
++        this.perm.recalculatePermissions();
++    }
++
++    @Override
++    public @NotNull Set<PermissionAttachmentInfo> getEffectivePermissions() {
++        return this.perm.getEffectivePermissions();
++    }
++
+     @Override
+     public double getEyeHeight() {
+         // TODO Auto-generated method stub
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/metadata/PatchBukkitMetadataStore.java b/java/patchbukkit/src/main/java/org/patchbukkit/metadata/PatchBukkitMetadataStore.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..b9f45daa55997e53ee55e5eee7b633e03c56390b
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/metadata/PatchBukkitMetadataStore.java
+@@ -0,0 +1,108 @@
++package org.patchbukkit.metadata;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Objects;
++import java.util.UUID;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.ConcurrentMap;
++import org.bukkit.metadata.MetadataValue;
++import org.bukkit.plugin.Plugin;
++
++/**
++ * Process-local Bukkit metadata with Bukkit's plugin-owner semantics.
++ *
++ * <p>Metadata is runtime-only. Stable target keys make independently-created
++ * Bukkit wrappers observe the same values without persisting values to disk.</p>
++ */
++public final class PatchBukkitMetadataStore {
++    private static final ConcurrentMap<TargetKey, ConcurrentMap<String, List<MetadataValue>>> VALUES =
++        new ConcurrentHashMap<>();
++
++    private PatchBukkitMetadataStore() {}
++
++    public static TargetKey entity(UUID uuid) {
++        return new TargetKey("entity", Objects.requireNonNull(uuid).toString());
++    }
++
++    public static TargetKey world(UUID uuid) {
++        return new TargetKey("world", Objects.requireNonNull(uuid).toString());
++    }
++
++    public static TargetKey block(UUID worldUuid, int x, int y, int z) {
++        return new TargetKey(
++            "block",
++            Objects.requireNonNull(worldUuid) + ":" + x + ":" + y + ":" + z
++        );
++    }
++
++    public static void set(TargetKey target, String key, MetadataValue value) {
++        Objects.requireNonNull(target, "target");
++        Objects.requireNonNull(key, "metadata key");
++        Objects.requireNonNull(value, "metadata value");
++        Objects.requireNonNull(value.getOwningPlugin(), "metadata owning plugin");
++        VALUES.computeIfAbsent(target, ignored -> new ConcurrentHashMap<>())
++            .compute(key, (ignored, existing) -> {
++                List<MetadataValue> replacement = existing == null
++                    ? new ArrayList<>()
++                    : new ArrayList<>(existing);
++                replacement.removeIf(old -> old.getOwningPlugin() == value.getOwningPlugin());
++                replacement.add(value);
++                return List.copyOf(replacement);
++            });
++    }
++
++    public static List<MetadataValue> get(TargetKey target, String key) {
++        ConcurrentMap<String, List<MetadataValue>> targetValues = VALUES.get(target);
++        return targetValues == null ? List.of() : targetValues.getOrDefault(key, List.of());
++    }
++
++    public static boolean has(TargetKey target, String key) {
++        return !get(target, key).isEmpty();
++    }
++
++    public static void remove(TargetKey target, String key, Plugin owner) {
++        Objects.requireNonNull(owner, "metadata owning plugin");
++        ConcurrentMap<String, List<MetadataValue>> targetValues = VALUES.get(target);
++        if (targetValues == null) {
++            return;
++        }
++        targetValues.computeIfPresent(key, (ignored, existing) -> {
++            List<MetadataValue> retained = existing.stream()
++                .filter(value -> value.getOwningPlugin() != owner)
++                .toList();
++            return retained.isEmpty() ? null : retained;
++        });
++        if (targetValues.isEmpty()) {
++            VALUES.remove(target, targetValues);
++        }
++    }
++
++    /** Removes metadata belonging to a plugin when that plugin is disabled. */
++    public static void clearPlugin(Plugin owner) {
++        Objects.requireNonNull(owner, "plugin");
++        VALUES.forEach((target, targetValues) -> {
++            targetValues.forEach((key, ignored) -> targetValues.computeIfPresent(key, (unused, values) -> {
++                List<MetadataValue> retained = values.stream()
++                    .filter(value -> value.getOwningPlugin() != owner)
++                    .toList();
++                return retained.isEmpty() ? null : retained;
++            }));
++            if (targetValues.isEmpty()) {
++                VALUES.remove(target, targetValues);
++            }
++        });
++    }
++
++    /** Clears ephemeral metadata when a player/entity session ends. */
++    public static void clear(TargetKey target) {
++        VALUES.remove(Objects.requireNonNull(target, "target"));
++    }
++
++    public record TargetKey(String type, String value) {
++        public TargetKey {
++            Objects.requireNonNull(type, "type");
++            Objects.requireNonNull(value, "value");
++        }
++    }
++}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitBlock.java b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitBlock.java
+index e13d58673bb3cf245d60742231a605f84eedc501..2c5b4b13310d9421c8be09e8f93faca628c5d12c 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitBlock.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitBlock.java
+@@ -3,16 +3,14 @@ package org.patchbukkit.world;
+ import java.lang.reflect.InvocationHandler;
+ import java.lang.reflect.Method;
+ import java.lang.reflect.Proxy;
+-import java.util.List;
+-import java.util.Map;
+ import java.util.Objects;
+-import java.util.concurrent.ConcurrentHashMap;
+ import org.bukkit.Location;
+ import org.bukkit.Material;
+ import org.bukkit.block.Block;
+ import org.bukkit.block.BlockFace;
+ import org.bukkit.metadata.MetadataValue;
+ import org.bukkit.plugin.Plugin;
++import org.patchbukkit.metadata.PatchBukkitMetadataStore;
+ import patchbukkit.bridge.NativeBridgeFfi;
+ import patchbukkit.common.BlockPosition;
+ import patchbukkit.common.BlockSnapshot;
+@@ -31,7 +29,6 @@ public final class PatchBukkitBlock implements InvocationHandler {
+     private final int x;
+     private final int y;
+     private final int z;
+-    private final Map<String, List<MetadataValue>> metadata = new ConcurrentHashMap<>();
+     private volatile Material material;
+ 
+     private PatchBukkitBlock(
+@@ -93,8 +90,8 @@ public final class PatchBukkitBlock implements InvocationHandler {
+                 || getMaterial() == Material.WATER
+                 || getMaterial() == Material.LAVA;
+             case "getTranslationKey" -> getMaterial().translationKey();
+-            case "hasMetadata" -> metadata.containsKey((String) args[0]);
+-            case "getMetadata" -> metadata.getOrDefault((String) args[0], List.of());
++            case "hasMetadata" -> PatchBukkitMetadataStore.has(metadataTarget(), (String) args[0]);
++            case "getMetadata" -> PatchBukkitMetadataStore.get(metadataTarget(), (String) args[0]);
+             case "setMetadata" -> setMetadata((String) args[0], (MetadataValue) args[1]);
+             case "removeMetadata" -> removeMetadata((String) args[0], (Plugin) args[1]);
+             case "hashCode" -> Objects.hash(world.getUID(), x, y, z);
+@@ -179,24 +176,12 @@ public final class PatchBukkitBlock implements InvocationHandler {
+     }
+ 
+     private Object setMetadata(String key, MetadataValue value) {
+-        metadata.compute(key, (ignored, existing) -> {
+-            List<MetadataValue> values = existing == null
+-                ? new java.util.ArrayList<>()
+-                : new java.util.ArrayList<>(existing);
+-            values.removeIf(old -> old.getOwningPlugin() == value.getOwningPlugin());
+-            values.add(value);
+-            return List.copyOf(values);
+-        });
++        PatchBukkitMetadataStore.set(metadataTarget(), key, value);
+         return null;
+     }
+ 
+     private Object removeMetadata(String key, Plugin owner) {
+-        metadata.computeIfPresent(key, (ignored, existing) -> {
+-            List<MetadataValue> values = existing.stream()
+-                .filter(value -> value.getOwningPlugin() != owner)
+-                .toList();
+-            return values.isEmpty() ? null : values;
+-        });
++        PatchBukkitMetadataStore.remove(metadataTarget(), key, owner);
+         return null;
+     }
+ 
+@@ -213,6 +198,10 @@ public final class PatchBukkitBlock implements InvocationHandler {
+             && z == block.getZ();
+     }
+ 
++    private PatchBukkitMetadataStore.TargetKey metadataTarget() {
++        return PatchBukkitMetadataStore.block(world.getUID(), x, y, z);
++    }
++
+     private static Material requireMaterial(String key) {
+         Material result = Material.matchMaterial(key);
+         if (result == null) {
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
+index 1a072a99d75fb09b7f8d052ca4e59736ed3db93f..a31a4ad4a777e55ca60e617c9fe889d70400a447 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/world/PatchBukkitWorld.java
+@@ -29,6 +29,7 @@ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
+ import org.jspecify.annotations.NonNull;
+ import org.patchbukkit.bridge.BridgeUtils;
++import org.patchbukkit.metadata.PatchBukkitMetadataStore;
+ import org.patchbukkit.PatchBukkitPluginManager;
+ import patchbukkit.bridge.NativeBridgeFfi;
+ import patchbukkit.world.UpdateWorldStateRequest;
+@@ -1684,9 +1685,10 @@ public class PatchBukkitWorld
+         @NotNull String metadataKey,
+         @NotNull MetadataValue newMetadataValue
+     ) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'setMetadata'"
++        PatchBukkitMetadataStore.set(
++            PatchBukkitMetadataStore.world(this.uuid),
++            metadataKey,
++            newMetadataValue
+         );
+     }
+ 
+@@ -1694,17 +1696,17 @@ public class PatchBukkitWorld
+     public @NotNull List<MetadataValue> getMetadata(
+         @NotNull String metadataKey
+     ) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'getMetadata'"
++        return PatchBukkitMetadataStore.get(
++            PatchBukkitMetadataStore.world(this.uuid),
++            metadataKey
+         );
+     }
+ 
+     @Override
+     public boolean hasMetadata(@NotNull String metadataKey) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'hasMetadata'"
++        return PatchBukkitMetadataStore.has(
++            PatchBukkitMetadataStore.world(this.uuid),
++            metadataKey
+         );
+     }
+ 
+@@ -1713,9 +1715,10 @@ public class PatchBukkitWorld
+         @NotNull String metadataKey,
+         @NotNull Plugin owningPlugin
+     ) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException(
+-            "Unimplemented method 'removeMetadata'"
++        PatchBukkitMetadataStore.remove(
++            PatchBukkitMetadataStore.world(this.uuid),
++            metadataKey,
++            owningPlugin
+         );
+     }
+ 

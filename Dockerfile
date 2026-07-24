@@ -24,17 +24,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN git init /patchbukkit \
     && git -C /patchbukkit remote add origin https://github.com/Pumpkin-MC/PatchBukkit.git \
     && git -C /patchbukkit fetch --depth=1 origin ${PATCHBUKKIT_COMMIT} \
-    && git -C /patchbukkit checkout --detach FETCH_HEAD
+    && git -C /patchbukkit checkout --detach FETCH_HEAD \
+    && test "$(git -C /patchbukkit rev-parse HEAD)" = "${PATCHBUKKIT_COMMIT}"
 
 WORKDIR /pumpkin
 COPY . /pumpkin
 
-# Apply reviewed compatibility batches to the pinned PatchBukkit source in
-# dependency order. Keeping them separate makes each behavior easy to review.
-RUN git -C /patchbukkit apply --unidiff-zero /pumpkin/docker/patchbukkit-26.2.patch \
-    && git -C /patchbukkit apply --unidiff-zero /pumpkin/docker/patchbukkit-world-time-weather.patch \
-    && git -C /patchbukkit apply --unidiff-zero /pumpkin/docker/patchbukkit-player-profile.patch \
-    && git -C /patchbukkit apply --unidiff-zero /pumpkin/docker/patchbukkit-event-dispatch.patch
+# Replay the reviewed baseline and public-server batches with normal context.
+# Every patch is checked immediately before it is applied so a stale or
+# partially matching source tree fails the build instead of producing an
+# unreviewed adapter.
+RUN git -C /patchbukkit apply --check /pumpkin/docker/patchbukkit-26.2.patch \
+    && git -C /patchbukkit apply /pumpkin/docker/patchbukkit-26.2.patch \
+    && git -C /patchbukkit apply --check /pumpkin/docker/patchbukkit-public-server-metadata.patch \
+    && git -C /patchbukkit apply /pumpkin/docker/patchbukkit-public-server-metadata.patch \
+    && git -C /patchbukkit diff --check
 
 # Build the Java bridge only after applying the compatibility/lifecycle patch.
 RUN --mount=type=cache,id=s/c4f5b7dc-c554-4f52-a998-ab086c9613f2-/root/.gradle,target=/root/.gradle \
