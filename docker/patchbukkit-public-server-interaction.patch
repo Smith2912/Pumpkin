@@ -1,0 +1,699 @@
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEntitySnapshot.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEntitySnapshot.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..ff1933e54cd62c71dbc46e83d171ba9eeb17958e
+--- /dev/null
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitEntitySnapshot.java
+@@ -0,0 +1,158 @@
++package org.patchbukkit.entity;
++
++import java.lang.reflect.InvocationHandler;
++import java.lang.reflect.Method;
++import java.lang.reflect.Proxy;
++import java.util.Collections;
++import java.util.Locale;
++import java.util.UUID;
++
++import org.bukkit.Bukkit;
++import org.bukkit.Location;
++import org.bukkit.World;
++import org.bukkit.entity.ArmorStand;
++import org.bukkit.entity.EnderCrystal;
++import org.bukkit.entity.Entity;
++import org.bukkit.entity.EntityType;
++import org.bukkit.entity.ItemFrame;
++import org.bukkit.entity.Player;
++import org.bukkit.metadata.MetadataValue;
++import org.bukkit.plugin.Plugin;
++import org.bukkit.util.Vector;
++import org.jetbrains.annotations.NotNull;
++import org.patchbukkit.metadata.PatchBukkitMetadataStore;
++
++import patchbukkit.events.EntityReference;
++
++/**
++ * Immutable Bukkit entity view used only while dispatching a native interaction.
++ *
++ * <p>The client supplied an entity id, but the bridge captures the target before
++ * entering Java. This prevents listeners from observing a different entity if that
++ * id is reused while the synchronous event is in flight.</p>
++ */
++public final class PatchBukkitEntitySnapshot {
++    private PatchBukkitEntitySnapshot() {
++    }
++
++    public static Entity create(@NotNull EntityReference reference) {
++        if (!reference.hasUuid() || !reference.hasLocation() || !reference.getLocation().hasWorld()
++            || !reference.getLocation().hasPosition()
++            || !reference.getLocation().getWorld().hasUuid()) {
++            throw new IllegalArgumentException("entity interaction snapshot is incomplete");
++        }
++
++        final UUID uuid = UUID.fromString(reference.getUuid().getValue());
++        final String resourceName = reference.getEntityType();
++        final String typeName = resourceName.startsWith("minecraft:")
++            ? resourceName.substring("minecraft:".length())
++            : resourceName;
++        final EntityType entityType;
++        try {
++            entityType = EntityType.valueOf(typeName.toUpperCase(Locale.ROOT));
++        } catch (IllegalArgumentException exception) {
++            throw new IllegalArgumentException("unsupported entity interaction type " + resourceName, exception);
++        }
++
++        Class<? extends Entity> interfaceType = switch (entityType) {
++            case PLAYER -> Player.class;
++            case ITEM_FRAME, GLOW_ITEM_FRAME -> ItemFrame.class;
++            case ARMOR_STAND -> ArmorStand.class;
++            case END_CRYSTAL -> EnderCrystal.class;
++            default -> throw new IllegalArgumentException(
++                "unsupported entity interaction type " + resourceName
++            );
++        };
++
++        World world = Bukkit.getWorld(UUID.fromString(reference.getLocation().getWorld().getUuid().getValue()));
++        if (world == null) {
++            throw new IllegalArgumentException("interaction target world is unavailable");
++        }
++        Location location = new Location(
++            world,
++            reference.getLocation().getPosition().getX(),
++            reference.getLocation().getPosition().getY(),
++            reference.getLocation().getPosition().getZ(),
++            reference.getLocation().getYaw(),
++            reference.getLocation().getPitch()
++        );
++
++        InvocationHandler handler = new SnapshotHandler(
++            uuid,
++            reference.getEntityId(),
++            entityType,
++            location
++        );
++        return (Entity) Proxy.newProxyInstance(
++            PatchBukkitEntitySnapshot.class.getClassLoader(),
++            new Class<?>[] { interfaceType },
++            handler
++        );
++    }
++
++    private record SnapshotHandler(
++        UUID uuid,
++        int entityId,
++        EntityType entityType,
++        Location location
++    ) implements InvocationHandler {
++        @Override
++        public Object invoke(Object proxy, Method method, Object[] args) {
++            return switch (method.getName()) {
++                case "getUniqueId" -> uuid;
++                case "getEntityId" -> entityId;
++                case "getType" -> entityType;
++                case "getWorld" -> location.getWorld();
++                case "getLocation" -> copyLocation(args);
++                case "getName" -> entityType.getKey().toString();
++                case "getServer" -> Bukkit.getServer();
++                case "isValid" -> true;
++                case "isDead" -> false;
++                case "isPersistent" -> true;
++                case "getNearbyEntities", "getPassengers" -> Collections.emptyList();
++                case "getTrackedBy", "getScoreboardTags" -> Collections.emptySet();
++                case "isEmpty" -> true;
++                case "getPassenger", "getVehicle", "getCustomName", "getLastDamageCause" -> null;
++                case "getVelocity" -> new Vector();
++                case "hasMetadata" -> PatchBukkitMetadataStore.has(
++                    PatchBukkitMetadataStore.entity(uuid),
++                    (String) args[0]
++                );
++                case "getMetadata" -> PatchBukkitMetadataStore.get(
++                    PatchBukkitMetadataStore.entity(uuid),
++                    (String) args[0]
++                );
++                case "setMetadata" -> setMetadata((String) args[0], (MetadataValue) args[1]);
++                case "removeMetadata" -> removeMetadata((String) args[0], (Plugin) args[1]);
++                case "equals" -> proxy == args[0];
++                case "hashCode" -> uuid.hashCode();
++                case "toString" -> "PatchBukkitEntitySnapshot[" + entityType + "," + uuid + "]";
++                default -> throw new UnsupportedOperationException(
++                    "PatchBukkit entity interaction snapshot does not implement " + method.getName()
++                );
++            };
++        }
++
++        private Object setMetadata(String key, MetadataValue value) {
++            PatchBukkitMetadataStore.set(PatchBukkitMetadataStore.entity(uuid), key, value);
++            return null;
++        }
++
++        private Object removeMetadata(String key, Plugin owner) {
++            PatchBukkitMetadataStore.remove(PatchBukkitMetadataStore.entity(uuid), key, owner);
++            return null;
++        }
++
++        private Location copyLocation(Object[] args) {
++            Location copy = location.clone();
++            if (args != null && args.length == 1 && args[0] instanceof Location target) {
++                target.setWorld(copy.getWorld());
++                target.set(copy.getX(), copy.getY(), copy.getZ());
++                target.setYaw(copy.getYaw());
++                target.setPitch(copy.getPitch());
++                return target;
++            }
++            return copy;
++        }
++    }
++}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
+index 44b2a6eff367aaae7d6e2199209fcf70cffed5c8..70100fb4301ca4b61f73e06e71b092baa61ef482 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
+@@ -8,12 +8,15 @@ import org.bukkit.Bukkit;
+ import org.bukkit.GameMode;
+ import org.bukkit.block.Block;
+ import org.bukkit.block.BlockFace;
++import org.bukkit.entity.Entity;
+ import org.bukkit.entity.Player;
+ import org.bukkit.event.block.Action;
+ import org.bukkit.inventory.EquipmentSlot;
++import org.bukkit.util.Vector;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
+ import org.patchbukkit.inventory.PatchBukkitItemStack;
++import org.patchbukkit.entity.PatchBukkitEntitySnapshot;
+ import org.patchbukkit.world.PatchBukkitBlock;
+ import org.patchbukkit.world.PatchBukkitBlockState;
+ import org.patchbukkit.world.PatchBukkitWorld;
+@@ -39,6 +42,7 @@ import patchbukkit.events.PlayerExpChangeEvent;
+ import patchbukkit.events.PlayerGameModeChangeEvent;
+ import patchbukkit.events.PlayerItemHeldEvent;
+ import patchbukkit.events.PlayerInteractEvent;
++import patchbukkit.events.PlayerInteractEntityEvent;
+ import patchbukkit.events.PlayerJoinEvent;
+ import patchbukkit.events.PlayerLoginEvent;
+ import patchbukkit.events.PlayerQuitEvent;
+@@ -55,12 +59,16 @@ import patchbukkit.events.WeatherChangeEvent;
+ import java.net.InetAddress;
+ import java.net.UnknownHostException;
+ import java.util.ArrayList;
++import java.util.Collections;
+ import java.util.LinkedHashSet;
++import java.util.Map;
+ import java.util.Set;
+ import java.util.logging.Logger;
+ 
+ public class PatchBukkitEventFactory {
+     private static final Logger LOGGER = Logger.getLogger("PatchBukkit");
++    private static final Map<org.bukkit.event.Event, patchbukkit.events.EntityReference>
++        ENTITY_INTERACTION_SNAPSHOTS = Collections.synchronizedMap(new java.util.WeakHashMap<>());
+ 
+     @Nullable
+     public static org.bukkit.event.Event createEventFromBytes(byte[] data) {
+@@ -555,6 +563,54 @@ public class PatchBukkitEventFactory {
+                     EquipmentSlot.HAND
+                 );
+             }
++            case PLAYER_INTERACT_ENTITY -> {
++                PlayerInteractEntityEvent interactEvent = event.getPlayerInteractEntity();
++                Player player = getPlayer(interactEvent.getPlayerUuid().getValue());
++                if (player == null || !interactEvent.hasTarget()) yield null;
++
++                Entity target;
++                EquipmentSlot hand;
++                try {
++                    target = PatchBukkitEntitySnapshot.create(interactEvent.getTarget());
++                    hand = switch (interactEvent.getHand()) {
++                        case "HAND" -> EquipmentSlot.HAND;
++                        case "OFF_HAND" -> EquipmentSlot.OFF_HAND;
++                        default -> throw new IllegalArgumentException(
++                            "unsupported entity interaction hand " + interactEvent.getHand()
++                        );
++                    };
++                } catch (IllegalArgumentException exception) {
++                    LOGGER.warning("EventFactory: Invalid PlayerInteractEntityEvent "
++                        + exception.getMessage());
++                    yield null;
++                }
++
++                if ("INTERACT".equals(interactEvent.getInteraction())) {
++                    org.bukkit.event.player.PlayerInteractEntityEvent bukkitEvent =
++                        new org.bukkit.event.player.PlayerInteractEntityEvent(player, target, hand);
++                    ENTITY_INTERACTION_SNAPSHOTS.put(bukkitEvent, interactEvent.getTarget());
++                    yield bukkitEvent;
++                }
++                if ("INTERACT_AT".equals(interactEvent.getInteraction())
++                    && interactEvent.hasClickPosition()) {
++                    org.bukkit.event.player.PlayerInteractAtEntityEvent bukkitEvent =
++                        new org.bukkit.event.player.PlayerInteractAtEntityEvent(
++                        player,
++                        target,
++                        new Vector(
++                            interactEvent.getClickPosition().getX(),
++                            interactEvent.getClickPosition().getY(),
++                            interactEvent.getClickPosition().getZ()
++                        ),
++                        hand
++                    );
++                    ENTITY_INTERACTION_SNAPSHOTS.put(bukkitEvent, interactEvent.getTarget());
++                    yield bukkitEvent;
++                }
++                LOGGER.warning("EventFactory: Invalid PlayerInteractEntityEvent interaction "
++                    + interactEvent.getInteraction());
++                yield null;
++            }
+             case DATA_NOT_SET -> {
+                 LOGGER.warning("EventFactory: Received Event with no data");
+                 yield null;
+@@ -917,6 +973,34 @@ public class PatchBukkitEventFactory {
+                 );
+             }
+             eventBuilder.setPlayerInteract(interactBuilder.build());
++        } else if (event instanceof org.bukkit.event.player.PlayerInteractEntityEvent interactEvent) {
++            patchbukkit.events.EntityReference target = ENTITY_INTERACTION_SNAPSHOTS.remove(event);
++            if (target == null) {
++                throw new IllegalArgumentException(
++                    "PlayerInteractEntityEvent was not created from a native interaction snapshot"
++                );
++            }
++            String interaction = event instanceof org.bukkit.event.player.PlayerInteractAtEntityEvent
++                ? "INTERACT_AT"
++                : "INTERACT";
++            PlayerInteractEntityEvent.Builder interactBuilder = PlayerInteractEntityEvent.newBuilder()
++                .setPlayerUuid(UUID.newBuilder()
++                    .setValue(interactEvent.getPlayer().getUniqueId().toString())
++                    .build())
++                .setInteraction(interaction)
++                .setHand(interactEvent.getHand().name())
++                .setTarget(target);
++            if (event instanceof org.bukkit.event.player.PlayerInteractAtEntityEvent atEvent) {
++                Vector position = atEvent.getClickedPosition();
++                interactBuilder.setClickPosition(
++                    patchbukkit.common.Vec3.newBuilder()
++                        .setX(position.getX())
++                        .setY(position.getY())
++                        .setZ(position.getZ())
++                        .build()
++                );
++            }
++            eventBuilder.setPlayerInteractEntity(interactBuilder.build());
+         }
+ 
+         builder.setData(eventBuilder.build());
+diff --git a/proto/patchbukkit/events/event.proto b/proto/patchbukkit/events/event.proto
+index 708065d2d5e9dbcccfc8734b1160717f689a9037..76eaee723b962ca744175f311b953f2bd9f85f7b 100644
+--- a/proto/patchbukkit/events/event.proto
++++ b/proto/patchbukkit/events/event.proto
+@@ -42,6 +42,7 @@ message Event {
+     PlayerExpChangeEvent player_exp_change = 28;
+     WeatherChangeEvent weather_change = 29;
+     ThunderChangeEvent thunder_change = 30;
++    PlayerInteractEntityEvent player_interact_entity = 31;
+   }
+ }
+ 
+diff --git a/proto/patchbukkit/events/player_events.proto b/proto/patchbukkit/events/player_events.proto
+index 9f60a3fda715a664a7efa2a228b3d68ecf5740ef..952ea58354811f3c02461ed8e51490451bba05c6 100644
+--- a/proto/patchbukkit/events/player_events.proto
++++ b/proto/patchbukkit/events/player_events.proto
+@@ -106,3 +106,21 @@ message PlayerExpChangeEvent {
+   patchbukkit.common.UUID player_uuid = 1;
+   int32 amount = 2;
+ }
++
++// Immutable information captured when the native interaction packet is read.
++// The Java event must never resolve an arbitrary live entity by a client-provided
++// ID after that point.
++message EntityReference {
++  patchbukkit.common.UUID uuid = 1;
++  int32 entity_id = 2;
++  string entity_type = 3;
++  patchbukkit.common.Location location = 4;
++}
++
++message PlayerInteractEntityEvent {
++  patchbukkit.common.UUID player_uuid = 1;
++  EntityReference target = 2;
++  string interaction = 3;
++  string hand = 4;
++  patchbukkit.common.Vec3 click_position = 5;
++}
+diff --git a/rust/src/events/handler.rs b/rust/src/events/handler.rs
+index 1eb916a342e87d7b1db76421758b6fcbbc79e0ab..d9ba2d85764b07601511cfbdac041205301a7dd1 100644
+--- a/rust/src/events/handler.rs
++++ b/rust/src/events/handler.rs
+@@ -7,6 +7,8 @@ use pumpkin::plugin::{BoxFuture, Cancellable, EventHandler, Payload};
+ use pumpkin::server::Server;
+ use pumpkin_api_macros::with_runtime;
+ use pumpkin_data::Block;
++use pumpkin_protocol::java::server::play::ActionType;
++use pumpkin_util::Hand;
+ use pumpkin_util::math::position::BlockPos;
+ use tokio::sync::{mpsc, oneshot};
+ 
+@@ -20,9 +22,11 @@ use crate::proto::patchbukkit::events::{
+     BlockBurnEvent as ProtoBlockBurnEvent, BlockCanBuildEvent as ProtoBlockCanBuildEvent,
+     BlockFromToEvent as ProtoBlockFromToEvent, BlockIgniteEvent as ProtoBlockIgniteEvent,
+     BlockPlaceEvent as ProtoBlockPlaceEvent, BlockRedstoneEvent as ProtoBlockRedstoneEvent,
+-    BlockReference, Event, PlayerChangedWorldEvent, PlayerChatEvent, PlayerCommandPreprocessEvent,
+-    PlayerCommandsSendEvent, PlayerExpChangeEvent as ProtoPlayerExpChangeEvent,
+-    PlayerGameModeChangeEvent, PlayerInteractEvent as ProtoPlayerInteractEvent,
++    BlockReference, EntityReference, Event, PlayerChangedWorldEvent, PlayerChatEvent,
++    PlayerCommandPreprocessEvent, PlayerCommandsSendEvent,
++    PlayerExpChangeEvent as ProtoPlayerExpChangeEvent, PlayerGameModeChangeEvent,
++    PlayerInteractEntityEvent as ProtoPlayerInteractEntityEvent,
++    PlayerInteractEvent as ProtoPlayerInteractEvent,
+     PlayerItemHeldEvent as ProtoPlayerItemHeldEvent, PlayerJoinEvent, PlayerLoginEvent,
+     PlayerQuitEvent, PlayerRespawnEvent, PlayerTeleportEvent as ProtoPlayerTeleportEvent,
+     PlayerToggleFlightEvent as ProtoPlayerToggleFlightEvent,
+@@ -96,6 +100,64 @@ fn location_reference(
+     }
+ }
+ 
++const fn bukkit_entity_interaction(action: &ActionType) -> Option<&'static str> {
++    match action {
++        ActionType::Interact => Some("INTERACT"),
++        ActionType::InteractAt => Some("INTERACT_AT"),
++        // ATTACK belongs to Bukkit's damage-event pipeline. Forwarding it as an
++        // interact event would both be incorrect and allow a cancellation to
++        // suppress combat through the wrong API.
++        ActionType::Attack => None,
++    }
++}
++
++const fn bukkit_hand_name(hand: Hand) -> &'static str {
++    match hand {
++        Hand::Right => "HAND",
++        Hand::Left => "OFF_HAND",
++    }
++}
++
++fn is_supported_interact_entity(resource_name: &str) -> bool {
++    matches!(
++        resource_name,
++        "player" | "item_frame" | "glow_item_frame" | "armor_stand" | "end_crystal"
++    )
++}
++
++fn entity_reference(target: &Arc<dyn pumpkin::entity::EntityBase>) -> EntityReference {
++    let entity = target.get_entity();
++    let world = entity.world.load_full();
++    EntityReference {
++        uuid: Some(Uuid {
++            value: entity.entity_uuid.to_string(),
++        }),
++        entity_id: entity.entity_id,
++        entity_type: format!("minecraft:{}", entity.entity_type.resource_name),
++        location: Some(location_reference(
++            world.uuid,
++            entity.pos.load(),
++            entity.yaw.load(),
++            entity.pitch.load(),
++        )),
++    }
++}
++
++fn same_position(
++    expected: Option<&pumpkin_util::math::vector3::Vector3<f64>>,
++    actual: Option<&Vec3>,
++) -> bool {
++    match (expected, actual) {
++        (None, None) => true,
++        (Some(expected), Some(actual)) => {
++            expected.x.to_bits() == actual.x.to_bits()
++                && expected.y.to_bits() == actual.y.to_bits()
++                && expected.z.to_bits() == actual.z.to_bits()
++        }
++        _ => false,
++    }
++}
++
+ const fn teleport_cause_name(
+     cause: pumpkin::plugin::player::player_teleport::TeleportCause,
+ ) -> &'static str {
+@@ -518,6 +580,80 @@ impl PatchBukkitEvent for pumpkin::plugin::weather::thunder_change::ThunderChang
+     }
+ }
+ 
++impl PatchBukkitEvent
++    for pumpkin::plugin::player::player_interact_entity_event::PlayerInteractEntityEvent
++{
++    fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
++        let interaction = bukkit_entity_interaction(&self.action)
++            .expect("attack interactions must not be forwarded to Bukkit");
++        let hand = self
++            .hand
++            .expect("interact and interact-at actions must carry a Java hand");
++
++        JvmEventPayload {
++            event: Event {
++                data: Some(Data::PlayerInteractEntity(ProtoPlayerInteractEntityEvent {
++                    player_uuid: Some(Uuid {
++                        value: self.player.gameprofile.id.to_string(),
++                    }),
++                    target: Some(entity_reference(&self.target)),
++                    interaction: interaction.to_owned(),
++                    hand: bukkit_hand_name(hand).to_owned(),
++                    click_position: self.target_position.as_ref().map(|position| Vec3 {
++                        x: position.x,
++                        y: position.y,
++                        z: position.z,
++                    }),
++                })),
++            },
++            context: EventContext {
++                server,
++                player: Some(self.player.clone()),
++            },
++        }
++    }
++
++    fn apply_modifications(&mut self, server: &Arc<Server>, data: Data) -> Option<()> {
++        let Data::PlayerInteractEntity(event) = data else {
++            return None;
++        };
++        let player_uuid = uuid::Uuid::parse_str(&event.player_uuid?.value).ok()?;
++        if player_uuid != self.player.gameprofile.id {
++            return None;
++        }
++        server.get_player_by_uuid(player_uuid)?;
++
++        let expected = self.target.get_entity();
++        let actual = event.target?;
++        let target_uuid = uuid::Uuid::parse_str(&actual.uuid?.value).ok()?;
++        if target_uuid != expected.entity_uuid
++            || actual.entity_id != expected.entity_id
++            || actual.entity_type != format!("minecraft:{}", expected.entity_type.resource_name)
++            || event.interaction != bukkit_entity_interaction(&self.action)?
++            || event.hand != bukkit_hand_name(self.hand?)
++            || !same_position(self.target_position.as_ref(), event.click_position.as_ref())
++        {
++            return None;
++        }
++        Some(())
++    }
++
++    fn should_forward(&self) -> bool {
++        let target = self.target.get_entity();
++        if bukkit_entity_interaction(&self.action).is_none() {
++            return false;
++        }
++        if !is_supported_interact_entity(target.entity_type.resource_name) {
++            tracing::warn!(
++                entity_type = target.entity_type.resource_name,
++                "PatchBukkit does not bridge this entity-interaction target type"
++            );
++            return false;
++        }
++        true
++    }
++}
++
+ impl PatchBukkitEvent for pumpkin::plugin::player::player_interact_event::PlayerInteractEvent {
+     fn to_payload(&self, server: Arc<Server>) -> JvmEventPayload {
+         let action = match self.action {
+@@ -1490,3 +1626,43 @@ where
+         })
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::{bukkit_entity_interaction, bukkit_hand_name, is_supported_interact_entity};
++    use pumpkin_protocol::java::server::play::ActionType;
++    use pumpkin_util::Hand;
++
++    #[test]
++    fn entity_right_clicks_map_to_their_distinct_bukkit_event_kinds() {
++        assert_eq!(
++            bukkit_entity_interaction(&ActionType::Interact),
++            Some("INTERACT")
++        );
++        assert_eq!(
++            bukkit_entity_interaction(&ActionType::InteractAt),
++            Some("INTERACT_AT")
++        );
++        assert_eq!(bukkit_hand_name(Hand::Right), "HAND");
++        assert_eq!(bukkit_hand_name(Hand::Left), "OFF_HAND");
++    }
++
++    #[test]
++    fn attacks_are_excluded_from_entity_interaction_forwarding() {
++        assert_eq!(bukkit_entity_interaction(&ActionType::Attack), None);
++    }
++
++    #[test]
++    fn only_snapshot_capable_entity_targets_are_forwarded() {
++        for entity_type in [
++            "player",
++            "item_frame",
++            "glow_item_frame",
++            "armor_stand",
++            "end_crystal",
++        ] {
++            assert!(is_supported_interact_entity(entity_type));
++        }
++        assert!(!is_supported_interact_entity("zombie"));
++    }
++}
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
+index e712245..61310ef 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
+@@ -5,10 +5,12 @@ import org.bukkit.Warning;
+ import org.bukkit.event.Event;
+ import org.bukkit.event.EventHandler;
+ import org.bukkit.event.EventPriority;
+ import org.bukkit.event.HandlerList;
+ import org.bukkit.event.Listener;
++import org.bukkit.event.player.PlayerInteractAtEntityEvent;
++import org.bukkit.event.player.PlayerInteractEntityEvent;
+ import org.bukkit.event.server.PluginDisableEvent;
+ import org.bukkit.event.server.PluginEnableEvent;
+ import org.bukkit.plugin.AuthorNagException;
+ import org.bukkit.plugin.EventExecutor;
+ import org.bukkit.plugin.IllegalPluginAccessException;
+@@ -184,11 +186,11 @@ public class PatchBukkitEventManager {
+     private synchronized void ensureNativeSubscription(@NotNull Class<? extends Event> event) {
+         if (isJavaOnlyEvent(event)) {
+             return;
+         }
+ 
+-        String eventType = event.getName();
++        String eventType = nativeSubscriptionType(event);
+         if (!this.nativeSubscribedEventTypes.add(eventType)) {
+             return;
+         }
+ 
+         try {
+@@ -205,10 +207,20 @@ public class PatchBukkitEventManager {
+             this.nativeSubscribedEventTypes.remove(eventType);
+             throw ex;
+         }
+     }
+ 
++    static String nativeSubscriptionType(@NotNull Class<? extends Event> event) {
++        // Pumpkin exposes both Bukkit interaction variants through one native
++        // event. A single canonical subscription prevents interact-at actions
++        // from being bridged twice when plugins listen to both HandlerLists.
++        if (PlayerInteractAtEntityEvent.class.isAssignableFrom(event)) {
++            return PlayerInteractEntityEvent.class.getName();
++        }
++        return event.getName();
++    }
++
+     private static boolean isJavaOnlyEvent(Class<? extends Event> eventClass) {
+         return eventClass == PluginEnableEvent.class
+             || eventClass == PluginDisableEvent.class
+             || eventClass.getClassLoader() instanceof PatchBukkitPluginClassLoader;
+     }
+diff --git a/rust/src/java/native_callbacks/events.rs b/rust/src/java/native_callbacks/events.rs
+index 2781a37..e4c76ea 100644
+--- a/rust/src/java/native_callbacks/events.rs
++++ b/rust/src/java/native_callbacks/events.rs
+@@ -499,10 +499,27 @@ pub fn ffi_native_bridge_register_event_impl(request: RegisterEventRequest) -> O
+                             pumpkin_priority,
+                             request.blocking,
+                         )
+                         .await;
+                 }
++                "org.bukkit.event.player.PlayerInteractEntityEvent" => {
++                    context
++                        .register_event::<
++                            pumpkin::plugin::player::player_interact_entity_event::PlayerInteractEntityEvent,
++                            PatchBukkitEventHandler<
++                                pumpkin::plugin::player::player_interact_entity_event::PlayerInteractEntityEvent,
++                            >,
++                        >(
++                            Arc::new(PatchBukkitEventHandler::new(
++                                request.plugin_name.clone(),
++                                command_tx.clone(),
++                            )),
++                            pumpkin_priority,
++                            request.blocking,
++                        )
++                        .await;
++                }
+                 "org.bukkit.event.server.ServerCommandEvent" => {
+                     context
+                         .register_event::<
+                             pumpkin::plugin::server::server_command::ServerCommandEvent,
+                             PatchBukkitEventHandler<pumpkin::plugin::server::server_command::ServerCommandEvent>,
+diff --git a/java/patchbukkit/build.gradle.kts b/java/patchbukkit/build.gradle.kts
+index 980d9bb..a0b009b 100644
+--- a/java/patchbukkit/build.gradle.kts
++++ b/java/patchbukkit/build.gradle.kts
+@@ -68,10 +68,16 @@ tasks.withType<JavaCompile> {
+         "-Xlint:-removal",
+         "-Xlint:-deprecation"
+     ))
+ }
+ 
++tasks.register<JavaExec>("nativeSubscriptionConformance") {
++    dependsOn(tasks.testClasses)
++    classpath = sourceSets["test"].runtimeClasspath
++    mainClass = "org.patchbukkit.events.PatchBukkitEventManagerConformance"
++}
++
+ tasks.named<Jar>("jar") {
+     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+     dependsOn(configurations.runtimeClasspath)
+ 
+     from({
+diff --git a/java/patchbukkit/src/test/java/org/patchbukkit/events/PatchBukkitEventManagerConformance.java b/java/patchbukkit/src/test/java/org/patchbukkit/events/PatchBukkitEventManagerConformance.java
+new file mode 100644
+index 0000000..d15c89a
+--- /dev/null
++++ b/java/patchbukkit/src/test/java/org/patchbukkit/events/PatchBukkitEventManagerConformance.java
+@@ -0,0 +1,34 @@
++package org.patchbukkit.events;
++
++import org.bukkit.event.player.PlayerInteractAtEntityEvent;
++import org.bukkit.event.player.PlayerInteractEntityEvent;
++import org.bukkit.event.player.PlayerInteractEvent;
++
++public final class PatchBukkitEventManagerConformance {
++
++    private PatchBukkitEventManagerConformance() {
++    }
++
++    public static void main(String[] args) {
++        String canonicalType = PlayerInteractEntityEvent.class.getName();
++
++        requireEqual(
++            canonicalType,
++            PatchBukkitEventManager.nativeSubscriptionType(PlayerInteractEntityEvent.class)
++        );
++        requireEqual(
++            canonicalType,
++            PatchBukkitEventManager.nativeSubscriptionType(PlayerInteractAtEntityEvent.class)
++        );
++        requireEqual(
++            PlayerInteractEvent.class.getName(),
++            PatchBukkitEventManager.nativeSubscriptionType(PlayerInteractEvent.class)
++        );
++    }
++
++    private static void requireEqual(String expected, String actual) {
++        if (!expected.equals(actual)) {
++            throw new AssertionError("Expected " + expected + " but got " + actual);
++        }
++    }
++}

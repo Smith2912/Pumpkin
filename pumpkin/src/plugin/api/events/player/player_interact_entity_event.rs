@@ -4,7 +4,7 @@ use crate::entity::EntityBase;
 use crate::entity::player::Player;
 use pumpkin_macros::{Event, cancellable};
 use pumpkin_protocol::java::server::play::ActionType;
-use pumpkin_util::math::vector3::Vector3;
+use pumpkin_util::{Hand, math::vector3::Vector3};
 
 use super::PlayerEvent;
 
@@ -28,6 +28,10 @@ pub struct PlayerInteractEntityEvent {
     /// The position on the entity that was clicked (only for `InteractAt`).
     pub target_position: Option<Vector3<f64>>,
 
+    /// The hand used for an interact or interact-at action. Attacks do not
+    /// carry a hand in the Java protocol.
+    pub hand: Option<Hand>,
+
     /// Whether the player was sneaking during the interaction.
     pub sneaking: bool,
 }
@@ -38,6 +42,7 @@ impl PlayerInteractEntityEvent {
         target: Arc<dyn EntityBase>,
         action: ActionType,
         target_position: Option<Vector3<f64>>,
+        hand: Option<Hand>,
         sneaking: bool,
     ) -> Self {
         Self {
@@ -45,6 +50,7 @@ impl PlayerInteractEntityEvent {
             target,
             action,
             target_position,
+            hand,
             sneaking,
             cancelled: false,
         }

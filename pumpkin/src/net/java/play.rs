@@ -1,5 +1,5 @@
 use pumpkin_protocol::bedrock::server::text::SText;
-use pumpkin_util::{Hand, PermissionLvl};
+use pumpkin_util::PermissionLvl;
 use rsa::pkcs1v15::{Signature as RsaPkcs1v15Signature, VerifyingKey};
 use rsa::signature::Verifier;
 use sha1::Sha1;
@@ -77,7 +77,7 @@ use pumpkin_protocol::java::server::play::{
 };
 use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::math::{polynomial_rolling_hash, position::BlockPos, wrap_degrees};
-use pumpkin_util::{GameMode, text::TextComponent};
+use pumpkin_util::{GameMode, Hand, text::TextComponent};
 use pumpkin_world::generation::structure::structures::jigsaw::JigsawJointType;
 use pumpkin_world::world::BlockFlags;
 use tokio::sync::Mutex;
@@ -1807,6 +1807,29 @@ impl JavaClient {
             self.kick(TextComponent::text("Invalid action type")).await;
             return;
         };
+        let hand = match &action {
+            ActionType::Interact | ActionType::InteractAt => {
+                let Some(hand) = interact.hand else {
+                    self.kick(TextComponent::text("Invalid interaction hand"))
+                        .await;
+                    return;
+                };
+                match hand.0 {
+                    // Java interaction packets encode 0 as main hand and 1 as
+                    // off hand. pumpkin_util::Hand::try_from represents a
+                    // player's dominant arm instead, so it must not be used
+                    // for this packet field.
+                    0 => Some(Hand::Right),
+                    1 => Some(Hand::Left),
+                    _ => {
+                        self.kick(TextComponent::text("Invalid interaction hand"))
+                            .await;
+                        return;
+                    }
+                }
+            }
+            ActionType::Attack => None,
+        };
 
         // Resolve the target entity for the event
         let world = player_entity.world.load_full();
@@ -1832,6 +1855,7 @@ impl JavaClient {
                     Arc::clone(&target),
                     action.clone(),
                     interact.target_position,
+                    hand,
                     sneaking,
                 );
 
@@ -1869,7 +1893,11 @@ impl JavaClient {
                             player.attack(event.target).await;
                         }
                         ActionType::Interact | ActionType::InteractAt => {
-                            let held = player.inventory.held_item();
+                            let Some(hand) = event.hand else {
+                                error!("entity interaction was missing its Java hand");
+                                return;
+                            };
+                            let held = player.inventory.get_stack_in_hand(hand).await;
                             let mut stack = held.lock().await.clone();
                             let target_entity = event.target.get_entity();
                             if target_entity.entity_type.resource_name == "zombie_villager"
