@@ -1,0 +1,649 @@
+diff --git a/java/patchbukkit-test-plugin/build.gradle.kts b/java/patchbukkit-test-plugin/build.gradle.kts
+index 9e9728ff8bfd552a1107beea371b9e00da09c1a0..4b40c71e9f1977461d11eae225957e744c6c7618 100644
+--- a/java/patchbukkit-test-plugin/build.gradle.kts
++++ b/java/patchbukkit-test-plugin/build.gradle.kts
+@@ -11,6 +11,7 @@ repositories {
+ 
+ dependencies {
+     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
++    compileOnly(project(":patchbukkit"))
+ }
+ 
+ java {
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
+index 96de0074811674654727f1c88c4000833252a629..c16fc51378ff5465e7d61228fe7b73e006707bec 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/PatchBukkitTestPlugin.java
+@@ -44,7 +44,7 @@ public final class PatchBukkitTestPlugin extends JavaPlugin {
+         framework.registerSuite(new PluginManagerTests(this));
+         framework.registerSuite(new CommandSystemTests());
+         framework.registerSuite(new EventSystemTests(this));
+-        framework.registerSuite(new PermissionsTests());
++        framework.registerSuite(new PermissionsTests(this));
+         framework.registerSuite(new RegistryTests());
+         framework.registerSuite(new EntityTests());
+         framework.registerSuite(new ConsoleSenderTests());
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EntityTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EntityTests.java
+index c3f588c715e8cdea2af3eb4214d1599eaec6bdf9..99b1dc977e870bdb443e84eeb9633e2a6a34421f 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EntityTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EntityTests.java
+@@ -76,6 +76,25 @@ public final class EntityTests {
+         }
+     }
+ 
++    @ConformanceTest(name = "Player sleep-ignore state round-trips for AFK plugins", category = TestCategory.ENTITY)
++    public void testSleepingIgnoredRoundTrip() {
++        Player player = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
++        if (player == null) {
++            return;
++        }
++
++        boolean original = player.isSleepingIgnored();
++        try {
++            player.setSleepingIgnored(!original);
++            assertTrue(
++                player.isSleepingIgnored() == !original,
++                "sleep-ignore state should reflect the last value set"
++            );
++        } finally {
++            player.setSleepingIgnored(original);
++        }
++    }
++
+     @ConformanceTest(name = "Server.getEntity(UUID) stub", category = TestCategory.ENTITY,
+             expectation = TestExpectation.EXPECT_UNSUPPORTED)
+     public void testGetEntity() {
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
+index d2a0fd796431b4d0ebc33532b15e19df735b468f..031798c43d0003990034281d837ffca20dc93643 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/EventSystemTests.java
+@@ -23,6 +23,8 @@ import org.bukkit.event.player.PlayerGameModeChangeEvent;
+ import org.bukkit.event.player.PlayerItemHeldEvent;
+ import org.bukkit.event.player.PlayerLoginEvent;
+ import org.bukkit.event.player.PlayerInteractEvent;
++import org.bukkit.event.player.PlayerInteractEntityEvent;
++import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+ import org.bukkit.event.player.PlayerQuitEvent;
+ import org.bukkit.event.player.PlayerRespawnEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent;
+@@ -167,6 +169,17 @@ public final class EventSystemTests {
+             public void onPlayerInteract(PlayerInteractEvent event) {
+             }
+ 
++            @EventHandler
++            public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
++            }
++
++            @EventHandler
++            public void onPlayerInteractAtEntity(PlayerInteractAtEntityEvent event) {
++                // The specialised event must remain cancellable. The native
++                // bridge consumes that cancellation before performing the use.
++                event.setCancelled(event.isCancelled());
++            }
++
+             @EventHandler
+             public void onServerCommand(ServerCommandEvent event) {
+             }
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PermissionsTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PermissionsTests.java
+index 2c7cc37dc0b1a702b95f605b9425eff2f2c287a5..f54333152dffdd04a34c4dbc7c7cf65e69d3a7e5 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PermissionsTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/PermissionsTests.java
+@@ -3,15 +3,57 @@ package org.patchbukkit.testplugin.tests;
+ import org.bukkit.Bukkit;
+ import org.bukkit.permissions.Permission;
+ import org.bukkit.permissions.PermissionDefault;
++import org.bukkit.permissions.PermissionAttachment;
++import org.bukkit.plugin.java.JavaPlugin;
+ import org.bukkit.plugin.PluginManager;
++import org.patchbukkit.entity.PatchBukkitHumanEntity;
+ import org.patchbukkit.testplugin.ConformanceTest;
+ import org.patchbukkit.testplugin.TestCategory;
+ 
+ import java.util.Set;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.TimeUnit;
+ 
+ import static org.patchbukkit.testplugin.TestAssertions.*;
+ 
+ public final class PermissionsTests {
++    private final JavaPlugin plugin;
++
++    public PermissionsTests(JavaPlugin plugin) {
++        this.plugin = plugin;
++    }
++
++    @ConformanceTest(name = "HumanEntity permission delegates are isolated and expire timed attachments", category = TestCategory.PERMISSIONS)
++    public void testHumanEntityPermissionDelegation() throws InterruptedException {
++        PatchBukkitHumanEntity first = new PatchBukkitHumanEntity(
++            java.util.UUID.randomUUID(), "permission-first"
++        );
++        PatchBukkitHumanEntity second = new PatchBukkitHumanEntity(
++            java.util.UUID.randomUUID(), "permission-second"
++        );
++        PermissionAttachment immediate = first.addAttachment(plugin, "patchbukkit.test.isolated", true);
++        PermissionAttachment timed = first.addAttachment(plugin, "patchbukkit.test.timed", true, 1);
++        CountDownLatch timedRemoval = new CountDownLatch(1);
++        timed.setRemovalCallback(attachment -> timedRemoval.countDown());
++        try {
++            assertTrue(first.hasPermission("patchbukkit.test.isolated"), "attachment should delegate to player perm");
++            assertTrue(!second.hasPermission("patchbukkit.test.isolated"), "player permission delegates must be isolated");
++            assertTrue(
++                first.getEffectivePermissions().stream().anyMatch(
++                    value -> value.getPermission().equals("patchbukkit.test.isolated") && value.getValue()
++                ),
++                "effective permissions should reflect delegated attachments"
++            );
++            assertTrue(first.hasPermission("patchbukkit.test.timed"), "timed attachment should apply first");
++            assertTrue(
++                timedRemoval.await(2, TimeUnit.SECONDS),
++                "timed attachment removal callback should run"
++            );
++            assertTrue(!first.hasPermission("patchbukkit.test.timed"), "timed attachment should expire after its tick delay");
++        } finally {
++            first.removeAttachment(immediate);
++        }
++    }
+ 
+     @ConformanceTest(name = "addPermission() and getPermission()", category = TestCategory.PERMISSIONS)
+     public void testAddAndGetPermission() {
+diff --git a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
+index 58a3538c93c4a0a13e00feab92529643bfe93558..406d98f8bb0dba5191b6001d838cbc2c0a3e7278 100644
+--- a/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
++++ b/java/patchbukkit-test-plugin/src/main/java/org/patchbukkit/testplugin/tests/ServerTests.java
+@@ -1,12 +1,15 @@
+ package org.patchbukkit.testplugin.tests;
+ 
+ import java.io.File;
++import java.lang.reflect.Proxy;
+ import java.lang.reflect.Modifier;
++import java.util.logging.Logger;
+ import org.bukkit.Bukkit;
+ import org.bukkit.GameMode;
+ import org.bukkit.World;
+ import org.bukkit.Server;
+ import org.bukkit.block.Block;
++import org.bukkit.metadata.FixedMetadataValue;
+ import org.bukkit.command.CommandMap;
+ import org.bukkit.command.ConsoleCommandSender;
+ import org.bukkit.event.EventHandler;
+@@ -15,6 +18,8 @@ import org.bukkit.event.Listener;
+ import org.bukkit.event.weather.ThunderChangeEvent;
+ import org.bukkit.event.weather.WeatherChangeEvent;
+ import org.bukkit.plugin.PluginManager;
++import org.bukkit.plugin.Plugin;
++import org.bukkit.plugin.PluginLoader;
+ import org.bukkit.permissions.PermissibleBase;
+ import org.bukkit.scheduler.BukkitScheduler;
+ import org.patchbukkit.testplugin.ConformanceTest;
+@@ -22,6 +27,7 @@ import org.patchbukkit.testplugin.TestCategory;
+ import org.patchbukkit.testplugin.TestExpectation;
+ import org.bukkit.plugin.java.JavaPlugin;
+ import java.util.concurrent.atomic.AtomicBoolean;
++import org.patchbukkit.entity.PatchBukkitHumanEntity;
+ 
+ import static org.patchbukkit.testplugin.TestAssertions.*;
+ 
+@@ -51,6 +57,75 @@ public final class ServerTests {
+         assertNotNull(block.getType(), "block material");
+     }
+ 
++    @ConformanceTest(name = "Metadata is shared by stable entity, block, and world identities", category = TestCategory.SERVER)
++    public void testRuntimeMetadataOwnershipAndCleanup() {
++        PluginLoader failingLoader = (PluginLoader) Proxy.newProxyInstance(
++            PluginLoader.class.getClassLoader(),
++            new Class<?>[] { PluginLoader.class },
++            (proxy, method, args) -> {
++                if (method.getName().equals("disablePlugin")) {
++                    throw new IllegalStateException("intentional metadata cleanup test failure");
++                }
++                return null;
++            }
++        );
++        Plugin secondaryOwner = (Plugin) Proxy.newProxyInstance(
++            Plugin.class.getClassLoader(),
++            new Class<?>[] { Plugin.class },
++            (proxy, method, args) -> switch (method.getName()) {
++                case "getName" -> "PatchBukkitMetadataSecondaryOwner";
++                case "getLogger" -> Logger.getLogger("PatchBukkitMetadataSecondaryOwner");
++                case "getPluginLoader" -> failingLoader;
++                case "isEnabled" -> true;
++                case "equals" -> proxy == args[0];
++                case "hashCode" -> System.identityHashCode(proxy);
++                default -> null;
++            }
++        );
++        PatchBukkitHumanEntity firstPlayer = new PatchBukkitHumanEntity(
++            java.util.UUID.randomUUID(), "metadata-first"
++        );
++        PatchBukkitHumanEntity samePlayer = new PatchBukkitHumanEntity(
++            firstPlayer.getUniqueId(), "metadata-second-wrapper"
++        );
++        World world = Bukkit.getWorlds().get(0);
++        Block firstBlock = world.getBlockAt(10, world.getMinHeight() + 1, 10);
++        Block secondBlock = world.getBlockAt(10, world.getMinHeight() + 1, 10);
++
++        firstPlayer.setMetadata("owner-check", new FixedMetadataValue(plugin, "first"));
++        firstPlayer.setMetadata("owner-check", new FixedMetadataValue(secondaryOwner, "second"));
++        firstBlock.setMetadata("wrapper-check", new FixedMetadataValue(plugin, "block"));
++        world.setMetadata("world-check", new FixedMetadataValue(plugin, "world"));
++        try {
++            assertTrue(samePlayer.hasMetadata("owner-check"), "entity metadata should be shared by UUID");
++            assertTrue(
++                samePlayer.getMetadata("owner-check").size() == 2,
++                "different plugin owners should retain independent values"
++            );
++            firstPlayer.removeMetadata("owner-check", plugin);
++            assertTrue(
++                samePlayer.getMetadata("owner-check").size() == 1,
++                "removing one owner must preserve the other owner's metadata"
++            );
++            assertTrue(secondBlock.hasMetadata("wrapper-check"), "block metadata should survive a fresh wrapper");
++            assertTrue(world.hasMetadata("world-check"), "world metadata should be available");
++
++            boolean disableFailed = false;
++            try {
++                Bukkit.getPluginManager().disablePlugin(secondaryOwner);
++            } catch (IllegalStateException expected) {
++                disableFailed = true;
++            }
++            assertTrue(disableFailed, "test plugin loader should exercise exceptional disable cleanup");
++            assertTrue(!samePlayer.hasMetadata("owner-check"), "plugin cleanup should remove owned metadata");
++        } finally {
++            firstPlayer.removeMetadata("owner-check", plugin);
++            firstPlayer.removeMetadata("owner-check", secondaryOwner);
++            firstBlock.removeMetadata("wrapper-check", plugin);
++            world.removeMetadata("world-check", plugin);
++        }
++    }
++
+     @ConformanceTest(name = "World time and weather round-trip through Pumpkin", category = TestCategory.SERVER)
+     public void testWorldTimeAndWeather() {
+         World world = Bukkit.getWorlds().get(0);
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
+index 4d1fd4c002ededfa02059e33dd377f1fbb840883..9e152c3f1783f661ce4fbce678e638a806f527cc 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/PatchBukkitServer.java
+@@ -200,23 +200,28 @@ public class PatchBukkitServer implements Server {
+      * Makes a login-stage player available to the event bridge without exposing
+      * it through Bukkit's online-player collection.
+      */
+-    public void registerPendingPlayer(Player player) {
+-        this.pendingPlayers.putIfAbsent(player.getUniqueId(), player);
++    public Player registerPendingPlayer(Player player) {
++        Player onlinePlayer = this.onlinePlayers.get(player.getUniqueId());
++        if (onlinePlayer != null) {
++            return onlinePlayer;
++        }
++        Player pendingPlayer = this.pendingPlayers.putIfAbsent(player.getUniqueId(), player);
++        return pendingPlayer != null ? pendingPlayer : player;
+     }
+ 
+     /**
+      * Promotes the exact player object used by PlayerLoginEvent so permission
+      * plugins keep their injected permissible delegate after login.
+      *
+-     * @return whether a pending player was found and promoted
++     * @return the promoted player, or {@code null} if no pending player exists
+      */
+-    public boolean promotePendingPlayer(UUID uuid) {
++    public @Nullable Player promotePendingPlayer(UUID uuid) {
+         Player player = this.pendingPlayers.remove(uuid);
+         if (player == null) {
+-            return false;
++            return null;
+         }
+         this.registerPlayer(player);
+-        return true;
++        return player;
+     }
+ 
+     /**
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
+index ca58157e8c8a9e03920f2ed55e2647902c07f822..f6a61c2383bee0349d0f6b3b81202b856b6cd4e7 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/entity/PatchBukkitPlayer.java
+@@ -95,6 +95,7 @@ public class PatchBukkitPlayer
+     implements Player {
+ 
+     private final Map<UUID, Set<WeakReference<Plugin>>> invertedVisibilityEntities = new HashMap<>();
++    private volatile boolean sleepingIgnored;
+ 
+    public PatchBukkitPlayer(UUID uuid, String name) {
+         super(uuid, name);
+@@ -763,14 +764,12 @@ public class PatchBukkitPlayer
+ 
+     @Override
+     public void setSleepingIgnored(boolean isSleeping) {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'setSleepingIgnored'");
++        this.sleepingIgnored = isSleeping;
+     }
+ 
+     @Override
+     public boolean isSleepingIgnored() {
+-        // TODO Auto-generated method stub
+-        throw new UnsupportedOperationException("Unimplemented method 'isSleepingIgnored'");
++        return this.sleepingIgnored;
+     }
+ 
+     @Override
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
+index 70100fb4301ca4b61f73e06e71b092baa61ef482..a2422dfb58fa5ce68df79ffa96865b8c1825701d 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventFactory.java
+@@ -72,9 +72,17 @@ public class PatchBukkitEventFactory {
+ 
+     @Nullable
+     public static org.bukkit.event.Event createEventFromBytes(byte[] data) {
++        return createEventFromBytes(data, null);
++    }
++
++    @Nullable
++    public static org.bukkit.event.Event createEventFromBytes(
++        byte[] data,
++        @Nullable Player lifecyclePlayer
++    ) {
+         try {
+             Event event = Event.parseFrom(data);
+-            return createEvent(event);
++            return createEvent(event, lifecyclePlayer);
+         } catch (InvalidProtocolBufferException e) {
+             LOGGER.severe("Failed to parse Event: " + e.getMessage());
+             return null;
+@@ -83,6 +91,14 @@ public class PatchBukkitEventFactory {
+ 
+     @Nullable
+     public static org.bukkit.event.Event createEvent(@NotNull Event event) {
++        return createEvent(event, null);
++    }
++
++    @Nullable
++    public static org.bukkit.event.Event createEvent(
++        @NotNull Event event,
++        @Nullable Player lifecyclePlayer
++    ) {
+         Event.DataCase dataCase = event.getDataCase();
+ 
+         return switch (dataCase) {
+@@ -126,7 +142,11 @@ public class PatchBukkitEventFactory {
+             }
+             case PLAYER_LOGIN -> {
+                 PlayerLoginEvent loginEvent = event.getPlayerLogin();
+-                Player player = getEventPlayer(loginEvent.getPlayerUuid().getValue());
++                Player player = getLifecyclePlayer(
++                    loginEvent.getPlayerUuid().getValue(),
++                    lifecyclePlayer,
++                    true
++                );
+                 if (player == null) yield null;
+ 
+                 InetAddress address = parseAddress(loginEvent.getAddress());
+@@ -157,7 +177,11 @@ public class PatchBukkitEventFactory {
+             }
+             case PLAYER_JOIN -> {
+                 PlayerJoinEvent joinEvent = event.getPlayerJoin();
+-                Player player = getPlayer(joinEvent.getPlayerUuid().getValue());
++                Player player = getLifecyclePlayer(
++                    joinEvent.getPlayerUuid().getValue(),
++                    lifecyclePlayer,
++                    true
++                );
+                 if (player == null) yield null;
+ 
+                 Component joinMessage = GsonComponentSerializer.gson().deserialize(joinEvent.getJoinMessage());
+@@ -1186,6 +1210,28 @@ public class PatchBukkitEventFactory {
+         }
+     }
+ 
++    @Nullable
++    private static Player getLifecyclePlayer(
++        @NotNull String uuidStr,
++        @Nullable Player lifecyclePlayer,
++        boolean includePending
++    ) {
++        try {
++            java.util.UUID uuid = java.util.UUID.fromString(uuidStr);
++            if (lifecyclePlayer != null) {
++                if (!uuid.equals(lifecyclePlayer.getUniqueId())) {
++                    LOGGER.severe("EventFactory: Lifecycle player UUID mismatch for " + uuidStr);
++                    return null;
++                }
++                return lifecyclePlayer;
++            }
++            return includePending ? getEventPlayer(uuidStr) : getPlayer(uuidStr);
++        } catch (IllegalArgumentException e) {
++            LOGGER.severe("EventFactory: Invalid UUID string: " + uuidStr);
++            return null;
++        }
++    }
++
+     @Nullable
+     private static InetAddress parseAddress(@NotNull String address) {
+         try {
+diff --git a/java/patchbukkit/src/test/java/org/patchbukkit/events/PatchBukkitEventManagerConformance.java b/java/patchbukkit/src/test/java/org/patchbukkit/events/PatchBukkitEventManagerConformance.java
+index 2fd0d6b4b817bc5b144b3194030916d2a06a0140..3ef5b92453910514c151eca7d5ccf69d4eeada0d 100644
+--- a/java/patchbukkit/src/test/java/org/patchbukkit/events/PatchBukkitEventManagerConformance.java
++++ b/java/patchbukkit/src/test/java/org/patchbukkit/events/PatchBukkitEventManagerConformance.java
+@@ -3,6 +3,10 @@ package org.patchbukkit.events;
+ import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+ import org.bukkit.event.player.PlayerInteractEntityEvent;
+ import org.bukkit.event.player.PlayerInteractEvent;
++import org.bukkit.entity.Player;
++
++import java.lang.reflect.Proxy;
++import java.util.UUID;
+ 
+ public final class PatchBukkitEventManagerConformance {
+ 
+@@ -24,6 +28,36 @@ public final class PatchBukkitEventManagerConformance {
+             PlayerInteractEvent.class.getName(),
+             PatchBukkitEventManager.nativeSubscriptionType(PlayerInteractEvent.class)
+         );
++
++        UUID playerId = UUID.randomUUID();
++        Player lifecyclePlayer = (Player) Proxy.newProxyInstance(
++            Player.class.getClassLoader(),
++            new Class<?>[] { Player.class },
++            (proxy, method, methodArgs) -> switch (method.getName()) {
++                case "getUniqueId" -> playerId;
++                case "getName" -> "LifecycleProbe";
++                case "toString" -> "LifecycleProbe";
++                default -> defaultValue(method.getReturnType());
++            }
++        );
++        patchbukkit.events.Event nativeJoin = patchbukkit.events.Event.newBuilder()
++            .setPlayerJoin(
++                patchbukkit.events.PlayerJoinEvent.newBuilder()
++                    .setPlayerUuid(
++                        patchbukkit.common.UUID.newBuilder()
++                            .setValue(playerId.toString())
++                    )
++                    .setJoinMessage("\"LifecycleProbe joined\"")
++            )
++            .build();
++        org.bukkit.event.Event bukkitJoin =
++            PatchBukkitEventFactory.createEvent(nativeJoin, lifecyclePlayer);
++        if (!(bukkitJoin instanceof org.bukkit.event.player.PlayerJoinEvent joinEvent)) {
++            throw new AssertionError("Expected PlayerJoinEvent from lifecycle context");
++        }
++        if (joinEvent.getPlayer() != lifecyclePlayer) {
++            throw new AssertionError("PlayerJoinEvent must preserve the canonical lifecycle player");
++        }
+     }
+ 
+     private static void requireEqual(String expected, String actual) {
+@@ -31,4 +65,32 @@ public final class PatchBukkitEventManagerConformance {
+             throw new AssertionError("Expected " + expected + " but got " + actual);
+         }
+     }
++
++    private static Object defaultValue(Class<?> type) {
++        if (!type.isPrimitive()) {
++            return null;
++        }
++        if (type == boolean.class) {
++            return false;
++        }
++        if (type == char.class) {
++            return '\0';
++        }
++        if (type == byte.class) {
++            return (byte) 0;
++        }
++        if (type == short.class) {
++            return (short) 0;
++        }
++        if (type == int.class) {
++            return 0;
++        }
++        if (type == long.class) {
++            return 0L;
++        }
++        if (type == float.class) {
++            return 0F;
++        }
++        return 0D;
++    }
+ }
+diff --git a/rust/src/java/plugin/event_manager.rs b/rust/src/java/plugin/event_manager.rs
+index ebc30c434a5693beb0807cb406e3b310816ac5ab..92a755456d65aeff8fda5d1ac8c8302d05693326 100644
+--- a/rust/src/java/plugin/event_manager.rs
++++ b/rust/src/java/plugin/event_manager.rs
+@@ -34,32 +34,44 @@ impl EventManager {
+         let patch_server = jvm.cast(&server, "org.patchbukkit.PatchBukkitServer")?;
+         let event_manager = jvm.invoke(&patch_server, "getEventManager", InvocationArg::empty())?;
+ 
+-        if let Some(ref event) = payload.event.data
++        let lifecycle_player = if let Some(ref event) = payload.event.data
+             && let Some(ref player) = payload.context.player
+         {
+             match event {
+-                Data::PlayerLogin(_) => {
+-                    Self::register_pending_player(
+-                        jvm,
+-                        &patch_server,
+-                        player,
+-                        &payload.context.server,
+-                    )?;
+-                }
++                Data::PlayerLogin(_) => Some(Self::register_pending_player(
++                    jvm,
++                    &patch_server,
++                    player,
++                    &payload.context.server,
++                )?),
+                 Data::PlayerJoin(_) => {
+                     let j_uuid = Self::java_uuid(jvm, player)?;
+-                    let promoted: bool = jvm.to_rust(jvm.invoke(
++                    let promoted = jvm.invoke(
+                         &patch_server,
+                         "promotePendingPlayer",
+                         &[InvocationArg::from(j_uuid)],
++                    )?;
++                    let is_null: bool = jvm.to_rust(jvm.invoke_static(
++                        "java.util.Objects",
++                        "isNull",
++                        &[InvocationArg::from(jvm.clone_instance(&promoted)?)],
+                     )?)?;
+-                    if !promoted {
+-                        Self::register_player(jvm, &patch_server, player, &payload.context.server)?;
++                    if is_null {
++                        Some(Self::register_player(
++                            jvm,
++                            &patch_server,
++                            player,
++                            &payload.context.server,
++                        )?)
++                    } else {
++                        Some(promoted)
+                     }
+                 }
+-                _ => {}
++                _ => None,
+             }
+-        }
++        } else {
++            None
++        };
+ 
+         let bytes = payload.event.encode_to_vec();
+         let j_bytes = jvm.create_java_array(
+@@ -75,11 +87,22 @@ impl EventManager {
+                 .collect::<Vec<_>>(),
+         )?;
+ 
+-        let j_event = jvm.invoke_static(
+-            "org.patchbukkit.events.PatchBukkitEventFactory",
+-            "createEventFromBytes",
+-            &[InvocationArg::from(j_bytes)],
+-        )?;
++        let j_event = if let Some(lifecycle_player) = lifecycle_player {
++            jvm.invoke_static(
++                "org.patchbukkit.events.PatchBukkitEventFactory",
++                "createEventFromBytes",
++                &[
++                    InvocationArg::from(j_bytes),
++                    InvocationArg::from(lifecycle_player),
++                ],
++            )?
++        } else {
++            jvm.invoke_static(
++                "org.patchbukkit.events.PatchBukkitEventFactory",
++                "createEventFromBytes",
++                &[InvocationArg::from(j_bytes)],
++            )?
++        };
+ 
+         let is_null: bool = jvm.to_rust(jvm.invoke_static(
+             "java.util.Objects",
+@@ -166,7 +189,7 @@ impl EventManager {
+         patch_server: &Instance,
+         player: &Arc<Player>,
+         server: &Arc<Server>,
+-    ) -> Result<()> {
++    ) -> Result<Instance> {
+         let j_uuid = Self::java_uuid(jvm, player)?;
+         let existing = jvm.invoke(
+             patch_server,
+@@ -176,17 +199,17 @@ impl EventManager {
+         let is_null: bool = jvm.to_rust(jvm.invoke_static(
+             "java.util.Objects",
+             "isNull",
+-            &[InvocationArg::from(existing)],
++            &[InvocationArg::from(jvm.clone_instance(&existing)?)],
+         )?)?;
+         if is_null {
+             let j_player = Self::create_player(jvm, player, server)?;
+-            jvm.invoke(
++            return Ok(jvm.invoke(
+                 patch_server,
+                 "registerPendingPlayer",
+                 &[InvocationArg::from(j_player)],
+-            )?;
++            )?);
+         }
+-        Ok(())
++        Ok(existing)
+     }
+ 
+     pub fn register_player(
+@@ -194,16 +217,16 @@ impl EventManager {
+         patch_server: &Instance,
+         player: &Arc<Player>,
+         server: &Arc<Server>,
+-    ) -> Result<()> {
++    ) -> Result<Instance> {
+         let j_player = Self::create_player(jvm, player, server)?;
+ 
+         jvm.invoke(
+             patch_server,
+             "registerPlayer",
+-            &[InvocationArg::from(j_player)],
++            &[InvocationArg::from(jvm.clone_instance(&j_player)?)],
+         )?;
+ 
+-        Ok(())
++        Ok(j_player)
+     }
+ 
+     pub fn call_event(&self, jvm: &Jvm, event: Instance) -> Result<()> {

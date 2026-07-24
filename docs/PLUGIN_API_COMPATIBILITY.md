@@ -390,6 +390,34 @@ This batch does not claim per-player time or weather, lightning events or
 entities, game-rule mutation, world creation/unloading, or cross-world clock
 coupling.
 
+## Public-server foundation batch gate
+
+The EssentialsX and LuckPerms foundation batch is complete only when one
+deployed commit passes all of these checks:
+
+1. Player, entity, block, block-state, and world metadata share one
+   thread-safe runtime store keyed by stable native identity. Multiple plugin
+   owners coexist, and owner-specific removal preserves other owners.
+2. Fresh block and entity wrappers observe the same metadata. Plugin disable
+   removes that plugin's values, and ending a player session removes that
+   player's values. Metadata is not persisted across restarts.
+3. Each human entity delegates every permission operation through its
+   mutable `CraftHumanEntity.perm` field. Permission attachments, recalculation,
+   effective-permission reads, operator changes, and timed expiry remain
+   isolated per player and take effect without reconnecting.
+4. Native right-click and positional right-click interactions become
+   `PlayerInteractEntityEvent` and `PlayerInteractAtEntityEvent` with the real
+   actor, captured target identity/location, exact hand, clicked position, and
+   cancellation. Attacks remain in the damage pipeline.
+5. Player, item-frame, armor-stand, and end-crystal targets are supported.
+   Other entity wrappers remain explicit follow-up work.
+6. The pinned patch replay, Java/protobuf build, focused Rust checks, release
+   builds, Docker image, and the live non-permitted/grant/revoke workflow all
+   pass for the same immutable commit.
+
+The evidence template and rollback rule are in
+[`PUBLIC_SERVER_FOUNDATION_RELEASE.md`](PUBLIC_SERVER_FOUNDATION_RELEASE.md).
+
 ## Human verification runbook
 
 Every compatibility change must leave evidence a maintainer can reproduce and
@@ -399,10 +427,13 @@ understand. Test count alone is not evidence.
 
 1. Confirm `PATCHBUKKIT_COMMIT` in the root `Dockerfile` is the reviewed
    PatchBukkit revision.
-2. With clean Pumpkin and PatchBukkit checkouts, run:
+2. With clean Pumpkin and PatchBukkit checkouts, apply each patch listed by
+   the root `Dockerfile` in order. Check every patch immediately before
+   applying it:
 
    ```text
-   git -C <patchbukkit-checkout> apply --check --unidiff-zero <pumpkin-checkout>/docker/patchbukkit-26.2.patch
+   git -C <patchbukkit-checkout> apply --check <patch>
+   git -C <patchbukkit-checkout> apply <patch>
    ```
 
 3. Apply the patch and run PatchBukkit's full Java build. This verifies the
