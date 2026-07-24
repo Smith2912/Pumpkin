@@ -1,0 +1,109 @@
+diff --git a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
+index 17a645c..e712245 100644
+--- a/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
++++ b/java/patchbukkit/src/main/java/org/patchbukkit/events/PatchBukkitEventManager.java
+@@ -37,7 +37,10 @@ import java.util.logging.Level;
+ 
+ public class PatchBukkitEventManager {
+ 
++    private static final String BRIDGE_DISPATCHER_NAME = "PatchBukkit";
++
+     private final Server server;
++    private final Set<String> nativeSubscribedEventTypes = new HashSet<>();
+ 
+     public PatchBukkitEventManager(Server server) {
+         this.server = server;
+@@ -133,31 +136,19 @@ public class PatchBukkitEventManager {
+     }
+ 
+     /**
+-     * Called from Rust (via j4rs) when a Pumpkin event fires for a specific plugin.
++     * Called from Rust (via j4rs) when a Pumpkin event fires.
+      *
+-     * Iterates PatchBukkitEvent's HandlerList, filters to the target plugin
+-     * by name, and invokes its executors. Cancellation state is set on the
+-     * event and read back by Rust after this returns.
++     * A bridged event type has exactly one native subscription. This method
++     * therefore dispatches the event once through Bukkit's authoritative
++     * HandlerList, preserving global listener priority order and
++     * ignoreCancelled behavior. Cancellation state is read back by Rust after
++     * this returns.
+      *
+      * @param event      The PatchBukkitEvent populated by Rust
+-     * @param pluginName The plugin whose handlers should execute
++     * @param pluginName Retained for bridge ABI compatibility
+      */
+     public void fireEvent(@NotNull Event event, @NotNull String pluginName) {
+-        for (RegisteredListener listener : event.getHandlers().getRegisteredListeners()) {
+-            if (!listener.getPlugin().getName().equals(pluginName)) continue;
+-            if (!listener.getPlugin().isEnabled()) continue;
+-
+-            try {
+-                listener.callEvent(event);
+-            } catch (Throwable ex) {
+-                this.server.getLogger().log(
+-                    Level.SEVERE,
+-                    "Could not pass event " + event.getEventName()
+-                        + " to " + listener.getPlugin().getPluginMeta().getDisplayName(),
+-                    ex
+-                );
+-            }
+-        }
++        callEventJavaOnly(event);
+     }
+ 
+     public void registerEvents(@NotNull Listener listener, @NotNull Plugin plugin) {
+@@ -167,15 +158,7 @@ public class PatchBukkitEventManager {
+ 
+         for (Map.Entry<Class<? extends Event>, Set<RegisteredListener>> entry : this.createRegisteredListeners(listener, plugin).entrySet()) {
+             this.getEventListeners(this.getRegistrationClass(entry.getKey())).registerAll(entry.getValue());
+-
+-            for (RegisteredListener rl : entry.getValue()) {
+-                if (isJavaOnlyEvent(entry.getKey())) {
+-                    continue;
+-                }
+-                int priorityOrdinal = Math.min(rl.getPriority().ordinal(), 4);
+-                var request = RegisterEventRequest.newBuilder().setEventType(entry.getKey().getName()).setPluginName(plugin.getName()).setPriority(priorityOrdinal).setBlocking(true).build();
+-                NativeBridgeFfi.registerEvent(request);
+-            }
++            ensureNativeSubscription(entry.getKey());
+         }
+     }
+ 
+@@ -195,10 +178,33 @@ public class PatchBukkitEventManager {
+             return;
+         }
+ 
+-        int priorityOrdinal = Math.min(priority.ordinal(), 4);
+-        var request = RegisterEventRequest.newBuilder().setEventType(event.getName()).setPluginName(plugin.getName()).setPriority(priorityOrdinal).setBlocking(true).build();
+-        NativeBridgeFfi.registerEvent(request);
++        ensureNativeSubscription(event);
++    }
++
++    private synchronized void ensureNativeSubscription(@NotNull Class<? extends Event> event) {
++        if (isJavaOnlyEvent(event)) {
++            return;
++        }
+ 
++        String eventType = event.getName();
++        if (!this.nativeSubscribedEventTypes.add(eventType)) {
++            return;
++        }
++
++        try {
++            var request = RegisterEventRequest.newBuilder()
++                .setEventType(eventType)
++                .setPluginName(BRIDGE_DISPATCHER_NAME)
++                .setPriority(EventPriority.NORMAL.ordinal())
++                .setBlocking(true)
++                .build();
++            if (NativeBridgeFfi.registerEvent(request) == null) {
++                throw new IllegalStateException("Native bridge rejected event subscription for " + eventType);
++            }
++        } catch (RuntimeException | Error ex) {
++            this.nativeSubscribedEventTypes.remove(eventType);
++            throw ex;
++        }
+     }
+ 
+     private static boolean isJavaOnlyEvent(Class<? extends Event> eventClass) {
