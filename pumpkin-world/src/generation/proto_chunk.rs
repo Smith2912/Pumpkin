@@ -144,6 +144,9 @@ pub struct ProtoChunk {
     pub carving_mask: crate::generation::carver::mask::CarvingMask,
     pub blending_data: Option<crate::generation::blender::blending_data::BlendingData>,
     pub pending_block_entities: Vec<NbtCompound>,
+    /// Regular entities embedded in structure templates, handed to the runtime only after this
+    /// proto chunk successfully reaches the full stage.
+    pub pending_structure_entities: Vec<NbtCompound>,
     pub fluid_ticks: Vec<ScheduledTick<&'static Fluid>>,
 }
 
@@ -229,6 +232,7 @@ impl ProtoChunk {
             ),
             blending_data: None,
             pending_block_entities: Vec::new(),
+            pending_structure_entities: Vec::new(),
             fluid_ticks: Vec::new(),
         }
     }

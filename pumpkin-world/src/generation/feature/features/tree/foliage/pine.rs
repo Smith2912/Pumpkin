@@ -26,7 +26,7 @@ impl PineFoliagePlacer {
     ) -> Vec<BlockPos> {
         let mut foliage_positions = Vec::new();
         let mut radius = 0;
-        for y in (offset - foliage_height)..offset {
+        for y in pine_layer_offsets(offset, foliage_height) {
             FoliagePlacer::generate_square(
                 &mut foliage_positions,
                 self,
@@ -60,6 +60,10 @@ impl PineFoliagePlacer {
     }
 }
 
+fn pine_layer_offsets(offset: i32, foliage_height: i32) -> impl Iterator<Item = i32> {
+    (offset - foliage_height..=offset).rev()
+}
+
 impl LeaveValidator for PineFoliagePlacer {
     fn is_invalid_for_leaves(
         &self,
@@ -71,5 +75,18 @@ impl LeaveValidator for PineFoliagePlacer {
         _giant_trunk: bool,
     ) -> bool {
         dx == radius && dz == radius && radius > 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pine_layer_offsets;
+
+    #[test]
+    fn pine_crown_includes_top_and_bottom_layers_from_top_down() {
+        assert_eq!(
+            pine_layer_offsets(1, 4).collect::<Vec<_>>(),
+            vec![1, 0, -1, -2, -3]
+        );
     }
 }

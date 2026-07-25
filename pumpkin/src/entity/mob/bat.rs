@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::sound::Sound;
@@ -17,14 +17,11 @@ use crate::world::World;
 
 const ROOSTING_FLAG: u8 = 1;
 const CLOSE_PLAYER_DISTANCE: f64 = 4.0;
-/// Vanilla: `getMinAmbientSoundDelay()` returns 80 for most mobs
-const MIN_AMBIENT_SOUND_DELAY: i32 = 80;
 
 pub struct BatEntity {
     pub mob_entity: MobEntity,
     hanging_position: Mutex<Option<BlockPos>>,
     roosting: AtomicBool,
-    ambient_sound_chance: AtomicI32,
 }
 
 impl BatEntity {
@@ -34,7 +31,6 @@ impl BatEntity {
             mob_entity,
             hanging_position: Mutex::new(None),
             roosting: AtomicBool::new(true),
-            ambient_sound_chance: AtomicI32::new(MIN_AMBIENT_SOUND_DELAY),
         };
         let mob_arc = Arc::new(bat);
 
@@ -112,20 +108,18 @@ impl Mob for BatEntity {
         &self.mob_entity
     }
 
+    fn get_ambient_sound(&self) -> Option<Sound> {
+        // Resting bats suppress three out of four successful ambient-sound attempts.
+        (!self.is_roosting() || rand::rng().random_range(0..4) == 0)
+            .then_some(Sound::EntityBatAmbient)
+    }
+
     fn mob_tick<'a>(&'a self, _caller: &'a Arc<dyn EntityBase>) -> EntityBaseFuture<'a, ()> {
         Box::pin(async move {
             let entity = &self.mob_entity.living_entity.entity;
             let block_pos = entity.block_pos.load();
             let above_pos = BlockPos::new(block_pos.0.x, block_pos.0.y + 1, block_pos.0.z);
             let world = entity.world.load();
-
-            // Ambient idle sound (vanilla: MobEntity.mobTick → playAmbientSound)
-            let chance = self.ambient_sound_chance.fetch_sub(1, Relaxed);
-            if chance <= 0 {
-                self.ambient_sound_chance
-                    .store(MIN_AMBIENT_SOUND_DELAY, Relaxed);
-                entity.play_sound(Sound::EntityBatAmbient);
-            }
 
             if self.is_roosting() {
                 let above_state = world.get_block_state(&above_pos);

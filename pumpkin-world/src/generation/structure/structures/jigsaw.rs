@@ -159,6 +159,14 @@ impl RawPoolElement {
 }
 
 impl PoolElement {
+    /// Vertical offset between a pool element's template origin and its ground plane.
+    ///
+    /// Vanilla's base pool-element contract returns one for all current element kinds.
+    #[must_use]
+    pub const fn ground_level_delta(&self) -> i32 {
+        1
+    }
+
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         matches!(self.kind, PoolElementKind::Empty)
@@ -476,7 +484,7 @@ impl StructurePieceBase for PoolElementStructurePiece {
             pumpkin_util::math::vector3::Vector3::new(self.pos.0.x, self.pos.0.y, self.pos.0.z);
 
         self.element
-            .for_each_template(|_name, processor_list, template| {
+            .for_each_template(|name, processor_list, template| {
                 let processors = match processor_list {
                     ProcessorListRef::Named(name) => {
                         crate::generation::structure::template::processor::load_processor_list(name)
@@ -493,6 +501,16 @@ impl StructurePieceBase for PoolElementStructurePiece {
                     self.liquid_settings == LiquidSettings::ApplyWaterlog,
                     processors.as_ref(),
                     Some(chunk_box),
+                );
+                crate::generation::structure::template::enqueue_template_entities(
+                    chunk,
+                    &template,
+                    name,
+                    origin,
+                    (0, 0),
+                    self.rotation,
+                    self.mirror,
+                    chunk_box,
                 );
             });
 

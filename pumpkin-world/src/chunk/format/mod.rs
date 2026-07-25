@@ -339,6 +339,8 @@ impl ChunkData {
             }
         }
 
+        let pending_structure_entities = read_pending_structure_entities(&root_tag);
+
         let light_correct = root_tag.get_bool("isLightOn").unwrap_or(false);
 
         let status_str = root_tag.get_string("Status").unwrap_or("minecraft:empty");
@@ -367,6 +369,7 @@ impl ChunkData {
             block_ticks: ChunkTickScheduler::from_iter(block_ticks),
             fluid_ticks: ChunkTickScheduler::from_iter(fluid_ticks),
             pending_block_entities: std::sync::Mutex::new(block_entities),
+            pending_structure_entities: std::sync::Mutex::new(pending_structure_entities),
             light_engine: std::sync::Mutex::new(light_engine),
             light_populated: AtomicBool::new(light_correct),
             status,
@@ -393,6 +396,11 @@ impl ChunkData {
             let entities_guard = self.pending_block_entities.lock().unwrap();
             entities_guard.values().cloned().collect::<Vec<_>>()
         };
+        let pending_structure_entities = self
+            .pending_structure_entities
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
 
         let light_lock = self.light_engine.lock().unwrap();
         let heightmap_lock = self.heightmap.lock().unwrap();
@@ -516,6 +524,7 @@ impl ChunkData {
             block_entities_list.push(NbtTag::Compound(entity_comp));
         }
         root_compound.put_list("block_entities", block_entities_list);
+        write_pending_structure_entities(&mut root_compound, pending_structure_entities);
 
         root_compound.put_bool("isLightOn", is_light_correct);
 
@@ -524,6 +533,47 @@ impl ChunkData {
             .map_err(ChunkSerializingError::ErrorSerializingChunk)?;
 
         Ok(result.into())
+    }
+}
+
+const PENDING_STRUCTURE_ENTITIES_TAG: &str = "PumpkinPendingStructureEntities";
+
+fn read_pending_structure_entities(root: &NbtCompound) -> Vec<NbtCompound> {
+    root.get_list(PENDING_STRUCTURE_ENTITIES_TAG)
+        .into_iter()
+        .flatten()
+        .filter_map(|tag| tag.extract_compound().cloned())
+        .collect()
+}
+
+fn write_pending_structure_entities(root: &mut NbtCompound, entities: Vec<NbtCompound>) {
+    if !entities.is_empty() {
+        root.put_list(
+            PENDING_STRUCTURE_ENTITIES_TAG,
+            entities
+                .into_iter()
+                .map(pumpkin_nbt::tag::NbtTag::Compound)
+                .collect(),
+        );
+    }
+}
+
+#[cfg(test)]
+mod pending_structure_entity_tests {
+    use super::{read_pending_structure_entities, write_pending_structure_entities};
+    use pumpkin_nbt::compound::NbtCompound;
+
+    #[test]
+    fn pending_structure_entities_survive_chunk_nbt_round_trip() {
+        let mut villager = NbtCompound::new();
+        villager.put_string("id", "minecraft:villager".to_string());
+        let mut root = NbtCompound::new();
+
+        write_pending_structure_entities(&mut root, vec![villager]);
+
+        let restored = read_pending_structure_entities(&root);
+        assert_eq!(restored.len(), 1);
+        assert_eq!(restored[0].get_string("id"), Some("minecraft:villager"));
     }
 }
 

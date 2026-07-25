@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicI32, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
 use std::sync::{Arc, Weak};
 use uuid::Uuid;
 
@@ -27,7 +27,7 @@ use tokio::sync::Mutex;
 
 use crate::entity::player::Player;
 use crate::entity::{
-    Entity, EntityBase, NBTStorage,
+    Entity, EntityBase, EntitySpawnReason, NBTStorage,
     ai::goal::{
         avoid_entity::AvoidEntityGoal, look_around::RandomLookAroundGoal,
         look_at_entity::LookAtEntityGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
@@ -55,6 +55,7 @@ pub struct VillagerEntity {
     pub job_site: std::sync::Mutex<Option<BlockPos>>,
     pub home_pos: std::sync::Mutex<Option<BlockPos>>,
     pub self_weak: std::sync::Mutex<Option<Weak<Self>>>,
+    assign_profession_when_spawned: AtomicBool,
 }
 
 impl VillagerEntity {
@@ -81,6 +82,7 @@ impl VillagerEntity {
             job_site: std::sync::Mutex::new(None),
             home_pos: std::sync::Mutex::new(None),
             self_weak: std::sync::Mutex::new(None),
+            assign_profession_when_spawned: AtomicBool::new(false),
         };
         let mob_arc = Arc::new(villager);
         *mob_arc.self_weak.lock().unwrap() = Some(Arc::downgrade(&mob_arc));
@@ -424,6 +426,9 @@ impl NBTStorage for VillagerEntity {
                 self.last_restock_time.load(Ordering::Relaxed),
             );
             nbt.put_int("RestocksToday", self.restocks_today.load(Ordering::Relaxed));
+            if self.assign_profession_when_spawned.load(Ordering::Relaxed) {
+                nbt.put_bool("AssignProfessionWhenSpawned", true);
+            }
 
             let job_site_pos = *self.job_site.lock().unwrap();
             if let Some(pos) = job_site_pos {
@@ -548,6 +553,10 @@ impl NBTStorage for VillagerEntity {
             if let Some(today) = nbt.get_int("RestocksToday") {
                 self.restocks_today.store(today, Ordering::Relaxed);
             }
+            self.assign_profession_when_spawned.store(
+                nbt.get_bool("AssignProfessionWhenSpawned").unwrap_or(false),
+                Ordering::Relaxed,
+            );
 
             if let (Some(x), Some(y), Some(z)) = (
                 nbt.get_int("JobSiteX"),
@@ -722,6 +731,10 @@ fn profession_matches_block(profession: VillagerProfession, block: &Block) -> bo
     }
 }
 
+const fn should_scan_villager_points_of_interest(age: i32, assign_profession_now: bool) -> bool {
+    age % 20 == 0 || assign_profession_now
+}
+
 impl Mob for VillagerEntity {
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
@@ -735,6 +748,14 @@ impl Mob for VillagerEntity {
         *self.home_pos.lock().unwrap()
     }
 
+    fn mob_finalize_spawn(&self, reason: EntitySpawnReason) {
+        self.mob_entity.finalize_common_spawn();
+        if reason == EntitySpawnReason::Structure {
+            self.assign_profession_when_spawned
+                .store(true, Ordering::Relaxed);
+        }
+    }
+
     #[expect(clippy::too_many_lines)]
     fn mob_tick<'a>(
         &'a self,
@@ -742,7 +763,10 @@ impl Mob for VillagerEntity {
     ) -> crate::entity::EntityBaseFuture<'a, ()> {
         Box::pin(async move {
             let age = self.get_entity().age.load(Ordering::Relaxed);
-            if age % 20 != 0 {
+            let assign_profession_now = self
+                .assign_profession_when_spawned
+                .swap(false, Ordering::Relaxed);
+            if !should_scan_villager_points_of_interest(age, assign_profession_now) {
                 return;
             }
 
@@ -1061,5 +1085,17 @@ impl Mob for VillagerEntity {
 
             true
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_scan_villager_points_of_interest;
+
+    #[test]
+    fn structure_spawn_requests_an_immediate_profession_scan() {
+        assert!(should_scan_villager_points_of_interest(1, true));
+        assert!(!should_scan_villager_points_of_interest(1, false));
+        assert!(should_scan_villager_points_of_interest(20, false));
     }
 }

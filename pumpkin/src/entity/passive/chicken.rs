@@ -117,6 +117,10 @@ impl Mob for ChickenEntity {
         &self.mob_entity
     }
 
+    fn get_ambient_sound(&self) -> Option<Sound> {
+        Some(Sound::EntityChickenAmbient)
+    }
+
     fn mob_set_variant_name(&self, name: &str) {
         let variant = match name.strip_prefix("minecraft:").unwrap_or(name) {
             "cold" => 0,

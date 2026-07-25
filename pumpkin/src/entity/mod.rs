@@ -127,6 +127,16 @@ pub type EntityBaseFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 pub type TeleportFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
 
+/// Describes why a mob is being initialized before it enters the live world.
+///
+/// Keeping this explicit lets entity-specific initialization grow without coupling
+/// structure generation to concrete mob implementations.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum EntitySpawnReason {
+    Structure,
+}
+
 pub trait EntityBase: Send + Sync + NBTStorage + std::any::Any {
     /// Called every tick for this entity.
     ///
@@ -194,6 +204,11 @@ pub trait EntityBase: Send + Sync + NBTStorage + std::any::Any {
             }
         })
     }
+
+    /// Applies spawn-reason-specific initialization after NBT is loaded and before
+    /// the entity is announced to clients.
+    fn finalize_spawn(&self, _reason: EntitySpawnReason) {}
+
     fn set_variant_name(&self, _name: &str) {}
 
     // This method takes ownership of Arc<Self>, so the lifetime bounds are different.

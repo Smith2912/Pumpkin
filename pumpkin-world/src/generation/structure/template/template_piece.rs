@@ -204,6 +204,17 @@ impl StructurePieceBase for TemplatePiece {
         chunk_box: &BlockBox,
     ) {
         self.place_blocks(chunk, chunk_box);
+        let template_identity = format!("{:?}:{}", self.piece.r#type, self.piece.chain_length);
+        super::enqueue_template_entities(
+            chunk,
+            &self.template,
+            &template_identity,
+            self.piece.bounding_box.min,
+            (0, 0),
+            self.rotation,
+            self.mirror,
+            chunk_box,
+        );
     }
 
     fn get_structure_piece(&self) -> &StructurePiece {

@@ -72,6 +72,10 @@ impl Mob for CowEntity {
         &self.mob_entity
     }
 
+    fn get_ambient_sound(&self) -> Option<Sound> {
+        Some(Sound::EntityCowAmbient)
+    }
+
     fn mob_interact<'a>(
         &'a self,
         player: &'a Arc<Player>,

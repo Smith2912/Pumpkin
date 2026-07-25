@@ -77,6 +77,10 @@ impl Mob for PigEntity {
         &self.mob_entity
     }
 
+    fn get_ambient_sound(&self) -> Option<Sound> {
+        Some(Sound::EntityPigAmbient)
+    }
+
     fn mob_interact<'a>(
         &'a self,
         player: &'a Arc<Player>,

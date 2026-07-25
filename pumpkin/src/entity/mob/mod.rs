@@ -1,9 +1,13 @@
-use super::{Entity, EntityBase, NBTStorage, ai::pathfinder::Navigator, living::LivingEntity};
+use super::{
+    Entity, EntityBase, EntitySpawnReason, NBTStorage, ai::pathfinder::Navigator,
+    living::LivingEntity,
+};
 use crate::entity::EntityBaseFuture;
 use crate::entity::ai::control::MoveControlTrait;
 use crate::entity::ai::control::look_control::LookControl;
 use crate::entity::ai::control::move_control::MoveControl;
 use crate::entity::ai::goal::goal_selector::GoalSelector;
+use crate::entity::attributes::{AttributeInstance, Modifier, ModifierOperation};
 use crate::entity::player::Player;
 use crate::server::Server;
 use crate::world::World;
@@ -12,6 +16,7 @@ use pumpkin_data::attributes::Attributes;
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::meta_data_type::MetaDataType;
+use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_data::tracked_data::TrackedData;
 use pumpkin_protocol::java::client::play::{CHeadRot, CUpdateEntityRot, Metadata};
@@ -76,6 +81,7 @@ pub struct MobEntity {
     pub love_ticks: AtomicI32,
     pub breeding_cooldown: AtomicI32,
     pub breeder: AtomicCell<Option<Uuid>>,
+    ambient_sound_time: AtomicI32,
     mob_flags: AtomicU8,
     last_sent_yaw: AtomicU8,
     last_sent_pitch: AtomicU8,
@@ -112,6 +118,7 @@ impl MobEntity {
             love_ticks: AtomicI32::new(0),
             breeding_cooldown: AtomicI32::new(0),
             breeder: AtomicCell::new(None),
+            ambient_sound_time: AtomicI32::new(0),
             mob_flags: AtomicU8::new(0),
             last_sent_yaw: AtomicU8::new(0),
             last_sent_pitch: AtomicU8::new(0),
@@ -143,6 +150,16 @@ impl MobEntity {
 
     pub fn set_left_handed(&self, left_handed: bool) {
         self.set_mob_flag(Self::LEFT_HANDED_FLAG, left_handed);
+    }
+
+    fn initialize_left_handed(&self, left_handed: bool) {
+        let old = self.mob_flags.load(Relaxed);
+        let new = if left_handed {
+            old | Self::LEFT_HANDED_FLAG
+        } else {
+            old & !Self::LEFT_HANDED_FLAG
+        };
+        self.mob_flags.store(new, Relaxed);
     }
 
     pub fn is_left_handed(&self) -> bool {
@@ -379,6 +396,28 @@ impl MobEntity {
         let entity = &self.living_entity.entity;
         entity.set_on_fire_for(8.0);
     }
+
+    fn tick_ambient_sound(&self, min_delay: i32) -> bool {
+        // Vanilla increments the counter after testing it against a fresh 0..1000 roll.
+        let ambient_sound_time = self.ambient_sound_time.fetch_add(1, Relaxed);
+        if ambient_sound_roll_succeeds(ambient_sound_time, rand::rng().random_range(0..1000)) {
+            self.ambient_sound_time.store(-min_delay, Relaxed);
+            return true;
+        }
+        false
+    }
+
+    fn reset_ambient_sound_after_hurt(&self, min_delay: i32) {
+        self.ambient_sound_time.store(-min_delay, Relaxed);
+    }
+}
+
+const fn ambient_sound_roll_succeeds(ambient_sound_time: i32, roll: i32) -> bool {
+    roll < ambient_sound_time
+}
+
+fn default_ambient_sound(resource_name: &str) -> Option<Sound> {
+    Sound::from_name(&format!("entity.{resource_name}.ambient"))
 }
 
 pub trait Mob: EntityBase + Send + Sync {
@@ -399,6 +438,16 @@ pub trait Mob: EntityBase + Send + Sync {
     }
 
     fn get_mob_entity(&self) -> &MobEntity;
+
+    /// Returns the idle sound emitted after the common vanilla-style ambient roll succeeds.
+    fn get_ambient_sound(&self) -> Option<Sound> {
+        default_ambient_sound(self.get_entity().entity_type.resource_name)
+    }
+
+    /// The vanilla default interval is 80 ticks; the ambient counter is reset to its negative.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        80
+    }
 
     fn get_job_site(&self) -> Option<BlockPos> {
         None
@@ -505,10 +554,53 @@ pub trait Mob: EntityBase + Send + Sync {
                     None,
                 );
             }
+            let mob_flags = self.get_mob_entity().mob_flags.load(Relaxed);
+            if mob_flags != 0 {
+                entity.send_meta_data(
+                    &[Metadata::new(
+                        TrackedData::MOB_FLAGS_ID,
+                        MetaDataType::BYTE,
+                        mob_flags,
+                    )],
+                    None,
+                );
+            }
         })
     }
 
+    fn mob_finalize_spawn(&self, _reason: EntitySpawnReason) {
+        self.get_mob_entity().finalize_common_spawn();
+    }
+
     fn mob_set_variant_name(&self, _name: &str) {}
+}
+
+impl MobEntity {
+    pub(crate) fn finalize_common_spawn(&self) {
+        let mut random = rand::rng();
+        let follow_range_bonus = random.random::<f64>() - random.random::<f64>();
+        self.living_entity
+            .update_attribute(&Attributes::FOLLOW_RANGE, |attribute| {
+                ensure_random_spawn_bonus(attribute, follow_range_bonus * 0.114_85);
+            });
+        self.initialize_left_handed(random.random::<f32>() < 0.05);
+    }
+}
+
+fn ensure_random_spawn_bonus(attribute: &mut AttributeInstance, amount: f64) {
+    if attribute
+        .modifiers
+        .iter()
+        .any(|modifier| modifier.id == "minecraft:random_spawn_bonus")
+    {
+        return;
+    }
+
+    attribute.add_or_replace_modifier(Modifier {
+        id: "minecraft:random_spawn_bonus".to_string(),
+        amount,
+        operation: ModifierOperation::MultiplyBase,
+    });
 }
 impl<T: Mob + Send + 'static> EntityBase for T {
     fn init_data_tracker(&self) -> EntityBaseFuture<'_, ()> {
@@ -519,6 +611,10 @@ impl<T: Mob + Send + 'static> EntityBase for T {
 
     fn set_variant_name(&self, name: &str) {
         self.mob_set_variant_name(name);
+    }
+
+    fn finalize_spawn(&self, reason: EntitySpawnReason) {
+        self.mob_finalize_spawn(reason);
     }
 
     fn tick<'a>(
@@ -536,6 +632,13 @@ impl<T: Mob + Send + 'static> EntityBase for T {
 
             if mob_entity.love_ticks.load(Relaxed) > 0 {
                 mob_entity.love_ticks.fetch_sub(1, Relaxed);
+            }
+
+            if !mob_entity.living_entity.dead.load(Relaxed)
+                && mob_entity.tick_ambient_sound(self.get_ambient_sound_interval())
+                && let Some(sound) = self.get_ambient_sound()
+            {
+                mob_entity.living_entity.entity.play_sound(sound);
             }
 
             self.mob_tick(caller).await;
@@ -662,6 +765,8 @@ impl<T: Mob + Send + 'static> EntityBase for T {
                 .damage_with_context(caller, amount, damage_type, position, source, cause)
                 .await;
             if damaged {
+                self.get_mob_entity()
+                    .reset_ambient_sound_after_hurt(self.get_ambient_sound_interval());
                 self.on_damage(damage_type, source).await;
             }
             damaged
@@ -795,5 +900,78 @@ pub trait PathAwareEntity: Mob + Send + Sync {
 
     fn get_follow_leash_speed(&self) -> f32 {
         1.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        MobEntity, ambient_sound_roll_succeeds, default_ambient_sound, ensure_random_spawn_bonus,
+    };
+    use crate::entity::attributes::{AttributeInstance, Modifier, ModifierOperation};
+    use pumpkin_data::sound::Sound;
+
+    #[test]
+    fn ambient_sound_roll_uses_the_pre_increment_counter() {
+        assert!(!ambient_sound_roll_succeeds(0, 0));
+        assert!(!ambient_sound_roll_succeeds(80, 80));
+        assert!(ambient_sound_roll_succeeds(80, 79));
+    }
+
+    #[test]
+    fn hurt_reset_defers_the_next_ambient_sound_attempt() {
+        use std::sync::atomic::Ordering::Relaxed;
+
+        let counter = std::sync::atomic::AtomicI32::new(400);
+        counter.store(-80, Relaxed);
+        assert!(!ambient_sound_roll_succeeds(counter.load(Relaxed), 0));
+
+        // Keep the concrete method covered by type checking without constructing a world.
+        let _reset: fn(&MobEntity, i32) = MobEntity::reset_ambient_sound_after_hurt;
+    }
+
+    #[test]
+    fn negative_reset_counter_cannot_play_an_ambient_sound() {
+        assert!(!ambient_sound_roll_succeeds(-80, 0));
+        assert!(!ambient_sound_roll_succeeds(-1, 999));
+    }
+
+    #[test]
+    fn common_mob_ambient_sounds_are_discovered_from_the_generated_registry() {
+        assert_eq!(
+            default_ambient_sound("villager"),
+            Some(Sound::EntityVillagerAmbient)
+        );
+        assert_eq!(
+            default_ambient_sound("zombie"),
+            Some(Sound::EntityZombieAmbient)
+        );
+        assert_eq!(default_ambient_sound("creeper"), None);
+    }
+
+    #[test]
+    fn spawn_finalization_preserves_an_existing_random_bonus() {
+        let mut attribute = AttributeInstance::new(16.0);
+        attribute.add_or_replace_modifier(Modifier {
+            id: "minecraft:random_spawn_bonus".to_string(),
+            amount: 0.42,
+            operation: ModifierOperation::MultiplyBase,
+        });
+
+        ensure_random_spawn_bonus(&mut attribute, -0.1);
+
+        assert_eq!(attribute.modifiers.len(), 1);
+        assert_eq!(attribute.modifiers[0].amount, 0.42);
+    }
+
+    #[test]
+    fn spawn_finalization_adds_a_missing_random_bonus() {
+        let mut attribute = AttributeInstance::new(16.0);
+
+        ensure_random_spawn_bonus(&mut attribute, -0.1);
+
+        assert_eq!(attribute.modifiers.len(), 1);
+        assert_eq!(attribute.modifiers[0].id, "minecraft:random_spawn_bonus");
+        assert_eq!(attribute.modifiers[0].amount, -0.1);
     }
 }

@@ -51,6 +51,24 @@ pub const MAX_TOTAL_STRUCTURE_RANGE: i32 = 128;
 pub const MIN_DEPTH: i32 = 0;
 pub const MAX_DEPTH: i32 = 20;
 
+fn align_start_piece_to_ground(
+    bounding_box: &mut BlockBox,
+    template_position: BlockPos,
+    ground_y: i32,
+    ground_level_delta: i32,
+) -> BlockPos {
+    let y_offset = ground_y - (bounding_box.min.y + ground_level_delta);
+    bounding_box.move_pos(0, y_offset, 0);
+    template_position.add(0, y_offset, 0)
+}
+
+fn apply_expansion_hack(bounding_box: &mut BlockBox, expand_to: i32) {
+    if expand_to > 0 {
+        let new_span = (expand_to + 1).max(bounding_box.max.y - bounding_box.min.y);
+        bounding_box.max.y = bounding_box.max.y.max(bounding_box.min.y + new_span);
+    }
+}
+
 /// Simple lookup for Pool Aliases introduced in 1.20+
 pub struct PoolAliasLookup;
 
@@ -138,8 +156,9 @@ impl JigsawPlacement {
             adjusted_position.0.y
         };
 
-        let old_min_y = box_.min.y;
-        box_.move_pos(0, bottom_y - old_min_y, 0);
+        let ground_level_delta = element.ground_level_delta();
+        let piece_pos =
+            align_start_piece_to_ground(&mut box_, adjusted_position, bottom_y, ground_level_delta);
 
         if box_.min.y < context.min_y + dimension_padding.bottom
             || box_.max.y > context.min_y + 320 - dimension_padding.top
@@ -166,11 +185,7 @@ impl JigsawPlacement {
                 JigsawBlock::from_template_block(block, &template.palette[block.state as usize])
             {
                 let rotated_pos = rotation.transform_pos(jigsaw.pos.0, template.size);
-                jigsaw.pos = BlockPos(rotated_pos).add(
-                    adjusted_position.0.x,
-                    bottom_y,
-                    adjusted_position.0.z,
-                );
+                jigsaw.pos = BlockPos(rotated_pos).add(piece_pos.0.x, piece_pos.0.y, piece_pos.0.z);
                 jigsaw.facing = rotate_direction(jigsaw.facing, rotation);
                 jigsaw.up = rotate_direction(jigsaw.up, rotation);
                 jigsaw_blocks.push(jigsaw);
@@ -184,12 +199,12 @@ impl JigsawPlacement {
                 0,
             ),
             element: element.clone(),
-            pos: BlockPos::new(adjusted_position.0.x, bottom_y, adjusted_position.0.z),
+            pos: piece_pos,
             rotation,
             mirror: Mirror::None,
             jigsaw_blocks,
             junctions: Vec::new(),
-            ground_level_delta: 0,
+            ground_level_delta,
             liquid_settings,
             projection: element.projection,
         });
@@ -402,11 +417,7 @@ impl JigsawPlacement {
                                     }
                                 }
 
-                                if expand_to > 0 {
-                                    let new_size = (expand_to + 1)
-                                        .max(target_box.max.y - target_box.min.y + 1);
-                                    target_box.max.y = target_box.min.y + new_size - 1;
-                                }
+                                apply_expansion_hack(&mut target_box, expand_to);
 
                                 if !is_box_inside(&global_bounding_box, &target_box) {
                                     continue;
@@ -432,7 +443,7 @@ impl JigsawPlacement {
                                     let target_ground_level_delta = if target_rigid {
                                         source_ground_level_delta - delta_y
                                     } else {
-                                        0
+                                        element.ground_level_delta()
                                     };
 
                                     let target_piece = Box::new(PoolElementStructurePiece {
@@ -705,5 +716,32 @@ const fn rotate_direction(
             BlockDirection::East => BlockDirection::North,
             _ => dir,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{align_start_piece_to_ground, apply_expansion_hack};
+    use pumpkin_util::math::{block_box::BlockBox, position::BlockPos};
+
+    #[test]
+    fn start_piece_ground_plane_is_aligned_instead_of_its_template_floor() {
+        let mut bounding_box = BlockBox::new(10, 64, 20, 14, 70, 24);
+        let template_position = BlockPos::new(10, 64, 20);
+
+        let placed_position =
+            align_start_piece_to_ground(&mut bounding_box, template_position, 80, 1);
+
+        assert_eq!(bounding_box.min.y + 1, 80);
+        assert_eq!(placed_position, BlockPos::new(10, 79, 20));
+    }
+
+    #[test]
+    fn expansion_hack_preserves_vanillas_inclusive_top_block() {
+        let mut bounding_box = BlockBox::new(0, 10, 0, 4, 15, 4);
+
+        apply_expansion_hack(&mut bounding_box, 10);
+
+        assert_eq!(bounding_box.max.y, 21);
     }
 }

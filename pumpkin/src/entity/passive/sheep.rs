@@ -134,6 +134,10 @@ impl Mob for SheepEntity {
         &self.mob_entity
     }
 
+    fn get_ambient_sound(&self) -> Option<Sound> {
+        Some(Sound::EntitySheepAmbient)
+    }
+
     fn on_eating_grass(&self) -> EntityBaseFuture<'_, ()> {
         Box::pin(async {
             self.set_sheared(false);

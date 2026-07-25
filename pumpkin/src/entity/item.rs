@@ -373,17 +373,29 @@ impl ItemEntity {
     ) {
         let entity = &self.entity;
 
+        // Refresh after movement so a fluid boundary crossed this tick affects the
+        // next physics step and the velocity the client receives.
         entity.update_fluid_state(caller).await;
 
-        let velocity_dirty = entity.velocity_dirty.swap(false, Ordering::SeqCst)
-            || entity.touching_water.load(Ordering::SeqCst)
-            || entity.touching_lava.load(Ordering::SeqCst)
-            || entity.velocity.load().sub(&original_velo).length_squared() > 0.1;
+        // Movement and velocity are synchronized independently. In particular,
+        // normal item gravity changes velocity by only 0.04 per tick, which is
+        // below the velocity packet threshold but still changes the position.
+        entity.send_pos_rot();
 
-        if velocity_dirty {
-            entity.send_pos_rot();
+        if Self::should_sync_velocity(entity, original_velo) {
             entity.send_velocity();
         }
+    }
+
+    fn should_sync_velocity(entity: &Entity, original_velo: Vector3<f64>) -> bool {
+        entity.velocity_dirty.swap(false, Ordering::SeqCst)
+            || entity.touching_water.load(Ordering::SeqCst)
+            || entity.touching_lava.load(Ordering::SeqCst)
+            || Self::velocity_change_requires_sync(original_velo, entity.velocity.load())
+    }
+
+    fn velocity_change_requires_sync(before: Vector3<f64>, after: Vector3<f64>) -> bool {
+        after.sub(&before).length_squared() > 0.1
     }
 }
 
@@ -442,6 +454,9 @@ impl EntityBase for ItemEntity {
     ) -> EntityBaseFuture<'a, ()> {
         Box::pin(async move {
             let entity = &self.entity;
+            // Item entities need the common tick for last-position bookkeeping,
+            // portal/fire handling, and fluid state before item physics runs.
+            entity.tick(caller, server).await;
             self.decrement_pickup_delay();
 
             let original_velo = entity.velocity.load();
@@ -622,5 +637,27 @@ impl EntityBase for ItemEntity {
             };
             client.send_game_packet(&packet).await;
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ItemEntity;
+    use pumpkin_util::math::vector3::Vector3;
+
+    #[test]
+    fn normal_gravity_delta_does_not_require_a_velocity_packet() {
+        let before = Vector3::new(0.0, 0.0, 0.0);
+        let after = Vector3::new(0.0, -0.04, 0.0);
+
+        assert!(!ItemEntity::velocity_change_requires_sync(before, after));
+    }
+
+    #[test]
+    fn a_large_velocity_delta_requires_a_velocity_packet() {
+        let before = Vector3::new(0.0, 0.0, 0.0);
+        let after = Vector3::new(0.0, -0.4, 0.0);
+
+        assert!(ItemEntity::velocity_change_requires_sync(before, after));
     }
 }

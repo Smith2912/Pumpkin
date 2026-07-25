@@ -1,5 +1,5 @@
 use crate::block::entities::{BlockEntity, block_entity_from_nbt};
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use pumpkin_data::attributes::Attributes;
 use pumpkin_data::chunk::Biome;
 use pumpkin_data::item::{BedrockItem, BedrockItemVersion};
@@ -37,7 +37,7 @@ use crate::{
         {OnNeighborUpdateArgs, OnScheduledTickArgs},
     },
     command::client_suggestions,
-    entity::{Entity, EntityBase, player::Player, r#type::from_type},
+    entity::{Entity, EntityBase, EntitySpawnReason, player::Player, r#type::from_type},
     error::PumpkinError,
     net::{ClientPlatform, java::JavaClient},
     plugin::{
@@ -199,6 +199,7 @@ pub struct World {
     /// A map of active entities within the world, keyed by their unique UUID.
     /// This does not include players.
     pub entities: ArcSwap<Vec<Arc<dyn EntityBase>>>,
+    entity_uuids: DashSet<Uuid>,
     /// The world's scoreboard, used for tracking scores, objectives, and display information.
     pub scoreboard: Mutex<Scoreboard>,
     /// The world's worldborder, defining the playable area and controlling its expansion or contraction.
@@ -298,6 +299,7 @@ impl World {
             level_info,
             players: ArcSwap::new(Arc::new(Vec::new())),
             entities: ArcSwap::new(Arc::new(Vec::new())),
+            entity_uuids: DashSet::new(),
             scoreboard: Mutex::new(Scoreboard::default()),
             worldborder: Mutex::new(Worldborder::new(0.0, 0.0, 5.999_996_8E7, 0, 5, 300)),
             level_time: Mutex::new(LevelTime::new()),
@@ -887,6 +889,7 @@ impl World {
         self.flush_block_updates().await;
         self.flush_synced_block_events().await;
         self.update_active_chunks();
+        self.spawn_pending_structure_entities().await;
         self.tick_environment().await;
 
         let world_for_chunks = self.clone();
@@ -1039,6 +1042,44 @@ impl World {
                 block_entity_count,
                 block_entity_elapsed,
             );
+        }
+    }
+
+    async fn spawn_pending_structure_entities(self: &Arc<Self>) {
+        let mut pending = Vec::new();
+        for chunk_pos in self.active_chunks.load().iter() {
+            if let Some(chunk_pending) = self.level.read_chunk_sync(chunk_pos, |chunk| {
+                let mut chunk_pending = chunk
+                    .pending_structure_entities
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let pending = std::mem::take(&mut *chunk_pending);
+                if !pending.is_empty() {
+                    chunk.mark_dirty(true);
+                }
+                pending
+            }) {
+                pending.extend(chunk_pending);
+            }
+        }
+
+        for nbt in pending {
+            let Some(id) = nbt.get_string("id") else {
+                warn!("Structure entity has no id; skipping it");
+                continue;
+            };
+            let Some(entity_type) =
+                EntityType::from_name(id.strip_prefix("minecraft:").unwrap_or(id))
+            else {
+                warn!("Structure entity has unsupported type {id}; skipping it");
+                continue;
+            };
+
+            let uuid = nbt.get_uuid("UUID").unwrap_or_else(Uuid::new_v4);
+            let entity = from_type(entity_type, Vector3::new(0.0, 0.0, 0.0), self, uuid);
+            entity.read_nbt_non_mut(&nbt).await;
+            entity.finalize_spawn(EntitySpawnReason::Structure);
+            self.spawn_entity(entity).await;
         }
     }
 
@@ -3867,6 +3908,12 @@ impl World {
                     let entity_nbts = std::mem::take(&mut *chunk.data.lock().await);
                     let mut entities_to_add: Vec<Arc<dyn EntityBase>> =
                         Vec::with_capacity(entity_nbts.len());
+                    let mut known_uuids = world
+                        .entities
+                        .load()
+                        .iter()
+                        .map(|entity| entity.get_entity().entity_uuid)
+                        .collect::<std::collections::HashSet<_>>();
                     for entity_nbt in &entity_nbts {
                         let Some(id) = entity_nbt.get_string("id") else {
                             debug!("Entity has no ID");
@@ -3883,6 +3930,12 @@ impl World {
                         // across reloads (matching vanilla); only fall back to a
                         // fresh one if it is missing/corrupt.
                         let uuid = entity_nbt.get_uuid("UUID").unwrap_or_else(Uuid::new_v4);
+                        if !known_uuids.insert(uuid) || !world.entity_uuids.insert(uuid) {
+                            warn!(
+                                "Skipping duplicate persisted entity UUID {uuid} in chunk {position:?}"
+                            );
+                            continue;
+                        }
                         // Pos is zero since it will be read from nbt.
                         let entity =
                             from_type(entity_type, Vector3::new(0.0, 0.0, 0.0), &world, uuid);
@@ -4344,7 +4397,14 @@ impl World {
     }
 
     pub fn spawn_entity_non_save(&self, entity: &Arc<dyn EntityBase>) {
-        let _base_entity = entity.get_entity();
+        let base_entity = entity.get_entity();
+        if !self.entity_uuids.insert(base_entity.entity_uuid) {
+            warn!(
+                "Skipping duplicate live entity UUID {}",
+                base_entity.entity_uuid
+            );
+            return;
+        }
         self.broadcast_entity_spawn(entity);
         self.spawn_state.load().add_entity(self, entity.as_ref());
 
@@ -4356,6 +4416,11 @@ impl World {
     }
 
     pub async fn spawn_entity(&self, entity: Arc<dyn EntityBase>) {
+        let uuid = entity.get_entity().entity_uuid;
+        if !self.entity_uuids.insert(uuid) {
+            warn!("Skipping duplicate live entity UUID {uuid}");
+            return;
+        }
         self.broadcast_entity_spawn(&entity);
         entity.init_data_tracker().await;
         self.add_entity_silent(entity).await;
@@ -4407,6 +4472,7 @@ impl World {
     #[allow(clippy::unused_async)]
     pub async fn remove_entity(&self, entity: &dyn EntityBase) {
         let base_entity = entity.get_entity();
+        self.entity_uuids.remove(&base_entity.entity_uuid);
         self.spawn_state.load().remove_entity(self, entity);
         self.entities.rcu(|current_entities| {
             let mut new_entities = (**current_entities).clone();
@@ -4442,6 +4508,7 @@ impl World {
         });
 
         for entity in entities_to_remove {
+            self.entity_uuids.remove(&entity.get_entity().entity_uuid);
             self.save_entity(&entity).await;
             self.spawn_state.load().remove_entity(self, entity.as_ref());
         }
