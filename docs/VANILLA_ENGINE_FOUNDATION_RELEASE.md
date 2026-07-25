@@ -86,7 +86,7 @@ Do not judge this batch from the already-generated broken village.
 ## Deployment record
 
 - Rollback Pumpkin SHA: `b44087fc81f4372f90a3afe184fd1a4be2b35891`
-- Candidate Pumpkin SHA:
+- Candidate Pumpkin SHA: `f3e7bf5c6c17050ab0a086502dd61677a570bb3d`
 - Loom/Gradle/JDK reference versions: `1.17.17` / `9.5.1` /
   Eclipse Temurin `25.0.3+9`
 - Focused test result: `18 passed, 0 failed`; formatting and `git diff --check`
@@ -97,14 +97,23 @@ Do not judge this batch from the already-generated broken village.
   `pumpkin.exe` 73,068,544 bytes, SHA-256
   `413dff6fbebf04148d7e4464386682a2732d0a1de55bc15f95ff1431366e46a2`
 - Docker image digest:
-- Railway deployment ID:
-- Docker build started/completed UTC:
-- Startup completed UTC:
-- Startup excerpt:
+  `sha256:2eb731a62a91759b66e334cf9f1a61d3a5220671637ff59756cc03a95fc547db`
+- Railway deployment ID: `66edc208-b563-4577-8aa0-9b18673d2af2`
+- Docker build started/completed UTC: `2026-07-25T06:15:46Z` /
+  `2026-07-25T06:43:51Z`
+- Startup completed UTC: `2026-07-25T06:44:01Z`
+- Startup excerpt: `Started server; took 2952ms`; `Server is now running`;
+  HTTP management panel returned 200 and the Minecraft TCP endpoint accepted a
+  connection.
 - Fresh-world seed and tested coordinates:
-- Human acceptance result:
-- Log review result:
-- Rollback decision:
+- Human acceptance result: pending the fresh-world in-game workflow above;
+  startup health is not a substitute for player-visible validation.
+- Log review result: startup passed with no panic, duplicate structure entity,
+  invalid entity NBT, chunk-generation failure, restart, or prior player-login
+  lifecycle error. Fresh-world gameplay log review remains pending. The
+  documented credential-only EssentialsDiscord and DiscordLink failures remain.
+- Rollback decision: not triggered; retain `b44087fc` as the immediate rollback
+  commit until human acceptance passes.
 
 Roll back to the recorded baseline if startup fails, item interaction regresses,
 chunk generation becomes unstable, structure entities duplicate, or the fresh
